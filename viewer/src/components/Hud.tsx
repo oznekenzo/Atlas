@@ -9,7 +9,6 @@ export function Hud() {
   return (
     <>
       <div id="tl" className="hud">
-        <div className="k wm">PATINA</div>
         <div className="h">
           {diff ? <>DIFF <span className="dim">&nbsp;{M.commits[diff.a].hash}&nbsp;…&nbsp;{M.commits[diff.b].hash}</span></>
             : mode.kind === "onion" ? "ALL COMMITS"

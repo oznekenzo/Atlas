@@ -2,11 +2,10 @@ import { useEffect } from "react";
 import { useStore } from "./store";
 import { Stage } from "./components/Stage";
 import { Hud } from "./components/Hud";
-import { Rail } from "./components/Rail";
 import { Legend } from "./components/Legend";
 import { Card } from "./components/Card";
 import { Terminal } from "./components/Terminal";
-import { Footer } from "./components/Footer";
+import { Nav } from "./components/Nav";
 
 function useKeys() {
   useEffect(() => {
@@ -28,7 +27,7 @@ export default function App() {
   const moving = useStore(s => s.moving);
   return (
     <div className={moving ? "moving" : ""}>
-      <Stage /><Hud /><Legend /><Rail /><Card /><Footer /><Terminal />
+      <Stage /><Hud /><Legend /><Card /><Terminal /><Nav />
     </div>
   );
 }
