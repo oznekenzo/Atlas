@@ -14,16 +14,21 @@ from scipy import ndimage
 from splat_io import read_ply
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-RAW = os.path.join(ROOT, "data", "raw"); OUT = os.path.join(ROOT, "data", "out")
-VOX = None            # set adaptively from splat spacing (see choose_voxel); ref units
-MIN_VOLUME = 0.0015   # smallest blob we report, in ref units^3 (~1.5 L real if ref scale ~1)
+DATA = os.environ.get("PATINA_DATA", os.path.join(ROOT, "data")); RAW = os.path.join(DATA, "raw"); OUT = os.path.join(DATA, "out")
+N_COMMITS = len([f for f in os.listdir(RAW) if f.startswith("c") and f.endswith(".ply") and f[1:-4].isdigit()])
+VOX = None            # 0.8% of room span (~5 cm in a garage); set in main
+MIN_VOLUME = None     # (5 voxels)^3 — set in main
+JITTER = 2            # voxels of positional slop tolerated before something counts as changed (splat surfaces are fuzzy)
+COVERAGE = 8          # voxels: a change must lie within this distance of the OTHER capture's geometry, else it was simply unobserved
+OPACITY_SOLID = 0.3   # a voxel is occupied if it holds >= MIN_COUNT splats at least this opaque (density-independent)
+MIN_COUNT = 2
 MIN_VOXELS = None     # derived from MIN_VOLUME / VOX^3
-JITTER = 1            # dilation radius (voxels) tolerated before something counts as changed
 
 def load_all():
-    T = json.load(open(f"{OUT}/transforms.json"))["transforms"]
+    TJ = json.load(open(f"{OUT}/transforms.json")); T = TJ["transforms"]
+    global REF_CANON; REF_CANON = np.array(TJ["ref_canon"])
     cs = []
-    for ci in range(6):
+    for ci in range(N_COMMITS):
         d = read_ply(f"{RAW}/c{ci}.ply"); M = np.array(T[f"c{ci}"])
         d["xyz"] = d["xyz"] @ M[:3,:3].T + M[:3,3]
         cs.append(d)
@@ -38,18 +43,22 @@ def choose_voxel(cs):
         d, _ = cKDTree(p).query(p, k=2, workers=-1); spac.append(np.median(d[:, 1]))
     return float(3.0 * np.median(spac))
 
+def room_points(c):
+    """Solid splats inside the room, judged in the registration's canonical unit frame (drops background splats)."""
+    p = c["xyz"][c["opacity"] > .35]; q = p @ REF_CANON[:3, :3].T + REF_CANON[:3, 3]
+    return p[np.all(np.abs(q) < 0.75, axis=1)]
+
 def grid_shape(cs):
-    allp = np.vstack([c["xyz"] for c in cs]); lo = np.percentile(allp, 0.2, axis=0) - 2*VOX
-    hi = np.percentile(allp, 99.8, axis=0) + 2*VOX
+    allp = np.vstack([room_points(c) for c in cs]); lo = np.percentile(allp, 1, axis=0); hi = np.percentile(allp, 99, axis=0)
+    pad = (hi - lo) * 0.08; lo -= pad + 2*VOX; hi += pad + 2*VOX
     return lo, np.ceil((hi - lo) / VOX).astype(int) + 1
 
 def occupancy(c, lo, shape):
     ijk = np.floor((c["xyz"] - lo) / VOX).astype(int)
     ok = np.all((ijk >= 0) & (ijk < shape), axis=1)
-    mass = np.zeros(shape); np.add.at(mass, tuple(ijk[ok].T), c["opacity"][ok])
-    # adaptive: occupied = at least a third of the typical mass of a populated voxel in THIS capture
-    thr = 0.35 * np.median(mass[mass > 0])
-    return mass >= thr, ijk, ok
+    solid = ok & (c["opacity"] > OPACITY_SOLID)
+    cnt = np.zeros(shape, np.int32); np.add.at(cnt, tuple(ijk[solid].T), 1)
+    return cnt >= MIN_COUNT, ijk, ok
 
 def components(mask):
     """Splat surfaces are thin shells: never erode them. Dilate to bridge gaps, label, filter by
@@ -64,7 +73,8 @@ def components(mask):
 
 if __name__ == "__main__":
     cs = load_all()
-    VOX = choose_voxel(cs); MIN_VOXELS = max(8, int(MIN_VOLUME / VOX**3))
+    span = float(np.abs(np.linalg.det(REF_CANON[:3, :3])) ** (-1 / 3))       # canonical frame divides by the room span
+    VOX = 0.008 * span; MIN_VOXELS = 125
     globals().update(VOX=VOX, MIN_VOXELS=MIN_VOXELS)
     lo, shape = grid_shape(cs)
     print(f"voxel {VOX:.4f} ref-units  min blob {MIN_VOXELS} vox  grid {shape} ({np.prod(shape)/1e6:.1f} M voxels)")
@@ -73,11 +83,13 @@ if __name__ == "__main__":
     objects = []          # {id, present:[...], bbox}
     live = {}             # object id -> voxel mask on the dilated support (for tracking)
     labels = []           # per commit: uint16 grid, value = object id + 1, 0 = untracked/static
-    for ci in range(6):
+    for ci in range(N_COMMITS):
         if ci > 0:
             a, b = occ[ci-1], occ[ci]
-            added   = b & ~ndimage.binary_dilation(a, st, iterations=JITTER)
-            removed = a & ~ndimage.binary_dilation(b, st, iterations=JITTER)
+            seen_a = ndimage.binary_dilation(a, st, iterations=COVERAGE)     # where capture a has geometry nearby at all
+            seen_b = ndimage.binary_dilation(b, st, iterations=COVERAGE)
+            added   = b & ~ndimage.binary_dilation(a, st, iterations=JITTER) & seen_a
+            removed = a & ~ndimage.binary_dilation(b, st, iterations=JITTER) & seen_b
             labA, nA = components(added); labR, nR = components(removed)
             for k in range(1, nR+1):                      # removals close live objects, or reveal c0 originals
                 m = labR == k; hit = None

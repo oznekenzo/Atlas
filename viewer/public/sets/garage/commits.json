@@ -1,0 +1,271 @@
+{
+ "commits": [
+  {
+   "id": "c0",
+   "index": 0,
+   "hash": "6114e54",
+   "message": "Garage, empty. Door open.",
+   "captured": "2026-09-02T16:00:00-07:00",
+   "file": "commits/c0.spz",
+   "splats": 1069347,
+   "labels": "commits/c0.labels.bin"
+  },
+  {
+   "id": "c1",
+   "index": 1,
+   "hash": "738811c",
+   "message": "Plants and things.",
+   "captured": "2026-09-02T18:38:00-07:00",
+   "file": "commits/c1.spz",
+   "splats": 2478027,
+   "labels": "commits/c1.labels.bin"
+  }
+ ],
+ "voxel": 0.08512904911787766,
+ "origin": [
+  -7.228683489082399,
+  -5.580028959031138,
+  -3.7212037769551074
+ ],
+ "shape": [
+  161,
+  131,
+  86
+ ],
+ "world_from_ref": [
+  [
+   0.5266381384007016,
+   -0.21913196449768407,
+   0.05697326704201983,
+   0.1664123400853084
+  ],
+  [
+   -0.05217157540867504,
+   0.022919828444327113,
+   0.570408018898465,
+   0.26284027423741174
+  ],
+  [
+   -0.22032452823376814,
+   -0.5292148556490837,
+   0.001112950627453485,
+   -0.10990804902640922
+  ],
+  [
+   0.0,
+   0.0,
+   0.0,
+   1.0
+  ]
+ ],
+ "calibration_m": 6.1,
+ "objects": [
+  {
+   "id": 0,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 2566,
+   "bbox": [
+    [
+     -6.888,
+     -2.43,
+     -0.231
+    ],
+    [
+     -3.909,
+     0.549,
+     2.663
+    ]
+   ],
+   "volume_vox_m3": 1.583,
+   "removed_in": null,
+   "name": "Object 00"
+  },
+  {
+   "id": 1,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 656,
+   "bbox": [
+    [
+     -4.675,
+     -0.217,
+     1.216
+    ],
+    [
+     -3.824,
+     0.805,
+     2.068
+    ]
+   ],
+   "volume_vox_m3": 0.4047,
+   "removed_in": null,
+   "name": "Object 01"
+  },
+  {
+   "id": 2,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 769,
+   "bbox": [
+    [
+     -4.59,
+     1.486,
+     1.131
+    ],
+    [
+     -3.568,
+     2.422,
+     1.982
+    ]
+   ],
+   "volume_vox_m3": 0.4744,
+   "removed_in": null,
+   "name": "Object 02"
+  },
+  {
+   "id": 3,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 1009,
+   "bbox": [
+    [
+     -3.313,
+     -1.238,
+     1.387
+    ],
+    [
+     -2.291,
+     -0.217,
+     2.153
+    ]
+   ],
+   "volume_vox_m3": 0.6225,
+   "removed_in": null,
+   "name": "Object 03"
+  },
+  {
+   "id": 4,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 873,
+   "bbox": [
+    [
+     -2.547,
+     0.379,
+     1.387
+    ],
+    [
+     -1.525,
+     1.741,
+     2.238
+    ]
+   ],
+   "volume_vox_m3": 0.5386,
+   "removed_in": null,
+   "name": "Object 04"
+  },
+  {
+   "id": 5,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 1757,
+   "bbox": [
+    [
+     -1.78,
+     -1.579,
+     1.557
+    ],
+    [
+     0.263,
+     0.72,
+     3.089
+    ]
+   ],
+   "volume_vox_m3": 1.0839,
+   "removed_in": null,
+   "name": "Object 05"
+  },
+  {
+   "id": 6,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 814,
+   "bbox": [
+    [
+     -0.248,
+     0.038,
+     1.642
+    ],
+    [
+     0.688,
+     0.975,
+     2.408
+    ]
+   ],
+   "volume_vox_m3": 0.5022,
+   "removed_in": null,
+   "name": "Object 06"
+  },
+  {
+   "id": 7,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 1040,
+   "bbox": [
+    [
+     0.603,
+     -1.409,
+     1.812
+    ],
+    [
+     1.965,
+     -0.217,
+     2.834
+    ]
+   ],
+   "volume_vox_m3": 0.6416,
+   "removed_in": null,
+   "name": "Object 07"
+  },
+  {
+   "id": 8,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 10791,
+   "bbox": [
+    [
+     3.072,
+     -5.58,
+     -3.721
+    ],
+    [
+     6.477,
+     1.741,
+     2.834
+    ]
+   ],
+   "volume_vox_m3": 6.6573,
+   "removed_in": null,
+   "name": "Object 08"
+  }
+ ]
+}

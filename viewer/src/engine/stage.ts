@@ -70,8 +70,9 @@ export class Stage {
     this.loop = this.loop.bind(this); this.raf = requestAnimationFrame(this.loop);
   }
 
-  async boot(manifestUrl = "commits.json") {
-    const M: Manifest = await (await fetch(manifestUrl)).json(); this.M = M;
+  async boot(set = new URLSearchParams(location.search).get("set") ?? "garage") {
+    const base = `sets/${set}/`; const M: Manifest = await (await fetch(base + "commits.json")).json(); this.M = M;
+    for (const c of M.commits) { c.file = base + c.file; c.labels = base + c.labels; }   // manifest paths are relative to the set
     const refScale = Math.cbrt(Math.abs(new THREE.Matrix3().set(...(M.world_from_ref.slice(0, 3).flatMap(r => r.slice(0, 3)) as [number, number, number, number, number, number, number, number, number])).determinant()));
     this.voxelOf = makeVoxelLookup(M); this.boxes = M.objects.map(o => worldBox(M, o.bbox));
     useStore.getState().setManifest(M, refScale);

@@ -22,6 +22,10 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
     cd pipeline && python3 make_synthetic.py && python3 register.py && python3 diff.py && python3 bake.py
     cd ../viewer && npm install && npm run dev
 
+## Datasets
+    viewer/public/sets/<name>/{commits.json, commits/*.spz, commits/*.labels.bin}
+    open the viewer with ?set=<name>  (default: garage — the real captures; synthetic — the generated test set)
+
 ## With real Teleport captures
     drop c0..c5.ply into data/raw/, set CAL_M in bake.py to one tape-measured wall span, run register → diff → bake.
     Name objects by editing "name" in viewer/public/commits.json.
