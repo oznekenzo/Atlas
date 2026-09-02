@@ -54,3 +54,14 @@
   #rail .tip .hh { color:var(--bright); }  #rail .tip .mm { color:rgba(255,255,255,.46); font-size:11px; margin-top:5px; }
   #rail .tip .tt { margin-top:7px; font-size:9px; }
   #rail .bracket { position:absolute; top:12px; height:16px; border:1px solid rgba(255,255,255,.34); border-bottom:none; border-radius:3px 3px 0 0; }
+
+  /* action log: bottom-left, newest on top, rows slide down and dim, the oldest sinks out */
+  #actions { position:fixed; left:46px; bottom:calc(var(--nav-h) + 26px); width:420px; height:126px; pointer-events:none; z-index:4;
+    -webkit-mask-image:linear-gradient(to bottom, #000 70%, transparent 100%); mask-image:linear-gradient(to bottom, #000 70%, transparent 100%); }
+  #actions .row { position:absolute; left:0; top:0; height:18px; line-height:18px; display:flex; gap:14px; white-space:pre; font-size:11px; will-change:transform, opacity; }
+  #actions .seq { color:rgba(255,255,255,.22); font-variant-numeric:tabular-nums; }
+  #actions .t { color:rgba(255,255,255,.34); font-variant-numeric:tabular-nums; }
+  #actions .verb { color:rgba(255,255,255,.62); min-width:64px; }
+  #actions .detail { color:rgba(255,255,255,.44); }
+  #actions .row.head .verb { color:var(--bright); }  #actions .row.head .detail { color:rgba(255,255,255,.7); }
+  #actions .row.head::before { content:""; position:absolute; left:-14px; top:8px; width:4px; height:1px; background:rgba(255,255,255,.7); }

@@ -29,7 +29,8 @@ export class Stage {
     this.controls.maxPolarAngle = Math.PI * 0.49; this.controls.minDistance = 1; this.controls.maxDistance = 14;
     this.spark = new SparkRenderer({ renderer: this.renderer }); this.scene.add(this.spark);
     this.controls.addEventListener("change", () => { useStore.getState().setMoving(true); clearTimeout(this.moveTimer);
-      this.moveTimer = window.setTimeout(() => useStore.getState().setMoving(false), 900); });
+      this.moveTimer = window.setTimeout(() => { const st = useStore.getState(); st.setMoving(false);
+        const p = this.camera.position; st.log("camera", `${p.x.toFixed(2)} ${p.y.toFixed(2)} ${p.z.toFixed(2)}`); }, 900); });
     this.onResize = this.onResize.bind(this); addEventListener("resize", this.onResize);
     this.unsub = useStore.subscribe((s, prev) => { if (s.head !== prev.head || s.mode !== prev.mode || s.selected !== prev.selected || s.hover !== prev.hover) this.applyMode(s); });
     this.renderer.domElement.addEventListener("pointermove", (ev) => useStore.getState().setHover(this.pick(ev)));

@@ -6,6 +6,7 @@ import { Legend } from "./components/Legend";
 import { Card } from "./components/Card";
 import { Terminal } from "./components/Terminal";
 import { Nav } from "./components/Nav";
+import { ActionLog } from "./components/ActionLog";
 
 function useKeys() {
   useEffect(() => {
@@ -27,7 +28,7 @@ export default function App() {
   const moving = useStore(s => s.moving);
   return (
     <div className={moving ? "moving" : ""}>
-      <Stage /><Hud /><Legend /><Card /><Terminal /><Nav />
+      <Stage /><Hud /><Legend /><Card /><ActionLog /><Terminal /><Nav />
     </div>
   );
 }

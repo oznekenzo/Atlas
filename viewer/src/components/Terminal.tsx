@@ -14,7 +14,7 @@ export function Terminal() {
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     const el = e.currentTarget; e.stopPropagation();
     if (e.key === "Enter") { const line = el.value; el.value = ""; if (!line.trim()) return;
-      setHist(h => [...h, line]); setHi(hist.length + 1); setLines(l => [...l, ...runGit(line, makeActions())]); }
+      setHist(h => [...h, line]); setHi(hist.length + 1); useStore.getState().log("$", line); setLines(l => [...l, ...runGit(line, makeActions())]); }
     else if (e.key === "ArrowUp") { const i = Math.max(0, hi - 1); setHi(i); el.value = hist[i] ?? ""; e.preventDefault(); }
     else if (e.key === "ArrowDown") { const i = Math.min(hist.length, hi + 1); setHi(i); el.value = hist[i] ?? ""; e.preventDefault(); }
     else if (e.key === "Escape") setTerminal(false);
