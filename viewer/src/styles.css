@@ -1,0 +1,47 @@
+:root { --fg: rgba(255,255,255,.72); --dim: rgba(255,255,255,.34); --bright: rgba(255,255,255,.92);
+          --add: #7fd6a4; --rem: #e0705c; --bg: #050506; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); overflow:hidden;
+    font-family:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px;
+    -webkit-font-smoothing:antialiased; }
+  #stage { position:fixed; inset:0; }
+  canvas { display:block; }
+  .hud { position:fixed; pointer-events:none; transition:opacity .35s; }
+  .moving .hud { opacity:0; }
+  .k { font-size:10px; letter-spacing:.22em; text-transform:uppercase; color:var(--dim); }
+  #tl { top:42px; left:46px; }  #tl .wm { letter-spacing:.34em; color:rgba(255,255,255,.62); }
+  #tl .h { margin-top:22px; color:var(--bright); }  #tl .m { margin-top:7px; color:rgba(255,255,255,.5); }
+  .half { color:rgba(255,255,255,.5); }
+  #tr { top:44px; right:46px; text-align:right; }
+  #tr div { display:flex; gap:18px; justify-content:flex-end; line-height:18px; }
+  #tr span:last-child { min-width:118px; text-align:right; color:rgba(255,255,255,.5); }
+  #legend { bottom:132px; right:46px; text-align:right; }
+  #legend div { display:flex; align-items:center; gap:12px; justify-content:flex-end; margin-top:9px; color:rgba(255,255,255,.78); }
+  #legend i { width:7px; height:7px; border-radius:50%; display:inline-block; }
+  #rail { position:fixed; bottom:62px; left:50%; transform:translateX(-50%); display:flex; pointer-events:auto; }
+  #rail .line { position:absolute; left:48px; right:48px; top:12px; height:1px; background:rgba(255,255,255,.16); }
+  #rail .dot { position:relative; width:96px; height:26px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  #rail .dot i { width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,.26); transition:all .15s; }
+  #rail .dot.active i { width:9px; height:9px; background:rgba(255,255,255,.92); }
+  #rail .dot.active::after { content:""; position:absolute; width:22px; height:22px; border:1px solid rgba(255,255,255,.28); border-radius:50%; }
+  #rail .dot:hover i { background:rgba(255,255,255,.72); }
+  #rail .dot.pending i { background:rgba(255,255,255,.1); }
+  #rail .tip { position:absolute; bottom:34px; left:50%; transform:translateX(-50%); white-space:nowrap; text-align:center; opacity:0; transition:opacity .15s; pointer-events:none; }
+  #rail .dot:hover .tip { opacity:1; }
+  #rail .tip .hh { color:var(--bright); }  #rail .tip .mm { color:rgba(255,255,255,.46); font-size:11px; margin-top:5px; }
+  #rail .tip .tt { margin-top:7px; font-size:9px; }
+  #rail .bracket { position:absolute; top:2px; height:22px; border:1px solid rgba(255,255,255,.34); border-bottom:none; border-radius:3px 3px 0 0; display:none; }
+  #bl { bottom:34px; left:46px; }  #br { bottom:34px; right:46px; }
+  #card { position:fixed; top:172px; right:46px; width:328px; border-top:1px solid rgba(255,255,255,.2); padding-top:20px; pointer-events:auto; }
+  #card .n { font-size:14px; color:var(--bright); }  #card .row { display:flex; justify-content:space-between; margin-top:10px; }
+  #card .mini { display:flex; gap:14px; margin-top:12px; align-items:center; }
+  #card .mini i { width:5px; height:5px; border-radius:50%; background:rgba(255,255,255,.2); cursor:pointer; }
+  #card .mini i.on { width:7px; height:7px; background:var(--add); }
+  #term { position:fixed; left:0; right:0; bottom:0; background:rgba(5,5,6,.94); border-top:1px solid rgba(255,255,255,.14);
+    padding:22px 46px 22px; pointer-events:auto; font-size:13px; }
+  #term .out { max-height:38vh; overflow:auto; white-space:pre; line-height:24px; }
+  #term .out .in { color:var(--bright); } #term .out .o { color:rgba(255,255,255,.56); } #term .out .e { color:var(--rem); }
+  #term .out .a { color:var(--add); } #term .out .d { color:var(--dim); }
+  #term .line .dim { color:var(--dim); }
+  #term .line { display:flex; gap:8px; line-height:24px; margin-top:6px; }
+  #term input { flex:1; background:none; border:none; outline:none; color:var(--bright); font:inherit; }
+  .add { color:var(--add); } .rem { color:var(--rem); }

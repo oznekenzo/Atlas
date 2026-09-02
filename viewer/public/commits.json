@@ -1,0 +1,440 @@
+{
+ "commits": [
+  {
+   "id": "c0",
+   "index": 0,
+   "hash": "6b7160c",
+   "message": "As found.",
+   "captured": "2026-09-02T18:12:00-07:00",
+   "file": "commits/c0.spz",
+   "splats": 356388,
+   "labels": "commits/c0.labels.bin"
+  },
+  {
+   "id": "c1",
+   "index": 1,
+   "hash": "a5e1163",
+   "message": "Cleared to one side.",
+   "captured": "2026-09-02T19:40:00-07:00",
+   "file": "commits/c1.spz",
+   "splats": 356388,
+   "labels": "commits/c1.labels.bin"
+  },
+  {
+   "id": "c2",
+   "index": 2,
+   "hash": "d89d9de",
+   "message": "Shelving and bench in.",
+   "captured": "2026-09-02T21:05:00-07:00",
+   "file": "commits/c2.spz",
+   "splats": 323288,
+   "labels": "commits/c2.labels.bin"
+  },
+  {
+   "id": "c3",
+   "index": 3,
+   "hash": "b45a7e6",
+   "message": "Tooled up. Bins on the racks.",
+   "captured": "2026-09-02T22:18:00-07:00",
+   "file": "commits/c3.spz",
+   "splats": 350488,
+   "labels": "commits/c3.labels.bin"
+  },
+  {
+   "id": "c4",
+   "index": 4,
+   "hash": "c60859e",
+   "message": "First job on the bench.",
+   "captured": "2026-09-03T00:02:00-07:00",
+   "file": "commits/c4.spz",
+   "splats": 361288,
+   "labels": "commits/c4.labels.bin"
+  },
+  {
+   "id": "c5",
+   "index": 5,
+   "hash": "2ce9017",
+   "message": "Car in.",
+   "captured": "2026-09-03T00:51:00-07:00",
+   "file": "commits/c5.spz",
+   "splats": 440488,
+   "labels": "commits/c5.labels.bin"
+  }
+ ],
+ "voxel": 0.11874286135067029,
+ "origin": [
+  -9.276141429623694,
+  -3.5249355338596198,
+  -0.23463444298080777
+ ],
+ "shape": [
+  111,
+  109,
+  40
+ ],
+ "world_from_ref": [
+  [
+   -0.34760133181624303,
+   0.5855062001582658,
+   -0.010453883415939488,
+   -2.617004642482235
+  ],
+  [
+   -0.0019855631339764554,
+   0.010978358712473454,
+   0.6809030864680322,
+   -0.09932029409148821
+  ],
+  [
+   0.5855961506373537,
+   0.3475851625125564,
+   -0.003896555210014805,
+   0.6345033544249858
+  ],
+  [
+   0.0,
+   0.0,
+   0.0,
+   1.0
+  ]
+ ],
+ "calibration_m": 6.5,
+ "objects": [
+  {
+   "id": 0,
+   "added_in": 0,
+   "removed_in": 1,
+   "present": [
+    0
+   ],
+   "voxels": 1068,
+   "bbox": [
+    [
+     -6.545,
+     3.481,
+     0.122
+    ],
+    [
+     -4.289,
+     5.5,
+     1.547
+    ]
+   ],
+   "volume_vox_m3": 1.7881,
+   "name": "Object 00"
+  },
+  {
+   "id": 1,
+   "added_in": 0,
+   "removed_in": 1,
+   "present": [
+    0
+   ],
+   "voxels": 1419,
+   "bbox": [
+    [
+     -3.814,
+     -0.319,
+     0.24
+    ],
+    [
+     -0.37,
+     1.106,
+     1.547
+    ]
+   ],
+   "volume_vox_m3": 2.3758,
+   "name": "Object 01"
+  },
+  {
+   "id": 2,
+   "added_in": 0,
+   "removed_in": 1,
+   "present": [
+    0
+   ],
+   "voxels": 741,
+   "bbox": [
+    [
+     -2.864,
+     0.75,
+     0.953
+    ],
+    [
+     -1.439,
+     2.175,
+     1.903
+    ]
+   ],
+   "volume_vox_m3": 1.2406,
+   "name": "Object 02"
+  },
+  {
+   "id": 3,
+   "added_in": 0,
+   "removed_in": 1,
+   "present": [
+    0
+   ],
+   "voxels": 1945,
+   "bbox": [
+    [
+     -0.489,
+     1.225,
+     0.122
+    ],
+    [
+     2.123,
+     4.075,
+     1.665
+    ]
+   ],
+   "volume_vox_m3": 3.2564,
+   "name": "Object 03"
+  },
+  {
+   "id": 4,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 3102,
+   "removed_in": 2,
+   "bbox": [
+    [
+     -5.358,
+     -1.981,
+     0.24
+    ],
+    [
+     -1.202,
+     1.106,
+     1.903
+    ]
+   ],
+   "volume_vox_m3": 5.1936,
+   "name": "Object 04"
+  },
+  {
+   "id": 5,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 694,
+   "removed_in": 2,
+   "bbox": [
+    [
+     -1.439,
+     1.7,
+     0.834
+    ],
+    [
+     -0.014,
+     3.006,
+     1.665
+    ]
+   ],
+   "volume_vox_m3": 1.1619,
+   "name": "Object 05"
+  },
+  {
+   "id": 6,
+   "added_in": 1,
+   "present": [
+    1
+   ],
+   "voxels": 1136,
+   "removed_in": 2,
+   "bbox": [
+    [
+     -1.32,
+     0.156,
+     0.24
+    ],
+    [
+     1.292,
+     1.581,
+     1.547
+    ]
+   ],
+   "volume_vox_m3": 1.902,
+   "name": "Object 06"
+  },
+  {
+   "id": 7,
+   "added_in": 2,
+   "present": [
+    2,
+    3,
+    4,
+    5
+   ],
+   "voxels": 4596,
+   "bbox": [
+    [
+     -7.732,
+     -1.15,
+     0.122
+    ],
+    [
+     -5.12,
+     2.531,
+     3.446
+    ]
+   ],
+   "volume_vox_m3": 7.6949,
+   "removed_in": null,
+   "name": "Object 07"
+  },
+  {
+   "id": 8,
+   "added_in": 2,
+   "present": [
+    2,
+    3,
+    4,
+    5
+   ],
+   "voxels": 112,
+   "bbox": [
+    [
+     -3.458,
+     0.275,
+     0.24
+    ],
+    [
+     -2.983,
+     0.75,
+     1.072
+    ]
+   ],
+   "volume_vox_m3": 0.1875,
+   "removed_in": null,
+   "name": "Object 08"
+  },
+  {
+   "id": 9,
+   "added_in": 2,
+   "present": [
+    2,
+    3,
+    4,
+    5
+   ],
+   "voxels": 1365,
+   "bbox": [
+    [
+     -3.102,
+     -0.556,
+     0.122
+    ],
+    [
+     -0.133,
+     2.056,
+     1.665
+    ]
+   ],
+   "volume_vox_m3": 2.2854,
+   "removed_in": null,
+   "name": "Object 09"
+  },
+  {
+   "id": 10,
+   "added_in": 3,
+   "present": [
+    3,
+    4,
+    5
+   ],
+   "voxels": 1071,
+   "bbox": [
+    [
+     -7.614,
+     -0.913,
+     1.547
+    ],
+    [
+     -5.358,
+     2.412,
+     2.14
+    ]
+   ],
+   "volume_vox_m3": 1.7931,
+   "removed_in": null,
+   "name": "Object 10"
+  },
+  {
+   "id": 11,
+   "added_in": 3,
+   "present": [
+    3,
+    4,
+    5
+   ],
+   "voxels": 845,
+   "bbox": [
+    [
+     -7.614,
+     -0.794,
+     2.496
+    ],
+    [
+     -5.358,
+     2.412,
+     3.09
+    ]
+   ],
+   "volume_vox_m3": 1.4147,
+   "removed_in": null,
+   "name": "Object 11"
+  },
+  {
+   "id": 12,
+   "added_in": 4,
+   "present": [
+    4,
+    5
+   ],
+   "voxels": 363,
+   "bbox": [
+    [
+     -2.864,
+     0.037,
+     1.547
+    ],
+    [
+     -1.202,
+     1.462,
+     1.903
+    ]
+   ],
+   "volume_vox_m3": 0.6078,
+   "removed_in": null,
+   "name": "Object 12"
+  },
+  {
+   "id": 13,
+   "added_in": 5,
+   "present": [
+    5
+   ],
+   "voxels": 19424,
+   "bbox": [
+    [
+     -6.664,
+     1.344,
+     0.122
+    ],
+    [
+     0.58,
+     7.281,
+     2.615
+    ]
+   ],
+   "volume_vox_m3": 32.5208,
+   "removed_in": null,
+   "name": "Object 13"
+  }
+ ]
+}
