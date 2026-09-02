@@ -58,7 +58,12 @@
   /* action log: bottom-left, newest on top, rows slide down and dim, the oldest sinks out */
   #actions { position:fixed; left:46px; bottom:calc(var(--nav-h) + 26px); width:420px; height:126px; pointer-events:none; z-index:4;
     -webkit-mask-image:linear-gradient(to bottom, #000 70%, transparent 100%); mask-image:linear-gradient(to bottom, #000 70%, transparent 100%); }
-  #actions .row { position:absolute; left:0; top:0; height:18px; line-height:18px; display:flex; gap:14px; white-space:pre; font-size:11px; will-change:transform, opacity; }
+  #actions .row { position:absolute; left:0; top:0; height:18px; line-height:18px; display:flex; gap:14px; white-space:pre; font-size:11px; will-change:transform, opacity;
+    pointer-events:auto; cursor:pointer; padding-right:12px; }
+  #actions .row.head { cursor:default; }
+  #actions .row:not(.head):hover { opacity:1 !important; }
+  #actions .row:not(.head):hover .verb, #actions .row:not(.head):hover .detail { color:var(--bright); }
+  #actions .row:not(.head):hover::after { content:"↩"; color:rgba(255,255,255,.5); margin-left:6px; }
   #actions .seq { color:rgba(255,255,255,.22); font-variant-numeric:tabular-nums; }
   #actions .t { color:rgba(255,255,255,.34); font-variant-numeric:tabular-nums; }
   #actions .verb { color:rgba(255,255,255,.62); min-width:64px; }

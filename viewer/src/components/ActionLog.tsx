@@ -29,7 +29,7 @@ export function ActionLog() {
   }, [actions]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  const order = new Map(actions.map((a, i) => [a.id, i]));
+  const order = new Map(actions.map((a, i) => [a.id, i])); const restore = useStore(s => s.restore);
   return (
     <div id="actions" aria-live="polite">
       {rows.map(r => {
@@ -42,7 +42,8 @@ export function ActionLog() {
           transition: r.fresh ? "none" : `transform 480ms cubic-bezier(.22,1,.36,1), opacity ${r.exiting ? EXIT_MS : 420}ms ease-out, filter 420ms ease-out`,
         };
         return (
-          <div key={r.id} className={`row${i === 0 && !r.exiting ? " head" : ""}`} style={style}>
+          <div key={r.id} className={`row${i === 0 && !r.exiting ? " head" : ""}`} style={style}
+            onClick={() => !r.exiting && i !== 0 && restore(r.id)} title={i === 0 ? undefined : "restore this state"}>
             <span className="seq">{String(r.id).padStart(3, "0")}</span>
             <span className="t">{clock(r.t)}</span>
             <span className="verb">{r.verb}</span>

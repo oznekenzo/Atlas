@@ -1,6 +1,8 @@
 import type { Commit, Obj } from "./types";
 
 export type Actions = {
+  reflog: () => { id: number; verb: string; detail: string }[];   // oldest first
+  restore: (id: number) => void;
   checkout: (i: number) => void; diff: (a: number, b: number) => void; head: () => number;
   objects: () => Obj[]; commits: () => Commit[]; select: (id: number | null) => void; status: () => string[];
 };
@@ -26,7 +28,10 @@ export function run(cmdline: string, A: Actions): Line[] {
   const bad = (r: string) => out.push({ k: "e", t: `fatal: ambiguous argument '${r}': unknown revision` });
   switch (sub) {
     case "log": { for (const c of [...cs].reverse()) out.push({ k: "o", t: fmt(c) }); break; }
-    case "checkout": { const i = resolveRef(rest[0] ?? "HEAD", A); if (i === null) { bad(rest[0]); break; }
+    case "reflog": { const h = A.reflog().filter(a => a.verb !== "$" && a.verb !== "terminal"); for (let n = 0; n < h.length; n++) { const a = h[h.length - 1 - n]; out.push({ k: n === 0 ? "o" : "d", t: `HEAD@{${n}}  ${String(a.id).padStart(3, "0")}  ${a.verb.padEnd(9)} ${a.detail}` }); } break; }
+    case "checkout": { const m = (rest[0] ?? "").match(/^HEAD@\{(\d+)\}$/); if (m) { const h = A.reflog().filter(a => a.verb !== "$" && a.verb !== "terminal"); const a = h[h.length - 1 - parseInt(m[1])];
+        if (!a) { bad(rest[0]); break; } A.restore(a.id); out.push({ k: "o", t: `restored ${String(a.id).padStart(3, "0")}  ${a.verb} ${a.detail}` }); break; }
+      const i = resolveRef(rest[0] ?? "HEAD", A); if (i === null) { bad(rest[0]); break; }
       A.checkout(i); out.push({ k: "o", t: `HEAD is now at ${cs[i].hash} ${cs[i].message}` }); break; }
     case "diff": { let a: number | null, b: number | null;
       if (rest.length === 0) { b = A.head(); a = Math.max(0, b - 1); }
@@ -64,8 +69,8 @@ export function run(cmdline: string, A: Actions): Line[] {
     case "revert": out.push({ k: "e", t: "fatal: the physical world does not support revert." }); break;
     case "push": out.push({ k: "e", t: "fatal: remote is reality. read-only." }); break;
     case "stash": out.push({ k: "e", t: "fatal: nowhere to put it." }); break;
-    case "help": case undefined: out.push({ k: "o", t: "log · checkout <ref> · diff [a] [b] · show <ref> · status · blame <object> · bisect <object>" },
-      { k: "d", t: "refs: c0…c5, HEAD, HEAD~n, or a hash prefix" }); break;
+    case "help": case undefined: out.push({ k: "o", t: "log · checkout <ref> · diff [a] [b] · show <ref> · status · blame <object> · bisect <object> · reflog" },
+      { k: "d", t: "refs: c0…c5, HEAD, HEAD~n, a hash prefix, or HEAD@{n} from the reflog" }); break;
     default: out.push({ k: "e", t: `git: '${sub}' is not a git command. See 'git help'.` });
   }
   return out;

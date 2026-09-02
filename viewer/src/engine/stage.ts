@@ -17,7 +17,8 @@ export class Stage {
   spark: SparkRenderer; loaded: (Loaded | undefined)[] = []; boxes: THREE.Box3[] = [];
   M!: Manifest; voxelOf!: (x: number, y: number, z: number) => number;
   timings: Record<string, number> = {}; paused = false; private frames = 0; private fpsT = performance.now();
-  private unsub: () => void; private raf = 0; private moveTimer = 0;
+  private unsub: () => void; private unsubCam: () => void = () => {}; private raf = 0; private moveTimer = 0;
+  private tween: { from: THREE.Vector3; to: THREE.Vector3; tFrom: THREE.Vector3; tTo: THREE.Vector3; t0: number; ms: number } | null = null;
 
   constructor(private el: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
@@ -29,8 +30,24 @@ export class Stage {
     this.controls.maxPolarAngle = Math.PI * 0.49; this.controls.minDistance = 1; this.controls.maxDistance = 14;
     this.spark = new SparkRenderer({ renderer: this.renderer }); this.scene.add(this.spark);
     this.controls.addEventListener("change", () => { useStore.getState().setMoving(true); clearTimeout(this.moveTimer);
-      this.moveTimer = window.setTimeout(() => { const st = useStore.getState(); st.setMoving(false);
-        const p = this.camera.position; st.log("camera", `${p.x.toFixed(2)} ${p.y.toFixed(2)} ${p.z.toFixed(2)}`); }, 900); });
+      this.moveTimer = window.setTimeout(() => useStore.getState().setMoving(false), 900); });
+    useStore.setState({ liveCamera: () => { const p = this.camera.position, t = this.controls.target; return { pos: [p.x, p.y, p.z], target: [t.x, t.y, t.z] }; } });
+    // every gesture is recorded on release, classified by the largest motion in metres: orbit (arc), pan (target), dolly (distance).
+    // A click (short, negligible motion) is not a camera action — it is a selection, and the selection snapshot carries the camera.
+    let gesture: { pos: THREE.Vector3; target: THREE.Vector3; t0: number } | null = null;
+    this.controls.addEventListener("start", () => { gesture = { pos: this.camera.position.clone(), target: this.controls.target.clone(), t0: performance.now() }; });
+    this.controls.addEventListener("end", () => {
+      if (!gesture) return; const g = gesture; gesture = null; const p = this.camera.position, t = this.controls.target;
+      const d0 = g.pos.distanceTo(g.target), d1 = p.distanceTo(t);
+      const mPan = t.distanceTo(g.target), mDolly = Math.abs(d1 - d0), ang = g.pos.clone().sub(g.target).angleTo(p.clone().sub(t)), mOrbit = ang * d0;
+      const biggest = Math.max(mPan, mDolly, mOrbit); const click = performance.now() - g.t0 < 250;
+      if (biggest < (click ? 0.05 : 0.01)) return;                       // a click, or nothing moved
+      const verb = biggest === mPan ? "pan" : biggest === mDolly ? "dolly" : "orbit";
+      const detail = verb === "dolly" ? `${d1.toFixed(2)} m` : verb === "pan" ? `→ ${t.x.toFixed(2)} ${t.y.toFixed(2)} ${t.z.toFixed(2)}` : `${(ang * 180 / Math.PI).toFixed(0)}°  ${p.x.toFixed(2)} ${p.y.toFixed(2)} ${p.z.toFixed(2)}`;
+      this.recordCamera(verb, detail);
+    });
+    // restore requests: tween the camera back to a logged state
+    this.unsubCam = useStore.subscribe((s, prev) => { if (s.camRequest && s.camRequest !== prev.camRequest) this.tweenTo(s.camRequest.cam); });
     this.onResize = this.onResize.bind(this); addEventListener("resize", this.onResize);
     this.unsub = useStore.subscribe((s, prev) => { if (s.head !== prev.head || s.mode !== prev.mode || s.selected !== prev.selected || s.hover !== prev.hover) this.applyMode(s); });
     this.renderer.domElement.addEventListener("pointermove", (ev) => useStore.getState().setHover(this.pick(ev)));
@@ -113,12 +130,20 @@ export class Stage {
   }
 
   lookAt(id: number, dist = 3.5, h = 1.5) { const c = this.boxes[id].getCenter(new THREE.Vector3()); const dir = new THREE.Vector3(c.x, 0, c.z).normalize().multiplyScalar(-1);
-    this.camera.position.set(c.x + dir.x * dist, h, c.z + dir.z * dist); this.controls.target.copy(c); this.controls.update(); }
+    this.camera.position.set(c.x + dir.x * dist, h, c.z + dir.z * dist); this.controls.target.copy(c); this.controls.update(); this.recordCamera("frame", `obj ${String(id).padStart(2, "0")}`); }
+  recordCamera(verb: string, detail: string) { const p = this.camera.position, t = this.controls.target;
+    const cam = { pos: [p.x, p.y, p.z] as [number, number, number], target: [t.x, t.y, t.z] as [number, number, number] }; const st = useStore.getState(); st.setCamera(cam); st.log(verb, detail, { cam }); }
   setCam(x: number, y: number, z: number) { this.camera.position.set(x, y, z); this.controls.update(); }
-  renderOnce() { this.controls.update(); this.renderer.render(this.scene, this.camera); }
+  tweenTo(cam: { pos: number[]; target: number[] }, ms = 700) {
+    this.tween = { from: this.camera.position.clone(), to: new THREE.Vector3(...(cam.pos as [number, number, number])),
+      tFrom: this.controls.target.clone(), tTo: new THREE.Vector3(...(cam.target as [number, number, number])), t0: performance.now(), ms }; }
+  private stepTween() { const tw = this.tween; if (!tw) return; const u = Math.min(1, (performance.now() - tw.t0) / tw.ms); const e = 1 - Math.pow(1 - u, 3);
+    this.camera.position.lerpVectors(tw.from, tw.to, e); this.controls.target.lerpVectors(tw.tFrom, tw.tTo, e);
+    if (u >= 1) { this.tween = null; const p = this.camera.position, t = this.controls.target; useStore.getState().setCamera({ pos: [p.x, p.y, p.z], target: [t.x, t.y, t.z] }); } }
+  renderOnce() { this.stepTween(); this.controls.update(); this.renderer.render(this.scene, this.camera); }
   private onResize() { const w = this.el.clientWidth, h = this.el.clientHeight; this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); this.renderer.setSize(w, h); }
   private loop() { if (!this.paused) { this.renderOnce(); this.frames++; const t = performance.now(); if (t - this.fpsT > 1000) { this.timings.fps = Math.round(this.frames * 1000 / (t - this.fpsT)); this.frames = 0; this.fpsT = t; } } this.raf = requestAnimationFrame(this.loop); }
-  dispose() { cancelAnimationFrame(this.raf); this.unsub(); removeEventListener("resize", this.onResize); for (const L of this.loaded) L?.mesh.dispose(); this.renderer.dispose(); this.el.innerHTML = ""; }
+  dispose() { cancelAnimationFrame(this.raf); this.unsub(); this.unsubCam(); removeEventListener("resize", this.onResize); for (const L of this.loaded) L?.mesh.dispose(); this.renderer.dispose(); this.el.innerHTML = ""; }
 
   /** Test/debug hooks (used by test_viewer.py). */
   debug() { const L = this.loaded[useStore.getState().head]; const gl = this.renderer.getContext() as WebGL2RenderingContext; this.renderOnce();
