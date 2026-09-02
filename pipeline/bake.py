@@ -16,8 +16,17 @@ else:
 N_COMMITS = len(META)
 # world frame for the viewer: c0 raw -> unit room frame (floor z=0) -> metres -> y-up (three.js)
 Tcanon = np.array(TJ["ref_canon"]); Tm = np.diag([CAL_M, CAL_M, CAL_M, 1.0])
+# The canonical frame's vertical sign is arbitrary (floor and ceiling are both horizontal planes). Resolve it from c0:
+# in a handheld capture the floor is far denser than the ceiling, so the denser end of the z range is DOWN.
+_d0 = read_ply(f"{RAW}/c0.ply"); _p = _d0["xyz"][_d0["opacity"] > .35]; _q = _p @ Tcanon[:3, :3].T + Tcanon[:3, 3]
+_q = _q[np.all(np.abs(_q) < 0.75, axis=1)]; _zlo, _zhi = np.percentile(_q[:, 2], [2, 98]); _h = _zhi - _zlo
+_bottom = (_q[:, 2] < _zlo + 0.15 * _h).sum(); _top = (_q[:, 2] > _zhi - 0.15 * _h).sum()
+Tflip = np.diag([1.0, -1.0, -1.0, 1.0]) if _top > _bottom else np.eye(4)      # 180 deg about x: proper rotation, swaps up/down
+_qz = (_q @ Tflip[:3, :3].T)[:, 2]; _floor = np.percentile(_qz, 2)
+Tfloor = np.eye(4); Tfloor[2, 3] = -_floor                                        # floor to z=0
+print(f"vertical: bottom {_bottom:,} vs top {_top:,} solid pts -> {'flipped' if _top > _bottom else 'kept'}; floor at z={_floor:.3f} (canonical) -> 0")
 Tyup = np.array([[1,0,0,0],[0,0,1,0],[0,-1,0,0],[0,0,0,1]], float)          # z-up -> y-up
-WORLD_FROM_REF = Tyup @ Tm @ Tcanon
+WORLD_FROM_REF = Tyup @ Tm @ Tfloor @ Tflip @ Tcanon
 
 commits = []
 for ci in range(N_COMMITS):
