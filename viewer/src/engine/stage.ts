@@ -18,6 +18,14 @@ export class Stage {
   M!: Manifest; voxelOf!: (x: number, y: number, z: number) => number;
   timings: Record<string, number> = {}; paused = false; private frames = 0; private fpsT = performance.now();
   private unsub: () => void; private unsubCam: () => void = () => {}; private raf = 0; private moveTimer = 0;
+  private pendingDolly: { d0: number; timer: number } | null = null;
+  private dollyRun: { d0: number } | null = null;   // one dolly row per zoom session: amended in place until another action intervenes
+  private flushDolly() { const pd = this.pendingDolly; if (!pd) return; clearTimeout(pd.timer); this.pendingDolly = null;
+    const d1 = this.camera.position.distanceTo(this.controls.target); if (Math.abs(d1 - pd.d0) < 0.01) return;
+    const st = useStore.getState(); const last = st.history[st.history.length - 1];
+    if (!(last?.verb === "dolly" && this.dollyRun)) this.dollyRun = { d0: pd.d0 };
+    const p = this.camera.position, t = this.controls.target; const cam = { pos: [p.x, p.y, p.z] as [number, number, number], target: [t.x, t.y, t.z] as [number, number, number] };
+    st.setCamera(cam); st.amend("dolly", `${this.dollyRun.d0.toFixed(2)} → ${d1.toFixed(2)} m`, { cam }); }
   private tween: { from: THREE.Vector3; to: THREE.Vector3; tFrom: THREE.Vector3; tTo: THREE.Vector3; t0: number; ms: number } | null = null;
 
   constructor(private el: HTMLElement) {
@@ -43,9 +51,15 @@ export class Stage {
       const biggest = Math.max(mPan, mDolly, mOrbit); const click = performance.now() - g.t0 < 250;
       if (biggest < (click ? 0.05 : 0.01)) return;                       // a click, or nothing moved
       const verb = biggest === mPan ? "pan" : biggest === mDolly ? "dolly" : "orbit";
-      const detail = verb === "dolly" ? `${d1.toFixed(2)} m` : verb === "pan" ? `→ ${t.x.toFixed(2)} ${t.y.toFixed(2)} ${t.z.toFixed(2)}` : `${(ang * 180 / Math.PI).toFixed(0)}°  ${p.x.toFixed(2)} ${p.y.toFixed(2)} ${p.z.toFixed(2)}`;
+      if (verb === "dolly") {                                             // wheel ticks arrive as separate gestures: coalesce them
+        if (!this.pendingDolly) this.pendingDolly = { d0, timer: 0 }; clearTimeout(this.pendingDolly.timer);
+        this.pendingDolly.timer = window.setTimeout(() => this.flushDolly(), 800); return;
+      }
+      this.flushDolly();
+      const detail = verb === "pan" ? `→ ${t.x.toFixed(2)} ${t.y.toFixed(2)} ${t.z.toFixed(2)}` : `${(ang * 180 / Math.PI).toFixed(0)}°  ${p.x.toFixed(2)} ${p.y.toFixed(2)} ${p.z.toFixed(2)}`;
       this.recordCamera(verb, detail);
     });
+    this.renderer.domElement.addEventListener("pointerdown", () => this.flushDolly());   // a click or drag after zooming closes the zoom entry first
     // restore requests: tween the camera back to a logged state
     this.unsubCam = useStore.subscribe((s, prev) => { if (s.camRequest && s.camRequest !== prev.camRequest) this.tweenTo(s.camRequest.cam); });
     this.onResize = this.onResize.bind(this); addEventListener("resize", this.onResize);
@@ -143,7 +157,7 @@ export class Stage {
   renderOnce() { this.stepTween(); this.controls.update(); this.renderer.render(this.scene, this.camera); }
   private onResize() { const w = this.el.clientWidth, h = this.el.clientHeight; this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); this.renderer.setSize(w, h); }
   private loop() { if (!this.paused) { this.renderOnce(); this.frames++; const t = performance.now(); if (t - this.fpsT > 1000) { this.timings.fps = Math.round(this.frames * 1000 / (t - this.fpsT)); this.frames = 0; this.fpsT = t; } } this.raf = requestAnimationFrame(this.loop); }
-  dispose() { cancelAnimationFrame(this.raf); this.unsub(); this.unsubCam(); removeEventListener("resize", this.onResize); for (const L of this.loaded) L?.mesh.dispose(); this.renderer.dispose(); this.el.innerHTML = ""; }
+  dispose() { this.flushDolly(); cancelAnimationFrame(this.raf); this.unsub(); this.unsubCam(); removeEventListener("resize", this.onResize); for (const L of this.loaded) L?.mesh.dispose(); this.renderer.dispose(); this.el.innerHTML = ""; }
 
   /** Test/debug hooks (used by test_viewer.py). */
   debug() { const L = this.loaded[useStore.getState().head]; const gl = this.renderer.getContext() as WebGL2RenderingContext; this.renderOnce();

@@ -16,6 +16,8 @@ export type State = {
   liveCamera: (() => Cam) | null;    // engine-provided: the camera right now, so every snapshot is exact
   camRequest: { cam: Cam; seq: number } | null;   // engine tweens to this when it changes
   log: (verb: string, detail?: string, snapOverride?: Partial<Snapshot>) => void;
+  /** Replace the newest entry if it has this verb (a continuing gesture), else append. */
+  amend: (verb: string, detail: string, snapOverride?: Partial<Snapshot>) => void;
   restore: (id: number) => void;
   setCamera: (cam: Cam) => void;
   head: number;
@@ -55,6 +57,10 @@ export const useStore = create<State>((set, get) => ({
     const snap: Snapshot = { head: st.head, mode: st.mode, selected: st.selected, cam: st.liveCamera?.() ?? st.camera, ...snapOverride };
     const a: Action = { id: ++actionSeq, t: performance.now() - T0, verb, detail, snap };
     return { actions: [a, ...st.actions].slice(0, 8), history: [...st.history, a] }; }),
+  amend: (verb, detail, snapOverride = {}) => { const st = get(); const last = st.history[st.history.length - 1];
+    if (!last || last.verb !== verb) { st.log(verb, detail, snapOverride); return; }
+    const snap: Snapshot = { ...last.snap, ...snapOverride }; const a: Action = { ...last, t: performance.now() - T0, detail, snap };
+    set({ history: [...st.history.slice(0, -1), a], actions: st.actions.map(x => (x.id === a.id ? a : x)) }); },
   restore: (id) => { const st = get(); const a = st.history.find(x => x.id === id); if (!a || a === st.history[st.history.length - 1]) return;
     const { head, mode, selected, cam } = a.snap; if (!st.loaded[head]) return;
     st.log("restore", `→ ${String(id).padStart(3, "0")}  ${a.verb}`, { head, mode, selected, cam });
