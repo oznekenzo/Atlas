@@ -3,11 +3,22 @@
  * Painting is declarative: a Style says, per object, how its splats should look; `paint` rewrites
  * the RGBA array only when the style actually differs from what the layer already shows.
  */
-import type { RgbaArray, SplatMesh } from "@sparkjsdev/spark";
+import { PackedSplats, SplatMesh } from "@sparkjsdev/spark";
+import type { RgbaArray } from "@sparkjsdev/spark";
+
+/**
+ * A commit reduced to the splats of its changed objects. The room itself — walls, floor, the shelving
+ * along them — is the same in every capture, so onion mode draws it once from the baseline commit and
+ * layers only the objects on top: three times fewer splats, and no stack of near-identically
+ * registered walls blurring against itself.
+ */
+export type Objects = { mesh: SplatMesh; n: number };
 
 export type Layer = {
   mesh: SplatMesh;
   n: number;
+  /** Just the labelled splats, built at load; absent when this commit changed nothing. */
+  objects: Objects | null;
   /** Original RGBA8, straight from the file. Never mutated. */
   orig: Uint8Array;
   /** Per-splat label: 0 = static, object id + 1 otherwise. */
@@ -28,6 +39,40 @@ export type Style = {
 
 export const ADD = [127, 214, 164] as const;
 export const REM = [224, 112, 92] as const;
+
+/** Opacity is baked into the generated splats, so a change has to bump the mesh version. */
+export function setOpacity(mesh: SplatMesh, opacity: number) {
+  if (mesh.opacity === opacity) return;
+  mesh.opacity = opacity;
+  mesh.updateVersion();
+}
+
+/**
+ * Compact a layer down to its labelled splats. Spark's packed format is 4 uint32 per splat, so this is
+ * a stride copy — no decode, no re-upload of anything the GPU already has in the full mesh.
+ */
+export function buildObjects(L: Layer): Objects | null {
+  const src = L.mesh.packedSplats;
+  const packed = src?.packedArray;
+  if (!packed) return null;
+  let count = 0;
+  for (let k = 0; k < L.n; k++) if (L.label[k]) count++;
+  if (count === 0) return null;
+  const sub = new Uint32Array(count * 4);
+  for (let k = 0, w = 0; k < L.n; k++) {
+    if (!L.label[k]) continue;
+    const r = k * 4;
+    sub[w++] = packed[r];
+    sub[w++] = packed[r + 1];
+    sub[w++] = packed[r + 2];
+    sub[w++] = packed[r + 3];
+  }
+  const mesh = new SplatMesh({
+    packedSplats: new PackedSplats({ packedArray: sub, numSplats: count, splatEncoding: src?.splatEncoding }),
+  });
+  mesh.visible = false;
+  return { mesh, n: count };
+}
 
 export const makeStyle = (nObjects: number): Style => ({
   abs: new Uint8Array(nObjects + 1),

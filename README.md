@@ -20,7 +20,8 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
                 src/store.ts           app state + the action log / reflog — the only thing React and the engine share
                 src/manifest.ts        commits.json validation: a bad bake fails with the field name, not a stack trace
                 src/engine/stage.ts    three.js + Spark: boot, layers, mode → per-object style, picking, camera, idle render gate
-                src/engine/layer.ts    one commit on the GPU; declarative Style → RGBA repaint only when the style changes
+                src/engine/layer.ts    one commit on the GPU; declarative Style → RGBA repaint only when the style changes;
+                                       also the objects-only copy (labelled splats compacted) that onion mode layers
                 src/engine/gestures.ts camera gesture recording (orbit / pan / dolly, clicks excluded, dolly coalesced)
                 src/components/        Stage (mounts the engine), Hud, Nav (wordmark · rail · hints), Legend, Card, ActionLog, Terminal
                 src/git.ts             the git command parser (pure); src/actions.ts adapts it to the store
@@ -62,6 +63,8 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
 - mesh.splatRgba must be followed by mesh.updateGenerator(); after that, mutate rgba.array + rgba.needsUpdate (no rebuild).
 - Per-splat RGBA injection is disabled when Spark LOD is on. Don't pass lod: true.
 - Hidden splats need rgb=0 AND alpha=0 (premultiplied blending; alpha 0 with rgb>0 adds light).
+- Onion mode draws the baseline commit whole and every later commit as objects only: the room is untouched between
+  captures, so N copies of the walls cost N× and blur against each other at the ~1 cm registration residual.
 - Spark regenerates a mesh only when its version moves: after rewriting rgba.array call mesh.updateVersion(), and again
   after changing mesh.opacity (it is baked at generation time). Visibility changes land only after Spark's async sort
   completes — give it frames (SparkRenderer's onDirty callback says when) and never stop the loop while spark.sorting.

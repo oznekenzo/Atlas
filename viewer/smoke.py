@@ -118,9 +118,20 @@ async def main():
         await pg.wait_for_timeout(50)
         check(await ev("window.__patina.S.head") == head0, "modifier chords do not navigate")
         await pg.keyboard.press("o")
-        await pg.wait_for_timeout(200)
+        await pg.wait_for_timeout(1500)
         check("states, one room" in await ev("document.getElementById('tl').innerText"), "onion mode")
+
+        # onion draws the baseline room once plus every later commit's objects, not N whole rooms
+        st = await ev("window.__patina.stats()")
+        total = sum(L["n"] for L in st if L["loaded"])
+        drawn = sum(L["drawn"] for L in st if L["loaded"])
+        check(drawn < total * 0.55, f"onion draws {drawn:,} of {total:,} splats ({100 * drawn / total:.0f}%)")
+        check(st[0]["drawn"] == st[0]["n"], "baseline commit supplies the room")
+        check(all(L["objects"] > 0 for L in st[1:] if L["loaded"]), f"objects-only layers built: {[L['objects'] for L in st[1:]]}")
+        d = await ev("window.__patina.debug()")
+        check(d["centreRowLitPixels"] > 50, f"onion renders (lit {d['centreRowLitPixels']}/512)")
         await pg.keyboard.press("o")
+        await pg.wait_for_timeout(400)
 
         # --- idle render gate: no frames when nothing moves ----------------------------------------
         await pg.wait_for_timeout(3500)  # settle window is 1.2 s; fps is a trailing 1 s average

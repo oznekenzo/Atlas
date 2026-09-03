@@ -9,7 +9,7 @@ import type { Manifest } from "../types";
 import { parseManifest } from "../manifest";
 import { loadLabels, makeVoxelLookup, refScaleOf, roomBox, worldBox } from "../labels";
 import { useStore, objectsChanged, type State, type Cam } from "../store";
-import { ADD, REM, makeStyle, paint, setColor, setDim, setHidden, type Layer, type Style } from "./layer";
+import { ADD, REM, buildObjects, makeStyle, paint, setColor, setDim, setHidden, setOpacity, type Layer, type Style } from "./layer";
 import { Gestures } from "./gestures";
 
 const CLICK_MS = 250;
@@ -178,7 +178,16 @@ export class Stage {
       mesh.splatRgba = rgba;
       mesh.updateGenerator(); // attach ONCE; mode changes only rewrite the array
       this.scene.add(mesh);
-      this.layers[i] = { mesh, n, orig, label: lab, rgba, style: null };
+      const L: Layer = { mesh, n, orig, label: lab, rgba, style: null, objects: null };
+      if (i > 0) {
+        L.objects = buildObjects(L); // c0 supplies the room in onion mode, so it never needs an objects-only copy
+        if (L.objects) {
+          await L.objects.mesh.initialized;
+          this.scene.add(L.objects.mesh);
+          this.timings[`objects c${i}`] = L.objects.n;
+        }
+      }
+      this.layers[i] = L;
       this.timings[`load c${i}`] = Math.round(performance.now() - t0);
       useStore.getState().markLoaded(i, n);
     } catch (e) {
@@ -211,7 +220,11 @@ export class Stage {
     const nObj = M.objects.length;
     const isEmph = (o: number) => o - 1 === s.selected || o - 1 === s.hover;
     const anyEmph = s.selected !== null || s.hover !== null;
-    for (const L of this.layers) if (L) L.mesh.visible = false;
+    for (const L of this.layers) {
+      if (!L) continue;
+      L.mesh.visible = false;
+      if (L.objects) L.objects.mesh.visible = false;
+    }
 
     if (s.mode.kind === "diff") {
       const { a: ca, b: cb } = s.mode;
@@ -229,27 +242,34 @@ export class Stage {
       }
       for (const L of [A, B]) {
         L.mesh.visible = true;
-        if (L.mesh.opacity !== 1) {
-          L.mesh.opacity = 1;
-          L.mesh.updateVersion();
-        }
+        setOpacity(L.mesh, 1);
       }
       paint(B, sb);
       paint(A, sa);
+    } else if (s.mode.kind === "onion") {
+      // One room, every state. The room comes from the baseline capture — the walls were never touched,
+      // so five copies of them would only blur against each other — and every later commit contributes
+      // just its objects. HEAD's objects stay solid so the rail still tells you where you are.
+      const shellIndex = this.layers[0] ? 0 : s.head; // c0 loads last; fall back until it arrives
+      const shell = this.layers[shellIndex];
+      if (shell) {
+        shell.mesh.visible = true;
+        setOpacity(shell.mesh, 1);
+        paint(shell, makeStyle(nObj));
+      }
+      for (let i = 0; i < this.layers.length; i++) {
+        const objects = i === shellIndex ? null : this.layers[i]?.objects;
+        if (!objects) continue;
+        objects.mesh.visible = true;
+        setOpacity(objects.mesh, i === s.head ? 1 : GHOST_OPACITY);
+      }
     } else {
-      const shown = s.mode.kind === "onion" ? this.layers.map((L, i) => (L ? i : -1)).filter((i) => i >= 0) : [s.head];
-      for (const i of shown) {
-        const L = this.layers[i];
-        if (!L) continue;
+      const L = this.layers[s.head];
+      if (L) {
         L.mesh.visible = true;
-        const opacity = i === s.head ? 1 : GHOST_OPACITY;
-        if (L.mesh.opacity !== opacity) {
-          L.mesh.opacity = opacity;
-          L.mesh.updateVersion(); // opacity is baked at generation time
-        }
+        setOpacity(L.mesh, 1);
         const st = makeStyle(nObj);
-        // emphasis applies to HEAD only; ghosts keep their style, so hovering never repaints them
-        if (i === s.head && anyEmph) for (let o = 0; o <= nObj; o++) if (!isEmph(o)) setDim(st, o, UNFOCUSED_DIM);
+        if (anyEmph) for (let o = 0; o <= nObj; o++) if (!isEmph(o)) setDim(st, o, UNFOCUSED_DIM);
         paint(L, st);
       }
     }
@@ -420,6 +440,7 @@ export class Stage {
       if (!L) continue;
       L.rgba.dispose();
       L.mesh.dispose();
+      L.objects?.mesh.dispose();
     }
     this.layers = [];
     this.spark.dispose();
@@ -437,7 +458,18 @@ export class Stage {
       const a = L.rgba.array;
       let changed = 0;
       if (a) for (let k = 0; k < L.n * 4; k += 4) if (a[k] !== L.orig[k] || a[k + 3] !== L.orig[k + 3]) changed++;
-      return { i, loaded: true, n: L.n, labelled, changed, visible: L.mesh.visible, opacity: L.mesh.opacity, injected: L.mesh.splatRgba === L.rgba };
+      return {
+        i,
+        loaded: true,
+        n: L.n,
+        labelled,
+        changed,
+        visible: L.mesh.visible,
+        opacity: L.mesh.opacity,
+        injected: L.mesh.splatRgba === L.rgba,
+        objects: L.objects?.n ?? 0,
+        drawn: (L.mesh.visible ? L.n : 0) + (L.objects?.mesh.visible ? L.objects.n : 0),
+      };
     });
   }
 
