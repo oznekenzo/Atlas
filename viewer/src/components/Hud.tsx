@@ -7,12 +7,21 @@ const when = (iso: string) => {
 };
 
 export function Hud() {
-  const { M, head, mode, splats, refScale } = useStore(
-    useShallow((s) => ({ M: s.manifest, head: s.head, mode: s.mode, splats: s.splatCount[s.head], refScale: s.refScale })),
+  const { M, head, mode, splats, refScale, selected } = useStore(
+    useShallow((s) => ({
+      M: s.manifest,
+      head: s.head,
+      mode: s.mode,
+      splats: s.splatCount[s.head],
+      refScale: s.refScale,
+      selected: s.selected,
+    })),
   );
   if (!M) return null;
   const c = M.commits[head];
   const diff = mode.kind === "diff" ? mode : null;
+  // onion with an object selected is a trace of that one object through time
+  const traced = mode.kind === "onion" && selected !== null ? M.objects[selected] : null;
   return (
     <>
       <div id="tl" className="hud">
@@ -23,6 +32,10 @@ export function Hud() {
               <span className="dim">
                 &nbsp;{M.commits[diff.a].hash}&nbsp;…&nbsp;{M.commits[diff.b].hash}
               </span>
+            </>
+          ) : traced ? (
+            <>
+              TRACING <span className="dim">·</span> {traced.name.toUpperCase()}
             </>
           ) : mode.kind === "onion" ? (
             "ALL COMMITS"
@@ -36,7 +49,13 @@ export function Hud() {
           )}
         </div>
         <div className="m">
-          {diff ? `c${diff.a} → c${diff.b}` : mode.kind === "onion" ? `${M.commits.length} states, one room` : `“${c.message}”`}
+          {diff
+            ? `c${diff.a} → c${diff.b}`
+            : traced
+              ? `${traced.present.length} ${traced.present.length === 1 ? "state" : "states"} · c${traced.added_in} → ${traced.removed_in === null ? "HEAD" : `c${traced.removed_in - 1}`}`
+              : mode.kind === "onion"
+                ? `${M.commits.length} states, one room`
+                : `“${c.message}”`}
         </div>
       </div>
       <div id="tr" className="hud">

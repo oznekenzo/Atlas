@@ -3,22 +3,12 @@
  * Painting is declarative: a Style says, per object, how its splats should look; `paint` rewrites
  * the RGBA array only when the style actually differs from what the layer already shows.
  */
-import { PackedSplats, SplatMesh } from "@sparkjsdev/spark";
-import type { RgbaArray } from "@sparkjsdev/spark";
+import { PackedSplats, RgbaArray, SplatMesh } from "@sparkjsdev/spark";
 
-/**
- * A commit reduced to the splats of its changed objects. The room itself — walls, floor, the shelving
- * along them — is the same in every capture, so onion mode draws it once from the baseline commit and
- * layers only the objects on top: three times fewer splats, and no stack of near-identically
- * registered walls blurring against itself.
- */
-export type Objects = { mesh: SplatMesh; n: number };
-
-export type Layer = {
+/** Anything paintable: a mesh plus the CPU-side colour source and per-splat labels behind it. */
+export type Paintable = {
   mesh: SplatMesh;
   n: number;
-  /** Just the labelled splats, built at load; absent when this commit changed nothing. */
-  objects: Objects | null;
   /** Original RGBA8, straight from the file. Never mutated. */
   orig: Uint8Array;
   /** Per-splat label: 0 = static, object id + 1 otherwise. */
@@ -26,6 +16,16 @@ export type Layer = {
   rgba: RgbaArray;
   /** Style currently applied to `rgba`, or null before the first paint. */
   style: Style | null;
+};
+
+export type Layer = Paintable & {
+  /**
+   * The same commit reduced to just its objects — the labelled splats, compacted. Onion mode layers
+   * these into whichever commit you are standing in: the room around them is untouched between
+   * captures, so drawing it once per commit would cost N× and blur N copies of the same wall against
+   * each other at the registration residual. Null when this commit changed nothing.
+   */
+  objects: Paintable | null;
 };
 
 /** Per-object paint rule. Index 0 = static splats, object id + 1 otherwise. */
@@ -51,7 +51,7 @@ export function setOpacity(mesh: SplatMesh, opacity: number) {
  * Compact a layer down to its labelled splats. Spark's packed format is 4 uint32 per splat, so this is
  * a stride copy — no decode, no re-upload of anything the GPU already has in the full mesh.
  */
-export function buildObjects(L: Layer): Objects | null {
+export function buildObjects(L: Layer): Paintable | null {
   const src = L.mesh.packedSplats;
   const packed = src?.packedArray;
   if (!packed) return null;
@@ -59,19 +59,32 @@ export function buildObjects(L: Layer): Objects | null {
   for (let k = 0; k < L.n; k++) if (L.label[k]) count++;
   if (count === 0) return null;
   const sub = new Uint32Array(count * 4);
-  for (let k = 0, w = 0; k < L.n; k++) {
+  const orig = new Uint8Array(count * 4);
+  const label = new Uint16Array(count);
+  for (let k = 0, j = 0; k < L.n; k++) {
     if (!L.label[k]) continue;
     const r = k * 4;
-    sub[w++] = packed[r];
-    sub[w++] = packed[r + 1];
-    sub[w++] = packed[r + 2];
-    sub[w++] = packed[r + 3];
+    const w = j * 4;
+    sub[w] = packed[r];
+    sub[w + 1] = packed[r + 1];
+    sub[w + 2] = packed[r + 2];
+    sub[w + 3] = packed[r + 3];
+    orig[w] = L.orig[r];
+    orig[w + 1] = L.orig[r + 1];
+    orig[w + 2] = L.orig[r + 2];
+    orig[w + 3] = L.orig[r + 3];
+    label[j] = L.label[k];
+    j++;
   }
   const mesh = new SplatMesh({
     packedSplats: new PackedSplats({ packedArray: sub, numSplats: count, splatEncoding: src?.splatEncoding }),
   });
   mesh.visible = false;
-  return { mesh, n: count };
+  // its own RGBA source, so onion can isolate a single object's history out of the whole set
+  const rgba = new RgbaArray({ array: orig.slice(), count });
+  mesh.splatRgba = rgba;
+  mesh.updateGenerator();
+  return { mesh, n: count, orig, label, rgba, style: null };
 }
 
 export const makeStyle = (nObjects: number): Style => ({
@@ -109,7 +122,7 @@ export const sameStyle = (a: Style | null, b: Style) => a !== null && same(a.abs
  * Rewrite the layer's RGBA from `orig` under `style`. Returns false (and touches nothing) when the
  * style is unchanged. The loop is closure-free on purpose: it runs over millions of splats.
  */
-export function paint(L: Layer, style: Style): boolean {
+export function paint(L: Paintable, style: Style): boolean {
   if (sameStyle(L.style, style)) return false;
   const a = L.rgba.array;
   if (!a) return false;

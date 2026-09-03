@@ -49,7 +49,9 @@ function Hints() {
     mode.kind === "diff"
       ? "D  exit diff   ·   click  inspect"
       : mode.kind === "onion"
-        ? "O  exit onion   ·   ← →  commits"
+        ? selected !== null
+          ? "ESC  all states   ·   O  exit onion"
+          : "click  trace an object   ·   O  exit onion"
         : selected !== null
           ? "ESC  deselect"
           : "← →  commits   ·   D  diff   ·   O  onion   ·   /  commands";

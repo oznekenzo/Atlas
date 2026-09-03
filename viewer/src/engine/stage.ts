@@ -14,6 +14,7 @@ import { Gestures } from "./gestures";
 
 const CLICK_MS = 250;
 const GHOST_OPACITY = 0.12;
+const GHOST_FOCUS_OPACITY = 0.4; // tracing one object draws far less, so its past states can be bolder
 const UNFOCUSED_DIM = 0.45;
 const DIFF_CONTEXT_DIM = 0.28;
 const REMOVED_ALPHA = 0.85;
@@ -179,13 +180,11 @@ export class Stage {
       mesh.updateGenerator(); // attach ONCE; mode changes only rewrite the array
       this.scene.add(mesh);
       const L: Layer = { mesh, n, orig, label: lab, rgba, style: null, objects: null };
-      if (i > 0) {
-        L.objects = buildObjects(L); // c0 supplies the room in onion mode, so it never needs an objects-only copy
-        if (L.objects) {
-          await L.objects.mesh.initialized;
-          this.scene.add(L.objects.mesh);
-          this.timings[`objects c${i}`] = L.objects.n;
-        }
+      L.objects = buildObjects(L);
+      if (L.objects) {
+        await L.objects.mesh.initialized;
+        this.scene.add(L.objects.mesh);
+        this.timings[`objects c${i}`] = L.objects.n;
       }
       this.layers[i] = L;
       this.timings[`load c${i}`] = Math.round(performance.now() - t0);
@@ -247,21 +246,29 @@ export class Stage {
       paint(B, sb);
       paint(A, sa);
     } else if (s.mode.kind === "onion") {
-      // One room, every state. The room comes from the baseline capture — the walls were never touched,
-      // so five copies of them would only blur against each other — and every later commit contributes
-      // just its objects. HEAD's objects stay solid so the rail still tells you where you are.
-      const shellIndex = this.layers[0] ? 0 : s.head; // c0 loads last; fall back until it arrives
-      const shell = this.layers[shellIndex];
+      // Every state at once, standing in the commit you are on: HEAD's own capture is the room, and every
+      // other commit lends only its objects. The room is untouched between captures, so drawing it once
+      // per commit would cost N× and blur N copies of the same wall at the registration residual.
+      // With an object selected this becomes a trace of that one object: only its past states appear.
+      const shell = this.layers[s.head];
       if (shell) {
         shell.mesh.visible = true;
         setOpacity(shell.mesh, 1);
-        paint(shell, makeStyle(nObj));
+        const st = makeStyle(nObj);
+        if (anyEmph) for (let o = 0; o <= nObj; o++) if (!isEmph(o)) setDim(st, o, UNFOCUSED_DIM);
+        paint(shell, st);
       }
+      const focus = s.selected;
+      const ghost = makeStyle(nObj);
+      // when tracing one object, the other objects' splats are hidden rather than drawn faintly
+      if (focus !== null) for (let o = 0; o <= nObj; o++) if (o - 1 !== focus) setHidden(ghost, o);
       for (let i = 0; i < this.layers.length; i++) {
-        const objects = i === shellIndex ? null : this.layers[i]?.objects;
+        if (i === s.head) continue;
+        const objects = this.layers[i]?.objects;
         if (!objects) continue;
         objects.mesh.visible = true;
-        setOpacity(objects.mesh, i === s.head ? 1 : GHOST_OPACITY);
+        setOpacity(objects.mesh, focus === null ? GHOST_OPACITY : GHOST_FOCUS_OPACITY);
+        paint(objects, ghost);
       }
     } else {
       const L = this.layers[s.head];
@@ -285,7 +292,7 @@ export class Stage {
     const r = this.renderer.domElement.getBoundingClientRect();
     this.ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     this.ray.setFromCamera(this.ndc, this.camera);
-    const vis = s.mode.kind === "diff" ? [s.mode.a, s.mode.b] : [s.head];
+    const vis = s.mode.kind === "diff" ? [s.mode.a, s.mode.b] : s.mode.kind === "onion" ? M.commits.map((c) => c.index) : [s.head];
     let best: { id: number; d: number } | null = null;
     const hit = new THREE.Vector3();
     for (const ob of M.objects) {
@@ -440,6 +447,7 @@ export class Stage {
       if (!L) continue;
       L.rgba.dispose();
       L.mesh.dispose();
+      L.objects?.rgba.dispose();
       L.objects?.mesh.dispose();
     }
     this.layers = [];

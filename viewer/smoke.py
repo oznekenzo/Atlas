@@ -19,13 +19,13 @@ ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-
 N = 6  # synthetic commits
 
 
+FAILURES = []
+
+
 def check(cond, msg):
-    print(("  ok   " if cond else "  FAIL ") + msg)
+    print(("  ok   " if cond else "  FAIL ") + msg, flush=True)
     if not cond:
-        check.failed += 1
-
-
-check.failed = 0
+        FAILURES.append(msg)
 
 
 async def main():
@@ -117,6 +117,7 @@ async def main():
         await pg.keyboard.press("Meta+ArrowLeft")
         await pg.wait_for_timeout(50)
         check(await ev("window.__patina.S.head") == head0, "modifier chords do not navigate")
+        await ev("window.__patina.select(null)")  # git blame left an object selected; onion would trace it
         await pg.keyboard.press("o")
         await pg.wait_for_timeout(1500)
         check("states, one room" in await ev("document.getElementById('tl').innerText"), "onion mode")
@@ -126,10 +127,19 @@ async def main():
         total = sum(L["n"] for L in st if L["loaded"])
         drawn = sum(L["drawn"] for L in st if L["loaded"])
         check(drawn < total * 0.55, f"onion draws {drawn:,} of {total:,} splats ({100 * drawn / total:.0f}%)")
-        check(st[0]["drawn"] == st[0]["n"], "baseline commit supplies the room")
+        check(st[N - 1]["drawn"] == st[N - 1]["n"], "HEAD's own capture supplies the room")
         check(all(L["objects"] > 0 for L in st[1:] if L["loaded"]), f"objects-only layers built: {[L['objects'] for L in st[1:]]}")
         d = await ev("window.__patina.debug()")
         check(d["centreRowLitPixels"] > 50, f"onion renders (lit {d['centreRowLitPixels']}/512)")
+
+        # selecting an object in onion traces just that object through time
+        await ev(f"window.__patina.select({car})")
+        await pg.wait_for_timeout(1200)
+        tl = await ev("document.getElementById('tl').innerText")
+        check("TRACING" in tl, f"onion + selection traces one object: {tl.replace(chr(10), ' | ')}")
+        st2 = await ev("window.__patina.stats()")
+        check(sum(L["drawn"] for L in st2 if L["loaded"]) <= drawn, "tracing draws no more than full onion")
+        await ev("window.__patina.select(null)")
         await pg.keyboard.press("o")
         await pg.wait_for_timeout(400)
 
@@ -143,8 +153,13 @@ async def main():
         for e in errs[:5]:
             print("    ", e[:200])
         await b.close()
-    print(f"\n{'PASS' if check.failed == 0 else f'FAIL ({check.failed})'}")
-    sys.exit(1 if check.failed else 0)
+    if FAILURES:
+        print("\nFAIL:")
+        for m in FAILURES:
+            print("  -", m)
+    else:
+        print("\nPASS")
+    sys.exit(1 if FAILURES else 0)
 
 
 asyncio.run(main())

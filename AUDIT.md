@@ -52,7 +52,7 @@ moves; register 100 s, diff 12 s, bake 3 min on a 4-core cloud box.
 | V17 | low | Nav hints overlapped the commit rail below ~1400 px. | fixed — rail pitch and hints scale with the viewport |
 | V18 | low | Hover still repaints the HEAD layer when emphasis changes (one full pass, ~15 ms for 480 k splats on software GL). | mitigated — a GPU-side style lookup (label texture + palette uniform) would make it free; not needed at this scale |
 | V19 | low | Ghost layers are not pickable in onion mode. | open — deliberate: picking follows HEAD so a click never selects something you cannot see clearly |
-| V20 | med | Onion drew every commit whole — 10.6 M splats, and N misregistered copies of the same walls blurring against each other. | fixed — the room comes from the baseline commit, later commits contribute only their labelled splats (a stride copy of Spark's packed array); 3.4 M splats, and the walls are drawn once |
+| V20 | med | Onion drew every commit whole — 10.6 M splats, and N misregistered copies of the same walls blurring against each other. | fixed — the room comes from the commit you are standing in, every other commit contributes only its labelled splats (a stride copy of Spark's packed array); 3.4 M splats, walls drawn once. Selecting an object first traces that object alone through time |
 
 Numbers (synthetic set, 6 commits × ~400 k splats, software GL in the sandbox): first commit on screen 1.6 s,
 all six in 4.6 s after the manifest; diff repaint 17–24 ms; select 16 ms; hover in diff 0 ms; idle 0 fps.
