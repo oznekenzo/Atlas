@@ -59,7 +59,7 @@ export function makeVoxelLookup(m: Manifest) {
   };
 }
 
-/** Axis-aligned ref-frame box → world-space Box3 (re-fit after the rotation). */
+/** Axis-aligned ref-frame box → world-space Box3 (re-fit after the rotation). Only the voxel-grid fallback needs it. */
 export function worldBox(m: Manifest, bbox: [number[], number[]]): THREE.Box3 {
   const W = worldFromRef(m);
   const box = new THREE.Box3();

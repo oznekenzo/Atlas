@@ -5,12 +5,13 @@ WORLDSTATE (working name: Patina) — spatial version control for gaussian-splat
 Six captures of one room → registered → voxel-diffed → objects tracked across commits → browser viewer with git semantics.
 
 ## Layout
-    pipeline/   run.py             the CLI: python3 pipeline/run.py <set> [--only register|diff|bake]
+    pipeline/   run.py             the CLI: python3 pipeline/run.py <set> [--only register|diff|bake|publish]
                 dataset.py         Dataset (paths, dataset.json validation) + RegisterParams / DiffParams / BakeParams defaults
                 register.py        room-frame registration (floor/walls → 8 symmetry candidates → ICP → similarity refine);
                                    decides up/down once and folds it into ref_canon (z up, floor at z = 0, unit span)
                 diff.py            voxel occupancy diff, object tracking (partial removals, moves, originals), label grids
-                bake.py            world frame (metric, y-up), SPZ via Spark's own writer, commits.json (object names from dataset.json)
+                bake.py            world frame (metric, y-up), SPZ via Spark's own writer; publish = label grids + commits.json
+                                   with the curation from dataset.json (object names, excluded artefacts, ids renumbered)
                 splat_io.py        3DGS ply read (memmap) / write / similarity transform incl. SH band 1
                 make_synthetic.py  test data: 6 commits as real 3DGS .ply, arbitrary frame+scale each → data/sets/synthetic/
                 test_synthetic.py  end-to-end check against truth.json (registration < 15 mm, objects found, contract kept)
@@ -22,7 +23,8 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
                 src/engine/stage.ts    three.js + Spark: boot, layers, mode → per-object style, picking, camera, idle render gate
                 src/engine/layer.ts    one commit on the GPU; declarative Style → RGBA repaint only when the style changes
                 src/engine/gestures.ts camera gesture recording (orbit / pan / dolly, clicks excluded, dolly coalesced)
-                src/components/        Stage (mounts the engine), Hud, Nav (wordmark · rail · hints), Legend, Card, ActionLog, Terminal
+                src/components/        Intro (the title card: the load writes the log, → begins), Stage (mounts the engine), Hud,
+                                       Nav (wordmark · rail · hints), Legend, Card, ActionLog, Terminal
                 src/git.ts             the git command parser (pure); src/actions.ts adapts it to the store
                 ply2spz.mjs            ply → SPZ v3 using Spark's SpzWriter (NOT splat-transform: it writes SPZ v4, Spark 2.1 can't read it)
                 smoke.py               headless end-to-end check of the built viewer (npm run build && npx vite preview, then python3 smoke.py)
@@ -38,6 +40,7 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
 ## Datasets
     viewer/public/sets/<name>/{commits.json, commits/*.spz, commits/*.labels.bin}
     open the viewer with ?set=<name>  (default: garage — the real captures; synthetic — the generated test set)
+    the set opens on c0 behind a title card and loads forward in time; → (or Enter) begins, and the chrome fades in
 
 ## Bringing in a new set of captures
     0. python3 pipeline/slim_ply.py <export.ply> data/sets/<name>/source/cN.ply   (sources stay untracked)
@@ -47,14 +50,20 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
        ("auto" = the denser end of the vertical range is the floor, "keep"/"flip" override it), min_inlier_frac and
        min_candidate_margin (the run fails loudly when the registration is weak or the room's symmetry is ambiguous).
     2. python3 pipeline/run.py <name>        (needs: pip install -r pipeline/requirements.txt; node + viewer/node_modules)
-    3. open the viewer with ?set=<name>; name objects with "objects": {"<id>": "name"} in dataset.json and re-run
-       --only bake (names live in dataset.json, so re-baking never loses them).
+    3. open the viewer with ?set=<name>; name objects with "objects": {"<id>": "name"} and drop artefacts (a stray
+       blob at the ceiling) with "exclude": [<id>, ...] in dataset.json, then --only publish (seconds: it needs the
+       .spz files, not the captures). Ids there are the diff's ids (out/objects.json, or source_id in commits.json);
+       the published ids are renumbered to stay compact, and publish logs the mapping.
     Tuning lives in dataset.json, never in code; the splat files carry nothing but splats.
+    Only the register step needs open3d; diff, bake and publish run on numpy + scipy.
 
 ## Gotchas found the hard way
 - Generic FPFH+RANSAC registration fails on box-shaped rooms (flips 180°, reports 0.99 fitness). Use register.py's room-frame method.
 - Splat surfaces are 1-voxel shells: never binary-open them; dilate → label → filter by size.
 - Voxel size must track the room (voxel_frac of the span in diff.py); a fixed 3 cm voxel is wrong for sparse or dense data.
+- Object boxes must be axis-aligned in the canonical (room) frame, not the registration frame: the reference capture
+  is yawed against the room, so a box aligned to it is up to √2 too wide, and re-fitting it after the rotation to
+  world inflates it again (a 0.8 m chair reported 1.5 m).
 - A near-square empty room is ambiguous under 90/180-degree yaw once scale is free; register.py refuses when the best
   symmetry candidate does not clearly beat the runner-up. Real rooms have fixtures; the synthetic one had to be given some.
 - SpzWriter.setScale wants LINEAR scale (it logs internally). Passing log scales gives invisible 45 µm splats.

@@ -50,5 +50,7 @@
     "prune_opacity": 0.05,
     "sh": 0
   },
+  "exclude": [8, 12],
+  "exclude_note": "8 and 12 are stray splats at the ceiling, not objects",
   "captured_note": "capture times are placeholders in capture order — replace with the real times from the Teleport app"
 }

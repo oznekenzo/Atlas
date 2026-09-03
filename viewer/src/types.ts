@@ -5,6 +5,7 @@ export type Obj = {
   added_in: number;
   removed_in: number | null;
   present: number[];
+  /** World space (metres, y up), aligned to the room: tight, and usable as-is. */
   bbox: [number[], number[]];
   voxels: number;
   volume_vox_m3: number;

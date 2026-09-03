@@ -13,6 +13,8 @@ Objects are tracked across the whole timeline:
   - a removal and an addition of similar size in the same step are recorded as a move (moved_from / moved_to)
 Label grids: per commit a uint16 grid (value = object id + 1, 0 = static). Each object's label support is
 its blob grown through the commit's occupancy (above the floor, not through static geometry), then dilated.
+Object boxes (bbox_canon) are axis-aligned in the canonical room frame and taken from the undilated blob: the
+reference frame is yawed against the room, so a box aligned to it would be up to sqrt(2) too wide.
 
 Writes out/objects.json and out/c<i>.labels.bin (gzipped uint16, C order).
 """
@@ -53,6 +55,7 @@ class Grid:
         self.shape = tuple(int(x) for x in np.ceil((hi + pad + 2 * vox - self.origin) / vox).astype(int) + 1)
         self.calibration_m = calibration_m
         span = float(np.abs(np.linalg.det(ref_canon[:3, :3])) ** (-1 / 3))
+        self.span = span
         self.m_per_ref = calibration_m / span                                  # metres per reference unit
         centres = self.origin + (np.indices(self.shape).reshape(3, -1).T + 0.5) * vox
         canon = centres @ ref_canon[:3, :3].T + ref_canon[:3, 3]
@@ -72,10 +75,12 @@ class Grid:
         count = np.bincount(flat, minlength=int(np.prod(self.shape))).reshape(self.shape)
         return count >= params.min_count
 
-    def bbox_ref(self, ijk_lo, ijk_hi):
-        lo = self.origin + np.asarray(ijk_lo) * self.vox
-        hi = self.origin + (np.asarray(ijk_hi) + 1) * self.vox
-        return [lo.round(3).tolist(), hi.round(3).tolist()]
+    def bbox_canon(self, mask):
+        """Tight axis-aligned box of a voxel mask in the canonical (room) frame, padded by half a voxel."""
+        centres = self.origin + (np.argwhere(mask) + 0.5) * self.vox
+        canon = centres @ self.ref_canon[:3, :3].T + self.ref_canon[:3, 3]
+        half = self.vox / self.span / 2
+        return [(canon.min(axis=0) - half).round(4).tolist(), (canon.max(axis=0) + half).round(4).tolist()]
 
 
 def room_points(xyz, opacity, ref_canon):
@@ -168,10 +173,10 @@ class Tracker:
         self.live = {}                  # object id -> voxel mask on the dilated support
         self.labels = []                # per commit: uint16 grid, value = object id + 1
 
-    def new_object(self, mask, added_in, removed_in, present):
-        ijk = np.argwhere(mask)
+    def new_object(self, mask, added_in, removed_in, present, core):
+        """`mask` is the dilated blob (tracking, labels); `core` the changed voxels themselves (the box)."""
         o = {"id": len(self.objects), "added_in": added_in, "removed_in": removed_in, "present": list(present),
-             "voxels": int(mask.sum()), "bbox_vox": [ijk.min(0).tolist(), ijk.max(0).tolist()],
+             "voxels": int(mask.sum()), "bbox_canon": self.grid.bbox_canon(core),
              "moved_from": None, "moved_to": None}
         self.objects.append(o)
         return o["id"]
@@ -215,13 +220,13 @@ class Tracker:
             if hits:
                 continue
             added_in = self.first_commit(m & removed, ci)
-            oid = self.new_object(m, added_in, ci, range(added_in, ci))
+            oid = self.new_object(m, added_in, ci, range(added_in, ci), core=m & removed)
             self.backfill(oid, m, added_in, ci, dist_cur)
             closed.append(oid)
         opened = []
         for k in range(1, nA + 1):
             m = labA == k
-            oid = self.new_object(m, ci, None, [ci])
+            oid = self.new_object(m, ci, None, [ci], core=m & added)
             self.live[oid] = m
             opened.append(oid)
         self.match_moves(closed, opened)
@@ -316,8 +321,6 @@ def run(ds):
         tracker.label_commit(ci, dist_prev)
     objects = tracker.objects
     for o in objects:
-        ijk_lo, ijk_hi = o.pop("bbox_vox")
-        o["bbox"] = grid.bbox_ref(ijk_lo, ijk_hi)
         o["volume_vox_m3"] = round(o["voxels"] * (vox * grid.m_per_ref) ** 3, 4)
     for ci, lab in enumerate(tracker.labels):
         with gzip.open(ds.labels_path(ci), "wb", compresslevel=6) as fh:

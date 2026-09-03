@@ -104,8 +104,9 @@ def main():
     long_span = np.linalg.norm(world[0] - world[2])       # (-W/2,-D/2,0) -> (-W/2,+D/2,0)
     check(abs(long_span - D) < 0.05 * D, f"long wall {long_span:.3f} m (expect {D})")
 
-    print("\n--- objects: truth parts inside detected bboxes, per commit")
+    print("\n--- objects: truth parts inside detected bboxes (world metres), per commit")
     objects = manifest["objects"]
+    world_from_ref = np.array(manifest["world_from_ref"])
     boxes = [(np.array(o["bbox"][0]), np.array(o["bbox"][1]), set(o["present"]), o["id"]) for o in objects]
     for t in truth["objects"]:
         for ci in t["commits"]:
@@ -113,7 +114,7 @@ def main():
             covered = 0
             hits = set()
             for p in parts:
-                centre = apply(np.array([p["centre"]]), F0)[0]
+                centre = apply(apply(np.array([p["centre"]]), F0), world_from_ref)[0]
                 inside = [oid for lo, hi, present, oid in boxes
                           if ci in present and np.all(centre >= lo) and np.all(centre <= hi)]
                 if inside:
@@ -125,10 +126,8 @@ def main():
 
     print("\n--- no detected object entirely below the floor or above the ceiling")
     for o in objects:
-        lo, hi = np.array(o["bbox"])
-        corners8 = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
-        z_m = apply(corners8, ref_canon)[:, 2] * calibration_m
-        check(z_m.max() > 0 and z_m.min() < H, f"object {o['id']:2d} spans {z_m.min():.2f}..{z_m.max():.2f} m above the floor")
+        lo, hi = np.array(o["bbox"])                     # world: y is up, floor at y = 0
+        check(hi[1] > 0 and lo[1] < H, f"object {o['id']:2d} spans {lo[1]:.2f}..{hi[1]:.2f} m above the floor")
 
     print("\n--- generator: 'Work in progress' geometry is identical in c4 and c5")
     wip = next(t for t in truth["objects"] if t["name"] == "Work in progress")

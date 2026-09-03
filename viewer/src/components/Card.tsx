@@ -2,14 +2,12 @@ import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 
 export function Card() {
-  const { M, selected, refScale, checkout } = useStore(
-    useShallow((s) => ({ M: s.manifest, selected: s.selected, refScale: s.refScale, checkout: s.checkout })),
-  );
+  const { M, selected, checkout } = useStore(useShallow((s) => ({ M: s.manifest, selected: s.selected, checkout: s.checkout })));
   if (!M || selected === null) return null;
   const ob = M.objects[selected];
   const last = M.commits.length - 1;
-  const [a, b] = ob.bbox;
-  const size = [0, 1, 2].map((i) => Math.abs(b[i] - a[i]) * refScale);
+  const [a, b] = ob.bbox; // world metres, room-aligned
+  const size = [0, 1, 2].map((i) => Math.abs(b[i] - a[i]));
   return (
     <div id="card">
       <div className="n">{ob.name}</div>

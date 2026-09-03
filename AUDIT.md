@@ -24,6 +24,8 @@ Status key — **fixed** in this pass · **mitigated** (reduced, not eliminated)
 | P11 | low | Object tracking matches moved objects by size ±30 %; two similar boxes can pair wrongly. | open — acceptable for a demo; a shape descriptor is the next step |
 | P12 | low | A box replaced in place by a similar box stays ~35 % "alive" (shared voxels). | open — inherent to occupancy diff without appearance |
 | P13 | low | Registration assumes a rectangular room with a dominant floor plane. | open — documented; L-shaped rooms need a second wall pair |
+| P14 | med | Object boxes were axis-aligned in the registration frame (yawed ~35° against the garage) and taken from the dilated blob; the viewer re-fit them after rotating to world. A 0.8 m chair reported 1.5 × 1.5 m. | fixed — boxes come from the undilated blob in the canonical room frame and are published in world metres; the viewer uses them as-is |
+| P15 | low | Stray splats at the ceiling pass the size/coverage/floor/wall filters and become objects (garage: two of fourteen). | mitigated — `exclude` in dataset.json drops them at publish with ids renumbered and label grids remapped; a ceiling-band rejection mirroring the floor one is the proper fix |
 
 Numbers (garage, five HD captures, ~2.1 M splats each after slimming): registration 75–80 % inliers at 0.2 % of
 span RMS (≈1.2 cm) with a 0.31+ margin over the runner-up symmetry on every commit; 14 tracked objects incl. two
@@ -50,7 +52,7 @@ moves; register 100 s, diff 12 s, bake 3 min on a 4-core cloud box.
 | V15 | low | `actions` (visible log) and `history` (reflog) were two arrays kept in sync by hand. | fixed — the log is derived from `history` |
 | V16 | low | Manifest paths were rewritten in place; a 400-line `stage.ts`; no formatter or typecheck script. | fixed — `engine/layer.ts`, `engine/gestures.ts`, `manifest.ts`; prettier; `npm run check`; `build` typechecks first |
 | V17 | low | Nav hints overlapped the commit rail below ~1400 px. | fixed — rail pitch and hints scale with the viewport |
-| V18 | low | Hover still repaints the HEAD layer when emphasis changes (one full pass, ~15 ms for 480 k splats on software GL). | mitigated — a GPU-side style lookup (label texture + palette uniform) would make it free; not needed at this scale |
+| V18 | low | Hover still repaints the HEAD layer when emphasis changes (one full pass, ~15 ms for 480 k splats on software GL). | superseded — hover no longer restyles anything; the room dims only for a selected object. Picking tests the object's own splats (a 1-in-3 sample kept at load), the bounding box only culls candidates |
 | V19 | low | Ghost layers are not pickable in onion mode. | open — deliberate: picking follows HEAD so a click never selects something you cannot see clearly |
 
 Numbers (synthetic set, 6 commits × ~400 k splats, software GL in the sandbox): first commit on screen 1.6 s,

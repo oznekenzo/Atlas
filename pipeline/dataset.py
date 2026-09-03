@@ -13,7 +13,9 @@ dataset.json keys:
   registration    optional RegisterParams overrides
   diff            optional DiffParams overrides
   bake            optional BakeParams overrides
-  objects         optional {"<object id>": "name"}; applied at bake so re-baking never loses names
+  objects         optional {"<object id>": "name"}; applied at publish so re-baking never loses names
+  exclude         optional [<object id>, ...]: detections to drop at publish (artefacts); the rest are renumbered
+  Object ids in `objects` and `exclude` are the diff's ids (out/objects.json), so excluding one never shifts the others.
 """
 import dataclasses
 import json
@@ -137,6 +139,10 @@ class Dataset:
             if not str(key).isdigit():
                 raise PipelineError(f"{self.json_path}: 'objects' keys must be object ids, got {key!r}")
             self.object_names[int(key)] = str(value)
+        exclude = spec.get("exclude") or []
+        if not isinstance(exclude, list) or not all(isinstance(i, int) and i >= 0 for i in exclude):
+            raise PipelineError(f"{self.json_path}: 'exclude' must be a list of object ids")
+        self.exclude = set(exclude)
 
     # ---- paths -------------------------------------------------------------------------------
     def raw_ply(self, i):

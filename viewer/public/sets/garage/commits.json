@@ -65,7 +65,7 @@
  "room": [
   [
    -1.85,
-   -0.0,
+   0.0,
    -2.8186
   ],
   [
@@ -104,31 +104,34 @@
  "objects": [
   {
    "id": 0,
+   "source_id": 0,
+   "name": "Object 00",
    "added_in": 1,
    "removed_in": 2,
    "present": [
     1
    ],
    "voxels": 1889,
+   "volume_vox_m3": 0.2195,
    "moved_from": null,
    "moved_to": null,
    "bbox": [
     [
-     -1.022,
-     1.65,
-     -4.726
+     -1.514,
+     3.2531,
+     -2.0484
     ],
     [
-     0.6,
-     3.272,
-     -3.8
+     -0.3861,
+     3.9504,
+     -0.9077
     ]
-   ],
-   "volume_vox_m3": 0.2195,
-   "name": "Object 00"
+   ]
   },
   {
    "id": 1,
+   "source_id": 1,
+   "name": "Object 01",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -136,25 +139,26 @@
     2
    ],
    "voxels": 3050,
+   "volume_vox_m3": 0.3545,
    "moved_from": null,
    "moved_to": null,
    "bbox": [
     [
-     -0.964,
-     -0.493,
-     -2.41
+     0.2074,
+     0.1446,
+     -0.7381
     ],
     [
-     0.194,
-     0.897,
-     -0.151
+     0.8369,
+     1.9618,
+     0.6417
     ]
-   ],
-   "volume_vox_m3": 0.3545,
-   "name": "Object 01"
+   ]
   },
   {
    "id": 2,
+   "source_id": 2,
+   "name": "Object 02",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -162,25 +166,26 @@
     2
    ],
    "voxels": 1222,
+   "volume_vox_m3": 0.142,
    "moved_from": null,
    "moved_to": null,
    "bbox": [
     [
-     -0.791,
-     1.65,
-     -0.788
+     -0.8851,
+     0.1793,
+     -1.7123
     ],
     [
-     0.02,
-     2.519,
-     -0.151
+     -0.3623,
+     0.6265,
+     -1.0126
     ]
-   ],
-   "volume_vox_m3": 0.142,
-   "name": "Object 02"
+   ]
   },
   {
    "id": 3,
+   "source_id": 3,
+   "name": "Object 03",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -188,75 +193,78 @@
     2
    ],
    "voxels": 4279,
+   "volume_vox_m3": 0.4973,
    "moved_from": null,
-   "moved_to": 9,
+   "moved_to": 8,
    "bbox": [
     [
-     0.715,
-     -1.188,
-     -1.599
+     -0.9864,
+     0.1684,
+     0.7247
     ],
     [
-     2.048,
-     0.144,
-     -0.208
+     -0.0396,
+     1.2456,
+     1.7489
     ]
-   ],
-   "volume_vox_m3": 0.4973,
-   "name": "Object 03"
+   ]
   },
   {
    "id": 4,
+   "source_id": 4,
+   "name": "Object 04",
    "added_in": 2,
    "removed_in": 3,
    "present": [
     2
    ],
    "voxels": 697,
+   "volume_vox_m3": 0.081,
    "moved_from": null,
    "moved_to": null,
    "bbox": [
     [
-     -1.833,
-     1.303,
-     -1.019
+     0.3965,
+     0.1775,
+     -1.7117
     ],
     [
-     -1.37,
-     1.766,
-     -0.151
+     0.7058,
+     0.8174,
+     -1.4164
     ]
-   ],
-   "volume_vox_m3": 0.081,
-   "name": "Object 04"
+   ]
   },
   {
    "id": 5,
+   "source_id": 5,
+   "name": "Object 05",
    "added_in": 2,
    "removed_in": 3,
    "present": [
     2
    ],
    "voxels": 675,
+   "volume_vox_m3": 0.0784,
    "moved_from": null,
-   "moved_to": 10,
+   "moved_to": 9,
    "bbox": [
     [
-     -0.327,
-     -2.115,
-     -3.916
+     0.7686,
+     2.7505,
+     1.2041
     ],
     [
-     0.542,
-     -1.362,
-     -3.278
+     1.2072,
+     3.1891,
+     1.9508
     ]
-   ],
-   "volume_vox_m3": 0.0784,
-   "name": "Object 05"
+   ]
   },
   {
    "id": 6,
+   "source_id": 6,
+   "name": "Object 06",
    "added_in": 2,
    "removed_in": 4,
    "present": [
@@ -264,199 +272,151 @@
     3
    ],
    "voxels": 871,
+   "volume_vox_m3": 0.1012,
    "moved_from": null,
    "moved_to": null,
    "bbox": [
     [
-     0.368,
-     -1.883,
-     -0.904
+     0.2592,
+     0.1092,
+     1.4341
     ],
     [
-     0.947,
-     -1.304,
-     -0.151
+     0.6997,
+     0.6521,
+     1.8757
     ]
-   ],
-   "volume_vox_m3": 0.1012,
-   "name": "Object 06"
+   ]
   },
   {
    "id": 7,
+   "source_id": 7,
+   "name": "Object 07",
    "added_in": 2,
    "removed_in": 3,
    "present": [
     2
    ],
    "voxels": 1010,
+   "volume_vox_m3": 0.1174,
    "moved_from": null,
    "moved_to": null,
    "bbox": [
     [
-     0.542,
-     0.492,
-     -0.904
+     -0.9577,
+     0.1525,
+     -0.1562
     ],
     [
-     1.121,
-     1.129,
-     -0.151
+     -0.6082,
+     0.6924,
+     0.3239
     ]
-   ],
-   "volume_vox_m3": 0.1174,
-   "name": "Object 07"
+   ]
   },
   {
    "id": 8,
-   "added_in": 2,
-   "removed_in": null,
-   "present": [
-    2,
-    3,
-    4
-   ],
-   "voxels": 1019,
-   "moved_from": null,
-   "moved_to": null,
-   "bbox": [
-    [
-     1.584,
-     -0.84,
-     -5.074
-    ],
-    [
-     2.395,
-     0.26,
-     -3.51
-    ]
-   ],
-   "volume_vox_m3": 0.1184,
-   "name": "Object 08"
-  },
-  {
-   "id": 9,
+   "source_id": 9,
+   "name": "Object 08",
    "added_in": 3,
    "removed_in": 4,
    "present": [
     3
    ],
    "voxels": 4229,
+   "volume_vox_m3": 0.4915,
    "moved_from": 3,
-   "moved_to": 11,
+   "moved_to": 10,
    "bbox": [
     [
-     -2.065,
-     0.26,
-     -1.541
+     0.1799,
+     0.1677,
+     -1.6324
     ],
     [
-     -0.791,
-     1.592,
-     -0.151
+     1.1328,
+     1.2511,
+     -0.6008
     ]
-   ],
-   "volume_vox_m3": 0.4915,
-   "name": "Object 09"
+   ]
   },
   {
-   "id": 10,
+   "id": 9,
+   "source_id": 10,
+   "name": "Object 09",
    "added_in": 3,
    "removed_in": 4,
    "present": [
     3
    ],
    "voxels": 580,
+   "volume_vox_m3": 0.0674,
    "moved_from": 5,
    "moved_to": null,
    "bbox": [
     [
-     -0.327,
-     2.114,
-     -1.019
+     -1.0352,
+     0.1879,
+     -1.5396
     ],
     [
-     0.136,
-     2.577,
-     -0.151
+     -0.7253,
+     0.8266,
+     -1.2456
     ]
-   ],
-   "volume_vox_m3": 0.0674,
-   "name": "Object 10"
+   ]
   },
   {
-   "id": 11,
+   "id": 10,
+   "source_id": 11,
+   "name": "Object 10",
    "added_in": 4,
    "removed_in": null,
    "present": [
     4
    ],
    "voxels": 3271,
-   "moved_from": 9,
-   "moved_to": null,
-   "bbox": [
-    [
-     -0.791,
-     -0.03,
-     -1.019
-    ],
-    [
-     0.484,
-     1.245,
-     -0.151
-    ]
-   ],
    "volume_vox_m3": 0.3801,
-   "name": "Object 11"
-  },
-  {
-   "id": 12,
-   "added_in": 4,
-   "removed_in": null,
-   "present": [
-    4
-   ],
-   "voxels": 1164,
-   "moved_from": null,
+   "moved_from": 8,
    "moved_to": null,
    "bbox": [
     [
-     -0.675,
-     2.229,
-     -4.726
+     -0.4172,
+     0.1537,
+     -0.6722
     ],
     [
-     0.484,
-     3.851,
-     -3.8
+     0.3752,
+     0.8009,
+     0.1677
     ]
-   ],
-   "volume_vox_m3": 0.1353,
-   "name": "Object 12"
+   ]
   },
   {
-   "id": 13,
+   "id": 11,
+   "source_id": 13,
+   "name": "Object 11",
    "added_in": 4,
    "removed_in": null,
    "present": [
     4
    ],
    "voxels": 1791,
+   "volume_vox_m3": 0.2081,
    "moved_from": null,
    "moved_to": null,
    "bbox": [
     [
-     1.468,
-     -0.783,
-     -4.842
+     -2.2338,
+     3.1147,
+     0.9766
     ],
     [
-     2.974,
-     0.955,
-     -3.684
+     -0.5618,
+     3.9912,
+     1.9014
     ]
-   ],
-   "volume_vox_m3": 0.2081,
-   "name": "Object 13"
+   ]
   }
  ]
 }
