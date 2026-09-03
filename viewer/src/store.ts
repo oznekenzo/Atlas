@@ -34,12 +34,15 @@ export type State = {
   head: number;
   mode: Mode;
   selected: number | null;
-  hover: number | null;
+  hover: number | null; // object under the pointer; informational (cursor), never restyles the room
   loaded: boolean[]; // per commit
   loadErrors: Record<number, string>;
   splatCount: number[]; // per commit, once loaded
   terminalOpen: boolean;
   moving: boolean; // camera in motion → chrome fades
+  intro: boolean; // title card up; the chrome waits until the user begins
+
+  begin: () => void;
 
   setManifest: (m: Manifest, refScale: number) => void;
   setStatus: (status: Status) => void;
@@ -91,17 +94,26 @@ export const useStore = create<State>((set, get) => ({
   splatCount: [],
   terminalOpen: false,
   moving: false,
+  intro: true,
 
+  // time runs forward: the set opens on its first commit, not on HEAD
   setManifest: (m, refScale) =>
     set({
       manifest: m,
       refScale,
-      head: m.commits.length - 1,
+      head: 0,
       loaded: m.commits.map(() => false),
       loadErrors: {},
       splatCount: m.commits.map(() => 0),
     }),
   setStatus: (status) => set({ status }),
+  begin: () => {
+    const st = get();
+    const c = st.manifest?.commits[0];
+    if (!st.intro || !c || !st.loaded[0]) return;
+    st.log("begin", `c0  ${c.hash}`);
+    set({ intro: false });
+  },
   fail: (error) => set({ status: "error", error }),
   markLoaded: (i, splats) =>
     set((s) => {

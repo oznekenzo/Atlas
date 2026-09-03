@@ -15,6 +15,8 @@ export type Layer = {
   rgba: RgbaArray;
   /** Style currently applied to `rgba`, or null before the first paint. */
   style: Style | null;
+  /** Per label (object id + 1): a subsample of that object's splat centres in world space, flat xyz. For picking. */
+  pts: (Float32Array | undefined)[];
 };
 
 /** Per-object paint rule. Index 0 = static splats, object id + 1 otherwise. */

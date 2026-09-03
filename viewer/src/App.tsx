@@ -8,6 +8,7 @@ import { Card } from "./components/Card";
 import { Terminal } from "./components/Terminal";
 import { Nav } from "./components/Nav";
 import { ActionLog } from "./components/ActionLog";
+import { Intro } from "./components/Intro";
 
 const isEditable = (t: EventTarget | null) => t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
 
@@ -16,6 +17,13 @@ function useKeys() {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isEditable(e.target)) return;
       const s = useStore.getState();
+      if (s.intro) {
+        if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " " || e.key === "j") {
+          e.preventDefault();
+          s.begin();
+        }
+        return;
+      }
       if (s.terminalOpen || !s.manifest) return;
       const last = s.manifest.commits.length - 1;
       switch (e.key) {
@@ -52,37 +60,28 @@ function useKeys() {
   }, []);
 }
 
-/** Boot progress and failure. Nothing else in the chrome renders until the manifest is in. */
+/** Boot failure. Progress is the title card's job. */
 function Status() {
-  const { status, error, loaded, total } = useStore(
-    useShallow((s) => ({ status: s.status, error: s.error, loaded: s.loaded.filter(Boolean).length, total: s.loaded.length })),
+  const { status, error } = useStore(useShallow((s) => ({ status: s.status, error: s.error })));
+  if (status !== "error") return null;
+  return (
+    <div id="status" role="alert">
+      <div className="k">could not open set</div>
+      <div className="msg">{error}</div>
+      <div className="k dim">try ?set=garage or ?set=synthetic</div>
+    </div>
   );
-  if (status === "error") {
-    return (
-      <div id="status" role="alert">
-        <div className="k">could not open set</div>
-        <div className="msg">{error}</div>
-        <div className="k dim">try ?set=garage or ?set=synthetic</div>
-      </div>
-    );
-  }
-  if (status === "loading" && loaded === 0) {
-    return (
-      <div id="status" aria-live="polite">
-        <div className="k">{total ? `loading c${total - 1}…` : "opening set…"}</div>
-      </div>
-    );
-  }
-  return null;
 }
 
 export default function App() {
   useKeys();
-  const moving = useStore((s) => s.moving);
+  const { moving, intro, lit } = useStore(useShallow((s) => ({ moving: s.moving, intro: s.intro, lit: s.loaded.some(Boolean) })));
+  const cls = [moving ? "moving" : "", intro ? "intro" : "", lit ? "lit" : ""].join(" ").trim();
   return (
-    <div className={moving ? "moving" : ""}>
+    <div className={cls}>
       <Stage />
       <Status />
+      <Intro />
       <Hud />
       <Legend />
       <Card />

@@ -7,7 +7,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { SparkRenderer, SplatMesh, RgbaArray, unpackSplat } from "@sparkjsdev/spark";
 import type { Manifest } from "../types";
 import { parseManifest } from "../manifest";
-import { loadLabels, makeVoxelLookup, refScaleOf, roomBox, worldBox } from "../labels";
+import { loadLabels, makeVoxelLookup, refScaleOf, roomBox } from "../labels";
 import { useStore, objectsChanged, type State, type Cam } from "../store";
 import { ADD, REM, makeStyle, paint, setColor, setDim, setHidden, type Layer, type Style } from "./layer";
 import { Gestures } from "./gestures";
@@ -18,6 +18,8 @@ const UNFOCUSED_DIM = 0.45;
 const DIFF_CONTEXT_DIM = 0.28;
 const REMOVED_ALPHA = 0.85;
 const LABEL_CHUNK = 262144; // splats labelled per task before yielding to the render loop
+const PICK_STRIDE = 3; // keep every 3rd labelled splat for picking
+const PICK_RADIUS_VOXELS = 1.5; // the pointer hits an object when it passes within this many voxels of one of its splats
 const SETTLE_MS = 1200; // keep rendering this long after the last change (damping tails, Spark's async sort results)
 const MOVING_SETTLE_MS = 900;
 const TWEEN_MS = 700;
@@ -40,6 +42,7 @@ export class Stage {
   private M: Manifest | null = null;
   layers: (Layer | undefined)[] = [];
   private boxes: THREE.Box3[] = [];
+  private pickR2 = 0; // squared pick radius in world units
   private voxelOf: (x: number, y: number, z: number) => number = () => -1;
   private gestures: Gestures;
   private tween: Tween | null = null;
@@ -95,7 +98,7 @@ export class Stage {
         if (s.camRequest && s.camRequest !== prev.camRequest) this.tweenTo(s.camRequest.cam);
       }),
       useStore.subscribe((s, prev) => {
-        if (s.head !== prev.head || s.mode !== prev.mode || s.selected !== prev.selected || s.hover !== prev.hover || s.loaded !== prev.loaded) {
+        if (s.head !== prev.head || s.mode !== prev.mode || s.selected !== prev.selected || s.loaded !== prev.loaded) {
           this.applyMode(s);
         }
       }),
@@ -107,7 +110,7 @@ export class Stage {
     }, WATCHDOG_MS);
   }
 
-  /** Fetch the set's manifest, then its commits: HEAD first (first frame), then the rest newest-first. */
+  /** Fetch the set's manifest, then its commits oldest-first: c0 is the first frame and the log writes itself forward in time. */
   async boot(set = new URLSearchParams(location.search).get("set") ?? "garage") {
     const base = `sets/${encodeURIComponent(set)}/`;
     const store = useStore.getState();
@@ -120,17 +123,24 @@ export class Stage {
       if (this.disposed) return;
       this.M = M;
       this.voxelOf = makeVoxelLookup(M);
-      this.boxes = M.objects.map((o) => worldBox(M, o.bbox));
+      const refScale = refScaleOf(M);
+      const pickR = M.voxel * refScale * PICK_RADIUS_VOXELS;
+      this.pickR2 = pickR ** 2;
+      // object boxes are tight; grown by the pick radius they cull candidates without ever rejecting a real hit
+      this.boxes = M.objects.map((o) =>
+        new THREE.Box3(
+          new THREE.Vector3(...(o.bbox[0] as [number, number, number])),
+          new THREE.Vector3(...(o.bbox[1] as [number, number, number])),
+        ).expandByScalar(pickR),
+      );
       this.frameRoom(roomBox(M));
-      store.setManifest(M, refScaleOf(M));
-      const head = M.commits.length - 1;
-      const order = [head, ...Array.from({ length: head }, (_, k) => head - 1 - k)];
+      store.setManifest(M, refScale);
       let any = false;
-      for (const i of order) {
+      for (let i = 0; i < M.commits.length; i++) {
         try {
           await this.loadCommit(base, i);
           any = true;
-          if (i === head) this.timings.firstFrameMs = Math.round(performance.now() - t0);
+          if (i === 0) this.timings.firstFrameMs = Math.round(performance.now() - t0);
         } catch (e) {
           if (this.disposed) return;
           store.markFailed(i, errMsg(e));
@@ -159,6 +169,8 @@ export class Stage {
       const enc = mesh.packedSplats?.splatEncoding;
       const orig = new Uint8Array(n * 4);
       const lab = new Uint16Array(n);
+      const acc: number[][] = []; // per label: sampled splat centres, for picking
+      const seen: number[] = [];
       // Label in chunks so a 4M-splat commit does not freeze the frame it lands in.
       for (let k0 = 0; k0 < n; k0 += LABEL_CHUNK) {
         const k1 = Math.min(n, k0 + LABEL_CHUNK);
@@ -169,7 +181,11 @@ export class Stage {
           orig[k * 4 + 2] = s.color.b * 255;
           orig[k * 4 + 3] = s.opacity * 255;
           const v = this.voxelOf(s.center.x, s.center.y, s.center.z);
-          lab[k] = v < 0 ? 0 : label[v];
+          const o = v < 0 ? 0 : label[v];
+          lab[k] = o;
+          if (o > 0) {
+            if ((seen[o] = (seen[o] ?? 0) + 1) % PICK_STRIDE === 0) (acc[o] ??= []).push(s.center.x, s.center.y, s.center.z);
+          }
         }
         if (k1 < n) await yieldToLoop();
         if (this.disposed) throw new Error("disposed");
@@ -178,7 +194,7 @@ export class Stage {
       mesh.splatRgba = rgba;
       mesh.updateGenerator(); // attach ONCE; mode changes only rewrite the array
       this.scene.add(mesh);
-      this.layers[i] = { mesh, n, orig, label: lab, rgba, style: null };
+      this.layers[i] = { mesh, n, orig, label: lab, rgba, style: null, pts: acc.map((a) => (a ? new Float32Array(a) : undefined)) };
       this.timings[`load c${i}`] = Math.round(performance.now() - t0);
       useStore.getState().markLoaded(i, n);
     } catch (e) {
@@ -209,8 +225,8 @@ export class Stage {
     if (!M) return;
     const t0 = performance.now();
     const nObj = M.objects.length;
-    const isEmph = (o: number) => o - 1 === s.selected || o - 1 === s.hover;
-    const anyEmph = s.selected !== null || s.hover !== null;
+    // emphasis is selection only: hovering never changes what the room looks like
+    const sel = s.selected === null ? -1 : s.selected + 1;
     for (const L of this.layers) if (L) L.mesh.visible = false;
 
     if (s.mode.kind === "diff") {
@@ -248,8 +264,8 @@ export class Stage {
           L.mesh.updateVersion(); // opacity is baked at generation time
         }
         const st = makeStyle(nObj);
-        // emphasis applies to HEAD only; ghosts keep their style, so hovering never repaints them
-        if (i === s.head && anyEmph) for (let o = 0; o <= nObj; o++) if (!isEmph(o)) setDim(st, o, UNFOCUSED_DIM);
+        // emphasis applies to HEAD only; ghosts keep their style
+        if (i === s.head && sel > 0) for (let o = 0; o <= nObj; o++) if (o !== sel) setDim(st, o, UNFOCUSED_DIM);
         paint(L, st);
       }
     }
@@ -257,21 +273,41 @@ export class Stage {
     this.timings.lastModeMs = Math.round(performance.now() - t0);
   }
 
-  /** Object under the pointer, among objects present in the visible commit(s). Ghost layers are not pickable. */
-  pick(ev: PointerEvent): number | null {
+  /**
+   * Object under the pointer, among objects present in the visible commit(s). The bounding box only culls candidates;
+   * the hit is decided against the object's own splats, so the pointer has to be on the thing, not near it.
+   * Ghost layers are not pickable.
+   */
+  pick(ev: { clientX: number; clientY: number }): number | null {
     const M = this.M;
     if (!M) return null;
     const s = useStore.getState();
     const r = this.renderer.domElement.getBoundingClientRect();
     this.ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     this.ray.setFromCamera(this.ndc, this.camera);
+    const ray = this.ray.ray;
     const vis = s.mode.kind === "diff" ? [s.mode.a, s.mode.b] : [s.head];
     let best: { id: number; d: number } | null = null;
     const hit = new THREE.Vector3();
+    const p = new THREE.Vector3();
     for (const ob of M.objects) {
       if (!vis.some((v) => ob.present.includes(v))) continue;
-      if (!this.ray.ray.intersectBox(this.boxes[ob.id], hit)) continue;
-      const d = hit.distanceTo(this.camera.position);
+      if (!ray.intersectBox(this.boxes[ob.id], hit)) continue;
+      let d2min = Infinity;
+      let d = 0;
+      for (const v of vis) {
+        const P = ob.present.includes(v) ? this.layers[v]?.pts[ob.id + 1] : undefined;
+        if (!P) continue;
+        for (let i = 0; i < P.length; i += 3) {
+          p.set(P[i], P[i + 1], P[i + 2]);
+          const d2 = ray.distanceSqToPoint(p);
+          if (d2 < d2min) {
+            d2min = d2;
+            d = p.distanceTo(this.camera.position);
+          }
+        }
+      }
+      if (d2min > this.pickR2) continue;
       if (!best || d < best.d) best = { id: ob.id, d };
     }
     return best?.id ?? null;
