@@ -26,9 +26,13 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
     viewer/public/sets/<name>/{commits.json, commits/*.spz, commits/*.labels.bin}
     open the viewer with ?set=<name>  (default: garage — the real captures; synthetic — the generated test set)
 
-## With real Teleport captures
-    drop c0..c5.ply into data/raw/, set CAL_M in bake.py to one tape-measured wall span, run register → diff → bake.
-    Name objects by editing "name" in viewer/public/commits.json.
+## Bringing in a new set of captures
+    1. mkdir data/sets/<name>; write data/sets/<name>/dataset.json (see pipeline/run.py docstring):
+       the capture files (any path), a message + timestamp per commit, calibration_m (tape-measure the longest wall),
+       and the tuning block — wall_margin_m ignores anything near the walls; everything else has sane defaults.
+    2. python3 pipeline/run.py <name>        (needs: pip install numpy scipy open3d; node + viewer/node_modules)
+    3. open the viewer with ?set=<name>; name objects by editing "name" in viewer/public/sets/<name>/commits.json.
+    Tuning lives in dataset.json, never in code; the splat files carry nothing but splats.
 
 ## Gotchas found the hard way
 - Generic FPFH+RANSAC registration fails on box-shaped rooms (flips 180°, reports 0.99 fitness). Use register.py's room-frame method.

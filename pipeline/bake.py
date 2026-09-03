@@ -6,13 +6,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DATA = os.environ.get("PATINA_DATA", os.path.join(ROOT, "data")); RAW = os.path.join(DATA, "raw"); OUT = os.path.join(DATA, "out")
 PUB = os.environ.get("PATINA_PUB", os.path.join(ROOT, "viewer", "public")); os.makedirs(f"{PUB}/commits", exist_ok=True)
-PRUNE_OPACITY = float(os.environ.get("PATINA_PRUNE", "0.05"))     # drop near-invisible splats (about a third of a real capture, ~5% of its mass)
 TJ = json.load(open(f"{OUT}/transforms.json")); T = TJ["transforms"]
-# commit metadata: truth.json (synthetic) or commits.meta.json (real captures)
-if os.path.exists(f"{RAW}/truth.json"):
-    truth = json.load(open(f"{RAW}/truth.json")); META = truth["commits"]; CAL_M = 6.5
+# commit metadata + bake parameters: dataset.json (real sets) or truth.json (synthetic)
+DS = json.load(open(f"{DATA}/dataset.json")) if os.path.exists(f"{DATA}/dataset.json") else None
+if DS:
+    META = DS["commits"]; CAL_M = float(DS["calibration_m"]); bp = DS.get("bake", {})
+    PRUNE_OPACITY = float(bp.get("prune_opacity", 0.05)); SH = str(bp.get("sh", 0))
 else:
-    meta = json.load(open(f"{RAW}/commits.meta.json")); META = meta["commits"]; CAL_M = float(meta["calibration_m"])
+    truth = json.load(open(f"{RAW}/truth.json")); META = truth["commits"]; CAL_M = 6.5; PRUNE_OPACITY = 0.0; SH = "1"
 N_COMMITS = len(META)
 # world frame for the viewer: c0 raw -> unit room frame (floor z=0) -> metres -> y-up (three.js)
 Tcanon = np.array(TJ["ref_canon"]); Tm = np.diag([CAL_M, CAL_M, CAL_M, 1.0])
@@ -31,12 +32,12 @@ WORLD_FROM_REF = Tyup @ Tm @ Tfloor @ Tflip @ Tcanon
 commits = []
 for ci in range(N_COMMITS):
     d = read_ply(f"{RAW}/c{ci}.ply")
-    keep = d["opacity"] >= PRUNE_OPACITY
+    keep = d["opacity"] >= PRUNE_OPACITY if PRUNE_OPACITY > 0 else np.ones(len(d["opacity"]), bool)
     raw = transform_raw(d["raw"][keep].copy(), d["names"], WORLD_FROM_REF @ np.array(T[f"c{ci}"]))
     aligned = f"{OUT}/c{ci}.aligned.ply"; write_ply(aligned, raw, d["names"])
     spz = f"{PUB}/commits/c{ci}.spz"
     # SPZ via Spark's own SpzWriter (splat-transform 3.x writes SPZ v4, which Spark 2.1 does not read)
-    subprocess.run(["node", os.path.join(ROOT, "viewer", "ply2spz.mjs"), aligned, spz, os.environ.get("PATINA_SH", "0")], check=True, capture_output=True)
+    subprocess.run(["node", os.path.join(ROOT, "viewer", "ply2spz.mjs"), aligned, spz, SH], check=True, capture_output=True)
     h = hashlib.sha1(open(spz, "rb").read()).hexdigest()[:7]
     tc = META[ci]
     commits.append({"id": f"c{ci}", "index": ci, "hash": h, "message": tc["message"], "captured": tc["captured"],

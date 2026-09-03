@@ -23,7 +23,9 @@ COVERAGE = 12         # voxels (~60 cm): "observed" = within this distance of th
 COVERAGE_FRAC = 0.25  # a candidate object survives if this fraction of it is observed (partial floor holes are common)
 OPACITY_SOLID = 0.2   # a voxel is occupied if it holds >= MIN_COUNT splats at least this opaque (density-independent)
 MIN_COUNT = 2
-HEIGHT_VOX = None
+WALL_MARGIN_M = 0.0   # metres: objects whose centroid lies this close to a wall are ignored (set per dataset)
+CAL_M = None
+HEIGHT_VOX = None; ROOM_LO = None; ROOM_HI = None
 LABEL_DILATE = 2      # voxels: how far an object's label reaches to catch its thin parts (leaves, wire)
 FLOOR_BAND = 2        # voxels: a candidate with >= FLOOR_FRAC of its voxels this close to the floor plane is a floor patch, not an object
 FLOOR_FRAC = 0.8
@@ -79,15 +81,30 @@ def components(mask, seen=None):
         if seen is not None and (m & seen).sum() < COVERAGE_FRAC * m.sum(): continue
         hm = HEIGHT_VOX[m]
         if (np.abs(hm) <= FLOOR_BAND).mean() >= FLOOR_FRAC or np.median(hm) <= FLOOR_BAND: continue   # floor patch / under-floor fuzz, not an object
+        if WALL_MARGIN_M and CAL_M:                                                                   # near-wall objects are out of scope
+            c = XY_CANON[m].mean(0); mg = WALL_MARGIN_M / CAL_M
+            if np.any(c < ROOM_LO + mg) or np.any(c > ROOM_HI - mg): continue
         keep.append(i+1)
     out = np.zeros_like(lab)
     for k, i in enumerate(keep, 1): out[lab == i] = k
     return out, len(keep)
 
+def load_params():
+    """Per-dataset tuning lives in data/<set>/dataset.json, never in code."""
+    p = os.path.join(DATA, "dataset.json")
+    if not os.path.exists(p): return {}
+    return json.load(open(p))
+
 if __name__ == "__main__":
+    P = load_params(); dp = P.get("diff", {})
+    globals().update(JITTER=int(dp.get("jitter_voxels", JITTER)), COVERAGE=int(dp.get("coverage_voxels", COVERAGE)),
+                     COVERAGE_FRAC=float(dp.get("coverage_frac", COVERAGE_FRAC)), OPACITY_SOLID=float(dp.get("opacity_solid", OPACITY_SOLID)),
+                     MIN_COUNT=int(dp.get("min_count", MIN_COUNT)), LABEL_DILATE=int(dp.get("label_dilate_voxels", LABEL_DILATE)),
+                     FLOOR_BAND=int(dp.get("floor_band_voxels", FLOOR_BAND)), FLOOR_FRAC=float(dp.get("floor_frac", FLOOR_FRAC)),
+                     WALL_MARGIN_M=float(dp.get("wall_margin_m", 0.0)), CAL_M=float(P.get("calibration_m", 0) or 0) or None)
     cs = load_all()
     span = float(np.abs(np.linalg.det(REF_CANON[:3, :3])) ** (-1 / 3))       # canonical frame divides by the room span
-    VOX = 0.008 * span; MIN_VOXELS = 60
+    VOX = float(dp.get("voxel_frac", 0.008)) * span; MIN_VOXELS = int(dp.get("min_voxels", 60))
     globals().update(VOX=VOX, MIN_VOXELS=MIN_VOXELS)
     lo, shape = grid_shape(cs)
     # signed height of every voxel above the floor plane, in voxels (canonical z, floor = 2nd percentile of solid c0 z, sign resolved by density)
@@ -97,6 +114,10 @@ if __name__ == "__main__":
     floor_is_high = (q0[:, 2] > zhi - .15 * h).sum() > (q0[:, 2] < zlo + .15 * h).sum()
     floor_z = zhi if floor_is_high else zlo; up = -1.0 if floor_is_high else 1.0
     HEIGHT_VOX = up * (zc - floor_z) / (VOX * float(np.abs(np.linalg.det(REF_CANON[:3, :3])) ** (1 / 3)))   # canonical units per voxel
+    ROOM_LO, ROOM_HI = np.percentile(q0[:, :2], 2, axis=0), np.percentile(q0[:, :2], 98, axis=0)               # walls, canonical xy
+    XY_CANON = (cen @ REF_CANON[:3, :3].T + REF_CANON[:3, 3])[:, :2].reshape(*shape, 2)
+    globals().update(ROOM_LO=ROOM_LO, ROOM_HI=ROOM_HI, XY_CANON=XY_CANON)
+    if WALL_MARGIN_M and CAL_M: print(f"wall margin {WALL_MARGIN_M} m -> ignoring objects within {WALL_MARGIN_M / CAL_M:.3f} of the room edge (canonical)")
     globals().update(HEIGHT_VOX=HEIGHT_VOX)
     print(f"voxel {VOX:.4f} ref-units  min blob {MIN_VOXELS} vox  grid {shape} ({np.prod(shape)/1e6:.1f} M voxels)")
     occ, ijks, oks = zip(*[occupancy(c, lo, shape) for c in cs])

@@ -1,0 +1,35 @@
+{
+  "calibration_m": 6.1,
+  "calibration_note": "assumed long-wall span of a one-car garage \u2014 replace with a tape measurement and re-run",
+  "commits": [
+    {
+      "file": "source/empty.ply",
+      "message": "Garage, empty. Door open.",
+      "captured": "2026-09-02T16:00:00-07:00",
+      "source_export": "teleport-Garage Empty-5ifgre7r2x1j-9my3co5sxtlv.ply"
+    },
+    {
+      "file": "source/plants.ply",
+      "message": "Plants and things.",
+      "captured": "2026-09-02T18:38:00-07:00",
+      "source_export": "teleport-Garage Plants + Things-fmzdjgkwdjpe-3ij4ikc3346r.ply"
+    }
+  ],
+  "diff": {
+    "wall_margin_m": 0.6,
+    "voxel_frac": 0.008,
+    "min_voxels": 60,
+    "jitter_voxels": 2,
+    "coverage_voxels": 12,
+    "coverage_frac": 0.25,
+    "opacity_solid": 0.2,
+    "min_count": 2,
+    "label_dilate_voxels": 2,
+    "floor_band_voxels": 2,
+    "floor_frac": 0.8
+  },
+  "bake": {
+    "prune_opacity": 0.05,
+    "sh": 0
+  }
+}
