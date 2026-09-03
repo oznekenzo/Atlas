@@ -63,6 +63,10 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
 ## Gotchas found the hard way
 - Generic FPFH+RANSAC registration fails on box-shaped rooms (flips 180°, reports 0.99 fitness). Use register.py's room-frame method.
 - Splat surfaces are 1-voxel shells: never binary-open them; dilate → label → filter by size.
+- Judge change against the other capture's above-floor geometry only. Measured against everything, the jitter
+  allowance (2 voxels) plus the floor under a new object eats its bottom 20 cm, and a 20 cm sculpture vanishes.
+- A garage ceiling sheds candidates: door tracks, the opener, splats poking through the ceiling. The diff rejects
+  anything whose median height sits within ceiling_band_voxels of the ceiling or whose top pokes through it.
 - Voxel size must track the room (voxel_frac of the span in diff.py); a fixed 3 cm voxel is wrong for sparse or dense data.
 - Object boxes must be axis-aligned in the canonical (room) frame, not the registration frame: the reference capture
   is yawed against the room, so a box aligned to it is up to √2 too wide, and re-fitting it after the rotation to

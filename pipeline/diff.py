@@ -2,10 +2,12 @@
 Voxel-occupancy diff between registered commits.
 
   occ[c]       : bool grid, voxel = VOX (in ref units); a voxel is on if it holds enough solid splats
-  added(a,b)   = occ[b] & (distance to occ[a] > JITTER)      (jitter absorbs registration + reconstruction slop)
-  removed(a,b) = occ[a] & (distance to occ[b] > JITTER)
+  up[c]        = occ[c] above the floor band
+  added(a,b)   = up[b] & (distance to up[a] > JITTER)        (jitter absorbs registration + reconstruction slop;
+  removed(a,b) = up[a] & (distance to up[b] > JITTER)         the floor is never evidence against a change above it,
+                                                              so a 20 cm object on the floor is not eaten by the slop)
   then: dilate (bridges the 1-voxel shells splat surfaces produce) -> connected components -> filter:
-        too small / unobserved by the other capture / floor patch / too close to a wall
+        too small / unobserved by the other capture / floor patch / at or through the ceiling / too close to a wall
 Objects are tracked across the whole timeline:
   - a removal that overlaps a live object shrinks it; the object closes when < 30% of it remains
   - an unmatched removal is an object that was there before we noticed: its first commit is found by
@@ -66,6 +68,7 @@ class Grid:
         self.room_hi = np.percentile(q0[:, :2], 98, axis=0)
         ceiling = float(np.percentile(q0[:, 2], 98))
         self.room_canon = [[*self.room_lo.tolist(), 0.0], [*self.room_hi.tolist(), ceiling]]   # floor at z = 0
+        self.ceiling_vox = ceiling * span / vox                                # ceiling height in voxels
 
     def occupancy(self, xyz, opacity, params):
         ijk = np.floor((xyz - self.origin) / self.vox).astype(np.int64)
@@ -116,6 +119,7 @@ def components(mask, seen, grid, params, what):
     covered = ndimage.sum(seen, core, index)
     near_floor = ndimage.sum(np.abs(grid.height_vox) <= params.floor_band_voxels, core, index)
     median_height = np.array(ndimage.median(grid.height_vox, core, index))
+    max_height = np.array(ndimage.maximum(grid.height_vox, core, index))
     cx = np.array(ndimage.mean(grid.xy_canon[..., 0], core, index))
     cy = np.array(ndimage.mean(grid.xy_canon[..., 1], core, index))
     reject = Counter()
@@ -127,6 +131,8 @@ def components(mask, seen, grid, params, what):
             reject["coverage"] += 1
         elif near_floor[i] / size[i] >= params.floor_frac or median_height[i] <= params.floor_band_voxels:
             reject["floor"] += 1
+        elif median_height[i] >= grid.ceiling_vox - params.ceiling_band_voxels or max_height[i] > grid.ceiling_vox + 1:
+            reject["ceiling"] += 1                     # fixtures, door tracks and splats poking through the ceiling
         elif params.wall_margin_m and _near_wall(cx[i], cy[i], grid, params):
             reject["wall"] += 1
         else:
@@ -134,7 +140,7 @@ def components(mask, seen, grid, params, what):
     lut = np.zeros(n + 1, np.int32)
     lut[keep] = np.arange(1, len(keep) + 1)
     log.info(f"  {what}: {len(keep)} kept of {n} candidates; rejected size {reject['size']}, "
-             f"coverage {reject['coverage']}, floor {reject['floor']}, wall {reject['wall']}")
+             f"coverage {reject['coverage']}, floor {reject['floor']}, ceiling {reject['ceiling']}, wall {reject['wall']}")
     return lut[lab], len(keep)
 
 
@@ -191,13 +197,16 @@ class Tracker:
                 break
         return added_in
 
-    def step(self, ci, dist_prev, dist_cur):
-        """Detect changes between commits ci-1 and ci and update the object list."""
+    def step(self, ci, dist_prev, dist_cur, dist_prev_up, dist_cur_up):
+        """Detect changes between commits ci-1 and ci and update the object list. Change is judged above the
+        floor band and against the other commit's above-floor geometry: the floor under a new object is not
+        evidence that the object was already there."""
         p = self.params
         a = self.occ[ci - 1]
         b = self.occ[ci]
-        added = b & (dist_prev > p.jitter_voxels)
-        removed = a & (dist_cur > p.jitter_voxels)
+        up = self.grid.height_vox > p.floor_band_voxels
+        added = b & up & (dist_prev_up > p.jitter_voxels)
+        removed = a & up & (dist_cur_up > p.jitter_voxels)
         labA, nA = components(added, dist_prev <= p.coverage_voxels, self.grid, p, f"c{ci - 1}->c{ci} added")
         labR, nR = components(removed, dist_cur <= p.coverage_voxels, self.grid, p, f"c{ci - 1}->c{ci} removed")
         closed = []
@@ -311,13 +320,16 @@ def run(ds):
         occ.append(grid.occupancy(xyz, opacity, p))
         del xyz, opacity
     tracker = Tracker(grid, occ, p)
-    dist_prev = None
+    up = grid.height_vox > p.floor_band_voxels
+    dist_prev = dist_prev_up = None
     dist_cur = distance_to(occ[0])
+    dist_cur_up = distance_to(occ[0] & up)
     for ci in range(len(occ)):
         if ci > 0:
-            dist_prev = dist_cur
+            dist_prev, dist_prev_up = dist_cur, dist_cur_up
             dist_cur = distance_to(occ[ci])
-            tracker.step(ci, dist_prev, dist_cur)
+            dist_cur_up = distance_to(occ[ci] & up)
+            tracker.step(ci, dist_prev, dist_cur, dist_prev_up, dist_cur_up)
         tracker.label_commit(ci, dist_prev)
     objects = tracker.objects
     for o in objects:

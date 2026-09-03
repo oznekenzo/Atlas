@@ -1,6 +1,6 @@
 {
   "calibration_m": 6.1,
-  "calibration_note": "assumed long-wall span of a one-car garage — replace with a tape measurement and re-run",
+  "calibration_note": "assumed long-wall span of a one-car garage \u2014 replace with a tape measurement and re-run",
   "commits": [
     {
       "file": "source/c0.ply",
@@ -36,7 +36,7 @@
   "diff": {
     "wall_margin_m": 0.6,
     "voxel_frac": 0.008,
-    "min_voxels": 60,
+    "min_voxels": 50,
     "jitter_voxels": 2,
     "coverage_voxels": 12,
     "coverage_frac": 0.25,
@@ -44,13 +44,15 @@
     "min_count": 2,
     "label_dilate_voxels": 2,
     "floor_band_voxels": 2,
-    "floor_frac": 0.8
+    "floor_frac": 0.8,
+    "ceiling_band_voxels": 10
   },
   "bake": {
     "prune_opacity": 0.05,
     "sh": 0
   },
-  "exclude": [8, 12],
-  "exclude_note": "8 and 12 are stray splats at the ceiling, not objects",
-  "captured_note": "capture times are placeholders in capture order — replace with the real times from the Teleport app"
+  "exclude": [],
+  "exclude_note": "diff ids (out/objects.json) of detections that are artefacts; the ceiling filter now catches the ceiling ones",
+  "captured_note": "capture times are placeholders in capture order \u2014 replace with the real times from the Teleport app",
+  "diff_note": "min_voxels 50: the small floor sculpture is ~60 voxels. ceiling_band 10 (50 cm): the door tracks and opener hang that far below the ceiling."
 }

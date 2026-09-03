@@ -26,41 +26,17 @@
   {
    "id": 0,
    "added_in": 1,
-   "removed_in": 2,
-   "present": [
-    1
-   ],
-   "voxels": 1889,
-   "bbox_canon": [
-    [
-     -0.2482,
-     0.1488,
-     0.5333
-    ],
-    [
-     -0.0633,
-     0.3358,
-     0.6476
-    ]
-   ],
-   "moved_from": null,
-   "moved_to": null,
-   "volume_vox_m3": 0.2195
-  },
-  {
-   "id": 1,
-   "added_in": 1,
    "removed_in": 3,
    "present": [
     1,
     2
    ],
-   "voxels": 3050,
+   "voxels": 3157,
    "bbox_canon": [
     [
      0.034,
      -0.1052,
-     0.0237
+     0.0153
     ],
     [
      0.1372,
@@ -70,22 +46,22 @@
    ],
    "moved_from": null,
    "moved_to": null,
-   "volume_vox_m3": 0.3545
+   "volume_vox_m3": 0.3669
   },
   {
-   "id": 2,
+   "id": 1,
    "added_in": 1,
    "removed_in": 3,
    "present": [
     1,
     2
    ],
-   "voxels": 1222,
+   "voxels": 1329,
    "bbox_canon": [
     [
      -0.1451,
      0.166,
-     0.0294
+     0.0142
     ],
     [
      -0.0594,
@@ -95,7 +71,34 @@
    ],
    "moved_from": null,
    "moved_to": null,
-   "volume_vox_m3": 0.142
+   "volume_vox_m3": 0.1544
+  },
+  {
+   "id": 2,
+   "added_in": 1,
+   "removed_in": null,
+   "present": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "voxels": 240,
+   "bbox_canon": [
+    [
+     -0.0467,
+     -0.0167,
+     0.0168
+    ],
+    [
+     0.0058,
+     0.036,
+     0.0417
+    ]
+   ],
+   "moved_from": null,
+   "moved_to": null,
+   "volume_vox_m3": 0.0279
   },
   {
    "id": 3,
@@ -105,12 +108,12 @@
     1,
     2
    ],
-   "voxels": 4279,
+   "voxels": 4421,
    "bbox_canon": [
     [
      -0.1617,
      -0.2867,
-     0.0276
+     0.012
     ],
     [
      -0.0065,
@@ -119,8 +122,8 @@
     ]
    ],
    "moved_from": null,
-   "moved_to": 9,
-   "volume_vox_m3": 0.4973
+   "moved_to": 8,
+   "volume_vox_m3": 0.5138
   },
   {
    "id": 4,
@@ -129,29 +132,31 @@
    "present": [
     2
    ],
-   "voxels": 697,
+   "voxels": 805,
    "bbox_canon": [
     [
-     0.065,
+     0.0647,
      0.2322,
-     0.0291
+     0.0131
     ],
     [
      0.1157,
-     0.2806,
+     0.281,
      0.134
     ]
    ],
    "moved_from": null,
-   "moved_to": null,
-   "volume_vox_m3": 0.081
+   "moved_to": 9,
+   "volume_vox_m3": 0.0936
   },
   {
    "id": 5,
    "added_in": 2,
-   "removed_in": 3,
+   "removed_in": null,
    "present": [
-    2
+    2,
+    3,
+    4
    ],
    "voxels": 675,
    "bbox_canon": [
@@ -167,7 +172,7 @@
     ]
    ],
    "moved_from": null,
-   "moved_to": 10,
+   "moved_to": null,
    "volume_vox_m3": 0.0784
   },
   {
@@ -178,7 +183,7 @@
     2,
     3
    ],
-   "voxels": 871,
+   "voxels": 901,
    "bbox_canon": [
     [
      0.0425,
@@ -193,7 +198,7 @@
    ],
    "moved_from": null,
    "moved_to": null,
-   "volume_vox_m3": 0.1012
+   "volume_vox_m3": 0.1047
   },
   {
    "id": 7,
@@ -202,12 +207,12 @@
    "present": [
     2
    ],
-   "voxels": 1010,
+   "voxels": 1102,
    "bbox_canon": [
     [
      -0.157,
      -0.0531,
-     0.025
+     0.017
     ],
     [
      -0.0997,
@@ -217,47 +222,21 @@
    ],
    "moved_from": null,
    "moved_to": null,
-   "volume_vox_m3": 0.1174
+   "volume_vox_m3": 0.1281
   },
   {
    "id": 8,
-   "added_in": 2,
-   "removed_in": null,
-   "present": [
-    2,
-    3,
-    4
-   ],
-   "voxels": 1019,
-   "bbox_canon": [
-    [
-     -0.1965,
-     -0.2979,
-     0.4849
-    ],
-    [
-     -0.1034,
-     -0.1609,
-     0.6922
-    ]
-   ],
-   "moved_from": null,
-   "moved_to": null,
-   "volume_vox_m3": 0.1184
-  },
-  {
-   "id": 9,
    "added_in": 3,
    "removed_in": 4,
    "present": [
     3
    ],
-   "voxels": 4229,
+   "voxels": 4376,
    "bbox_canon": [
     [
      0.0295,
      0.0985,
-     0.0275
+     0.012
     ],
     [
      0.1857,
@@ -266,22 +245,22 @@
     ]
    ],
    "moved_from": 3,
-   "moved_to": 11,
-   "volume_vox_m3": 0.4915
+   "moved_to": 10,
+   "volume_vox_m3": 0.5086
   },
   {
-   "id": 10,
+   "id": 9,
    "added_in": 3,
    "removed_in": 4,
    "present": [
     3
    ],
-   "voxels": 580,
+   "voxels": 671,
    "bbox_canon": [
     [
-     -0.1697,
-     0.2042,
-     0.0308
+     -0.1698,
+     0.2005,
+     0.0147
     ],
     [
      -0.1189,
@@ -289,23 +268,23 @@
      0.1355
     ]
    ],
-   "moved_from": 5,
+   "moved_from": 4,
    "moved_to": null,
-   "volume_vox_m3": 0.0674
+   "volume_vox_m3": 0.078
   },
   {
-   "id": 11,
+   "id": 10,
    "added_in": 4,
    "removed_in": null,
    "present": [
     4
    ],
-   "voxels": 3271,
+   "voxels": 3357,
    "bbox_canon": [
     [
      -0.0684,
      -0.0275,
-     0.0252
+     0.016
     ],
     [
      0.0615,
@@ -313,57 +292,9 @@
      0.1313
     ]
    ],
-   "moved_from": 9,
+   "moved_from": 8,
    "moved_to": null,
-   "volume_vox_m3": 0.3801
-  },
-  {
-   "id": 12,
-   "added_in": 4,
-   "removed_in": null,
-   "present": [
-    4
-   ],
-   "voxels": 1164,
-   "bbox_canon": [
-    [
-     -0.2732,
-     0.2075,
-     0.5352
-    ],
-    [
-     -0.1063,
-     0.4055,
-     0.6503
-    ]
-   ],
-   "moved_from": null,
-   "moved_to": null,
-   "volume_vox_m3": 0.1353
-  },
-  {
-   "id": 13,
-   "added_in": 4,
-   "removed_in": null,
-   "present": [
-    4
-   ],
-   "voxels": 1791,
-   "bbox_canon": [
-    [
-     -0.3662,
-     -0.3117,
-     0.5106
-    ],
-    [
-     -0.0921,
-     -0.1601,
-     0.6543
-    ]
-   ],
-   "moved_from": null,
-   "moved_to": null,
-   "volume_vox_m3": 0.2081
+   "volume_vox_m3": 0.3901
   }
  ]
 }

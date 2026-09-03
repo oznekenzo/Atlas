@@ -51,6 +51,8 @@ class DiffParams:
     label_dilate_voxels: int = 2         # how far an object's label reaches to catch its thin parts
     floor_band_voxels: int = 2           # a candidate mostly this close to the floor is a floor patch
     floor_frac: float = 0.8
+    ceiling_band_voxels: int = 6         # a candidate whose median lies this close to the ceiling (or that pokes
+                                         # through it) is a fixture or noise, not an object
 
 
 @dataclass

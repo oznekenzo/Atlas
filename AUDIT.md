@@ -25,7 +25,8 @@ Status key — **fixed** in this pass · **mitigated** (reduced, not eliminated)
 | P12 | low | A box replaced in place by a similar box stays ~35 % "alive" (shared voxels). | open — inherent to occupancy diff without appearance |
 | P13 | low | Registration assumes a rectangular room with a dominant floor plane. | open — documented; L-shaped rooms need a second wall pair |
 | P14 | med | Object boxes were axis-aligned in the registration frame (yawed ~35° against the garage) and taken from the dilated blob; the viewer re-fit them after rotating to world. A 0.8 m chair reported 1.5 × 1.5 m. | fixed — boxes come from the undilated blob in the canonical room frame and are published in world metres; the viewer uses them as-is |
-| P15 | low | Stray splats at the ceiling pass the size/coverage/floor/wall filters and become objects (garage: two of fourteen). | mitigated — `exclude` in dataset.json drops them at publish with ids renumbered and label grids remapped; a ceiling-band rejection mirroring the floor one is the proper fix |
+| P15 | low | Stray splats at the ceiling pass the size/coverage/floor/wall filters and become objects (garage: four of fourteen). | fixed — a ceiling rejection mirroring the floor one (`ceiling_band_voxels`, plus anything poking through the ceiling); `exclude` in dataset.json remains for whatever else slips through |
+| P16 | med | Change was judged against all of the other capture's geometry, floor included, so the 2-voxel jitter allowance plus the floor ate the bottom 20 cm of every new object; a 20 cm floor sculpture never surfaced. | fixed — change is judged above the floor band against the other capture's above-floor geometry; tracking, coverage and labels still use the full distance |
 
 Numbers (garage, five HD captures, ~2.1 M splats each after slimming): registration 75–80 % inliers at 0.2 % of
 span RMS (≈1.2 cm) with a 0.31+ margin over the runner-up symmetry on every commit; 14 tracked objects incl. two

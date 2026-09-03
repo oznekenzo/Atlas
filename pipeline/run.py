@@ -14,7 +14,7 @@ dataset.json:
   "registration": { "up": "auto", "min_inlier_frac": 0.4, "min_candidate_margin": 0.05 },
   "diff": { "wall_margin_m": 0.6, "voxel_frac": 0.008, "min_voxels": 60, "jitter_voxels": 2,
             "coverage_voxels": 12, "coverage_frac": 0.25, "opacity_solid": 0.2, "min_count": 2,
-            "label_dilate_voxels": 2, "floor_band_voxels": 2, "floor_frac": 0.8 },
+            "label_dilate_voxels": 2, "floor_band_voxels": 2, "floor_frac": 0.8, "ceiling_band_voxels": 6 },
   "bake": { "prune_opacity": 0.05, "sh": 0 },
   "objects": { "6": "Floor lamp" },           # optional names by object id (the diff's ids), applied at publish
   "exclude": [8, 12] }                        # optional: detections that are artefacts, dropped at publish
