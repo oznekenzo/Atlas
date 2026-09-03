@@ -19,9 +19,14 @@ N_COMMITS = len([f for f in os.listdir(RAW) if f.startswith("c") and f.endswith(
 VOX = None            # 0.8% of room span (~5 cm in a garage); set in main
 MIN_VOLUME = None     # (5 voxels)^3 — set in main
 JITTER = 2            # voxels of positional slop tolerated before something counts as changed (splat surfaces are fuzzy)
-COVERAGE = 8          # voxels: a change must lie within this distance of the OTHER capture's geometry, else it was simply unobserved
-OPACITY_SOLID = 0.3   # a voxel is occupied if it holds >= MIN_COUNT splats at least this opaque (density-independent)
+COVERAGE = 12         # voxels (~60 cm): "observed" = within this distance of the OTHER capture's geometry
+COVERAGE_FRAC = 0.25  # a candidate object survives if this fraction of it is observed (partial floor holes are common)
+OPACITY_SOLID = 0.2   # a voxel is occupied if it holds >= MIN_COUNT splats at least this opaque (density-independent)
 MIN_COUNT = 2
+HEIGHT_VOX = None
+LABEL_DILATE = 2      # voxels: how far an object's label reaches to catch its thin parts (leaves, wire)
+FLOOR_BAND = 2        # voxels: a candidate with >= FLOOR_FRAC of its voxels this close to the floor plane is a floor patch, not an object
+FLOOR_FRAC = 0.8
 MIN_VOXELS = None     # derived from MIN_VOLUME / VOX^3
 
 def load_all():
@@ -60,13 +65,21 @@ def occupancy(c, lo, shape):
     cnt = np.zeros(shape, np.int32); np.add.at(cnt, tuple(ijk[solid].T), 1)
     return cnt >= MIN_COUNT, ijk, ok
 
-def components(mask):
-    """Splat surfaces are thin shells: never erode them. Dilate to bridge gaps, label, filter by
-    the ORIGINAL mask's voxel count, and return labels on the dilated support (for tracking/bbox)."""
+def components(mask, seen=None):
+    """Splat surfaces are thin shells: never erode them. Dilate to bridge gaps, label, filter by the ORIGINAL mask's
+    voxel count, and drop candidates that lie almost entirely where the other capture has nothing nearby
+    (unobserved, not changed). Returns labels on the dilated support (for tracking/bbox)."""
     grown = ndimage.binary_dilation(mask, np.ones((3,3,3)), iterations=1)
     lab, n = ndimage.label(grown, structure=np.ones((3,3,3)))
     sizes = ndimage.sum(mask, lab, range(1, n+1))
-    keep = [i+1 for i, sz in enumerate(sizes) if sz >= MIN_VOXELS]
+    keep = []
+    for i, sz in enumerate(sizes):
+        if sz < MIN_VOXELS: continue
+        m = (lab == i+1) & mask
+        if seen is not None and (m & seen).sum() < COVERAGE_FRAC * m.sum(): continue
+        hm = HEIGHT_VOX[m]
+        if (np.abs(hm) <= FLOOR_BAND).mean() >= FLOOR_FRAC or np.median(hm) <= FLOOR_BAND: continue   # floor patch / under-floor fuzz, not an object
+        keep.append(i+1)
     out = np.zeros_like(lab)
     for k, i in enumerate(keep, 1): out[lab == i] = k
     return out, len(keep)
@@ -74,9 +87,17 @@ def components(mask):
 if __name__ == "__main__":
     cs = load_all()
     span = float(np.abs(np.linalg.det(REF_CANON[:3, :3])) ** (-1 / 3))       # canonical frame divides by the room span
-    VOX = 0.008 * span; MIN_VOXELS = 125
+    VOX = 0.008 * span; MIN_VOXELS = 60
     globals().update(VOX=VOX, MIN_VOXELS=MIN_VOXELS)
     lo, shape = grid_shape(cs)
+    # signed height of every voxel above the floor plane, in voxels (canonical z, floor = 2nd percentile of solid c0 z, sign resolved by density)
+    I, J, K = np.indices(shape); cen = lo + (np.stack([I, J, K], -1).reshape(-1, 3) + .5) * VOX
+    zc = (cen @ REF_CANON[:3, :3].T + REF_CANON[:3, 3])[:, 2].reshape(shape)
+    q0 = room_points(cs[0]) @ REF_CANON[:3, :3].T + REF_CANON[:3, 3]; zlo, zhi = np.percentile(q0[:, 2], [2, 98]); h = zhi - zlo
+    floor_is_high = (q0[:, 2] > zhi - .15 * h).sum() > (q0[:, 2] < zlo + .15 * h).sum()
+    floor_z = zhi if floor_is_high else zlo; up = -1.0 if floor_is_high else 1.0
+    HEIGHT_VOX = up * (zc - floor_z) / (VOX * float(np.abs(np.linalg.det(REF_CANON[:3, :3])) ** (1 / 3)))   # canonical units per voxel
+    globals().update(HEIGHT_VOX=HEIGHT_VOX)
     print(f"voxel {VOX:.4f} ref-units  min blob {MIN_VOXELS} vox  grid {shape} ({np.prod(shape)/1e6:.1f} M voxels)")
     occ, ijks, oks = zip(*[occupancy(c, lo, shape) for c in cs])
     st = ndimage.generate_binary_structure(3, 1)
@@ -88,9 +109,9 @@ if __name__ == "__main__":
             a, b = occ[ci-1], occ[ci]
             seen_a = ndimage.binary_dilation(a, st, iterations=COVERAGE)     # where capture a has geometry nearby at all
             seen_b = ndimage.binary_dilation(b, st, iterations=COVERAGE)
-            added   = b & ~ndimage.binary_dilation(a, st, iterations=JITTER) & seen_a
-            removed = a & ~ndimage.binary_dilation(b, st, iterations=JITTER) & seen_b
-            labA, nA = components(added); labR, nR = components(removed)
+            added   = b & ~ndimage.binary_dilation(a, st, iterations=JITTER)
+            removed = a & ~ndimage.binary_dilation(b, st, iterations=JITTER)
+            labA, nA = components(added, seen_a); labR, nR = components(removed, seen_b)
             for k in range(1, nR+1):                      # removals close live objects, or reveal c0 originals
                 m = labR == k; hit = None
                 for oid, g in live.items():
@@ -111,7 +132,10 @@ if __name__ == "__main__":
                 if ci not in objects[oid]["present"]: objects[oid]["present"].append(ci)
             print(f"c{ci-1}->c{ci}: {nA} added, {nR} removed components")
         lab = np.zeros(shape, np.uint16)
-        for oid, g in live.items(): lab[g] = oid + 1
+        prev = ndimage.binary_dilation(occ[ci-1], st, iterations=1) if ci > 0 else np.zeros(shape, bool)
+        for oid, g in live.items():
+            reach = ndimage.binary_dilation(g, st, iterations=LABEL_DILATE) & ~(prev & ~g)
+            lab[reach & (lab == 0)] = oid + 1
         labels.append(lab)
     # finalize bboxes in ref units
     for o in objects:
