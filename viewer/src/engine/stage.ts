@@ -12,6 +12,7 @@ import { useStore, objectsChanged, traceChain, type State, type Cam } from "../s
 import { ADD, REM, buildObjects, makeStyle, paint, setColor, setDim, setHidden, setOpacity, type Layer, type Style } from "./layer";
 import { Gestures } from "./gestures";
 import { Overlay, type BoxItem } from "./overlay";
+import { Minimap } from "./minimap";
 
 const CLICK_MS = 250;
 const GHOST_OPACITY = 0.12;
@@ -49,6 +50,7 @@ export class Stage {
   private voxelOf: (x: number, y: number, z: number) => number = () => -1;
   private gestures: Gestures;
   private overlay: Overlay;
+  private minimap: Minimap;
   private tween: Tween | null = null;
   private activeUntil = performance.now() + SETTLE_MS;
   private needsFrame = true; // a change is guaranteed at least one frame, however slow the GPU
@@ -88,6 +90,7 @@ export class Stage {
     this.gestures = new Gestures(this.camera, this.controls);
     this.overlay = new Overlay(el);
     this.overlay.resize(el.clientWidth, el.clientHeight);
+    this.minimap = new Minimap(el);
 
     useStore.setState({ liveCamera: () => this.gestures.snapshot() });
     this.controls.addEventListener("change", this.onControlsChange);
@@ -145,7 +148,9 @@ export class Stage {
       );
       // grown by the pick radius the boxes cull candidates without ever rejecting a real hit
       this.cull = this.boxes.map((b) => b.clone().expandByScalar(pickR));
-      this.frameRoom(roomBox(M));
+      const room = roomBox(M);
+      this.frameRoom(room);
+      this.minimap.setRoom(room);
       store.setManifest(M, refScale);
       let any = false;
       for (let i = 0; i < M.commits.length; i++) {
@@ -411,7 +416,14 @@ export class Stage {
     this.stepTween();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
-    this.overlay.draw(this.camera, this.boxItems(useStore.getState()));
+    this.drawChrome();
+  }
+
+  /** The 2D layers above the splats: the detection overlay and the minimap, from one pass over the mode. */
+  private drawChrome() {
+    const items = this.boxItems(useStore.getState());
+    this.overlay.draw(this.camera, items);
+    this.minimap.draw(this.camera, this.controls.target, items);
   }
 
   /**
@@ -473,7 +485,7 @@ export class Stage {
     if (!this.needsFrame && t > this.activeUntil) return;
     this.needsFrame = false;
     this.renderer.render(this.scene, this.camera);
-    this.overlay.draw(this.camera, this.boxItems(useStore.getState()));
+    this.drawChrome();
     this.frames++;
   };
 
@@ -546,6 +558,7 @@ export class Stage {
     this.layers = [];
     this.spark.dispose();
     this.overlay.dispose();
+    this.minimap.dispose();
     this.renderer.dispose();
     dom.remove();
     useStore.setState({ liveCamera: null });

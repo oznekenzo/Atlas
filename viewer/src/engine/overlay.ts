@@ -8,7 +8,7 @@ import * as THREE from "three";
 export type Tone = "neutral" | "add" | "rem" | "trace";
 export type BoxItem = { box: THREE.Box3; label: string; tone: Tone; emphasis: boolean };
 
-const TONES: Record<Tone, [number, number, number]> = {
+export const TONES: Record<Tone, [number, number, number]> = {
   neutral: [235, 238, 242],
   add: [127, 214, 164],
   rem: [224, 112, 92],
@@ -20,7 +20,7 @@ const MIN_PX = 14; // ignore anything smaller than this on screen: it is a speck
 // a box that spills past every edge means the camera is inside it; brackets in the frame corners read as noise
 const LABEL_H = 15;
 /** The chrome owns these regions; a tag that would land on them is dropped rather than drawn over them. */
-const RESERVED = ["#tl", "#tr", "#legend", "#card", "#actions", "#nav"];
+const RESERVED = ["#tl", "#tr", "#legend", "#card", "#actions", "#nav", ".minimap"];
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 const hits = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
