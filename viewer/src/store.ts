@@ -63,6 +63,27 @@ export type State = {
   setMoving: (m: boolean) => void;
 };
 
+/**
+ * One physical object across the commits: the tracker splits a thing that moved into separate ids
+ * linked by moved_from / moved_to, so following the links is what makes a trace a trail.
+ */
+export const traceChain = (m: Manifest, id: number): number[] => {
+  const chain = [id];
+  for (let o = m.objects[id]; o?.moved_from != null;) {
+    const prev = m.objects[o.moved_from];
+    if (!prev || chain.includes(prev.id)) break;
+    chain.unshift(prev.id);
+    o = prev;
+  }
+  for (let o = m.objects[id]; o?.moved_to != null;) {
+    const next = m.objects[o.moved_to];
+    if (!next || chain.includes(next.id)) break;
+    chain.push(next.id);
+    o = next;
+  }
+  return chain;
+};
+
 /** Objects that differ between two commits. Shared by the engine, the terminal, the legend and the log. */
 export const objectsChanged = (m: Manifest, a: number, b: number) => {
   const added = new Set<number>();

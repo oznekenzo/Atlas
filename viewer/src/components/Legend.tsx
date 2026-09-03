@@ -4,13 +4,14 @@ import { objectsChanged, useStore } from "../store";
 
 /** Diff summary, derived from the manifest — the engine paints, it does not report. */
 export function Legend() {
-  const { M, mode, refScale } = useStore(useShallow((s) => ({ M: s.manifest, mode: s.mode, refScale: s.refScale })));
+  const { M, mode } = useStore(useShallow((s) => ({ M: s.manifest, mode: s.mode })));
   const stats = useMemo(() => {
     if (!M || mode.kind !== "diff") return null;
     const { added, removed } = objectsChanged(M, mode.a, mode.b);
-    const vol = [...added, ...removed].reduce((acc, id) => acc + M.objects[id].volume_vox_m3, 0) * refScale ** 3;
+    // volume_vox_m3 is already metric (the pipeline scales by metres per ref unit) — do not scale it again
+    const vol = [...added, ...removed].reduce((acc, id) => acc + M.objects[id].volume_vox_m3, 0);
     return { added: added.size, removed: removed.size, volumeM3: vol };
-  }, [M, mode, refScale]);
+  }, [M, mode]);
   if (!stats) return null;
   return (
     <div id="legend" className="hud">

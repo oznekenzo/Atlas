@@ -52,6 +52,13 @@ body {
 .intro.lit #stage {
   opacity: 0.22; /* the room waits behind the title card; begin brings the light up */
 }
+/* detection overlay: 2D boxes drawn above the splats, never in the way of the pointer */
+#stage .overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
 canvas {
   display: block;
 }

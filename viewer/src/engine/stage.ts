@@ -8,12 +8,14 @@ import { SparkRenderer, SplatMesh, RgbaArray, unpackSplat } from "@sparkjsdev/sp
 import type { Manifest } from "../types";
 import { parseManifest } from "../manifest";
 import { loadLabels, makeVoxelLookup, refScaleOf, roomBox } from "../labels";
-import { useStore, objectsChanged, type State, type Cam } from "../store";
-import { ADD, REM, makeStyle, paint, setColor, setDim, setHidden, type Layer, type Style } from "./layer";
+import { useStore, objectsChanged, traceChain, type State, type Cam } from "../store";
+import { ADD, REM, buildObjects, makeStyle, paint, setColor, setDim, setHidden, setOpacity, type Layer, type Style } from "./layer";
 import { Gestures } from "./gestures";
+import { Overlay, type BoxItem } from "./overlay";
 
 const CLICK_MS = 250;
 const GHOST_OPACITY = 0.12;
+const GHOST_FOCUS_OPACITY = 0.4; // tracing one object draws far less, so its past states can be bolder
 const UNFOCUSED_DIM = 0.45;
 const DIFF_CONTEXT_DIM = 0.28;
 const REMOVED_ALPHA = 0.85;
@@ -41,10 +43,12 @@ export class Stage {
 
   private M: Manifest | null = null;
   layers: (Layer | undefined)[] = [];
-  private boxes: THREE.Box3[] = [];
+  private boxes: THREE.Box3[] = []; // tight, room-aligned: what the overlay draws
+  private cull: THREE.Box3[] = []; // the same grown by the pick radius: a cheap first pass for picking
   private pickR2 = 0; // squared pick radius in world units
   private voxelOf: (x: number, y: number, z: number) => number = () => -1;
   private gestures: Gestures;
+  private overlay: Overlay;
   private tween: Tween | null = null;
   private activeUntil = performance.now() + SETTLE_MS;
   private needsFrame = true; // a change is guaranteed at least one frame, however slow the GPU
@@ -82,6 +86,8 @@ export class Stage {
     this.spark = new SparkRenderer({ renderer: this.renderer, onDirty: () => this.touch() });
     this.scene.add(this.spark);
     this.gestures = new Gestures(this.camera, this.controls);
+    this.overlay = new Overlay(el);
+    this.overlay.resize(el.clientWidth, el.clientHeight);
 
     useStore.setState({ liveCamera: () => this.gestures.snapshot() });
     this.controls.addEventListener("change", this.onControlsChange);
@@ -101,6 +107,10 @@ export class Stage {
         if (s.head !== prev.head || s.mode !== prev.mode || s.selected !== prev.selected || s.loaded !== prev.loaded) {
           this.applyMode(s);
         }
+      }),
+      // hover never restyles splats; it only changes which overlay box is emphasised, so a redraw is enough
+      useStore.subscribe((s, prev) => {
+        if (s.hover !== prev.hover) this.touch();
       }),
     );
     this.raf = requestAnimationFrame(this.loop);
@@ -126,13 +136,15 @@ export class Stage {
       const refScale = refScaleOf(M);
       const pickR = M.voxel * refScale * PICK_RADIUS_VOXELS;
       this.pickR2 = pickR ** 2;
-      // object boxes are tight; grown by the pick radius they cull candidates without ever rejecting a real hit
-      this.boxes = M.objects.map((o) =>
-        new THREE.Box3(
-          new THREE.Vector3(...(o.bbox[0] as [number, number, number])),
-          new THREE.Vector3(...(o.bbox[1] as [number, number, number])),
-        ).expandByScalar(pickR),
+      this.boxes = M.objects.map(
+        (o) =>
+          new THREE.Box3(
+            new THREE.Vector3(...(o.bbox[0] as [number, number, number])),
+            new THREE.Vector3(...(o.bbox[1] as [number, number, number])),
+          ),
       );
+      // grown by the pick radius the boxes cull candidates without ever rejecting a real hit
+      this.cull = this.boxes.map((b) => b.clone().expandByScalar(pickR));
       this.frameRoom(roomBox(M));
       store.setManifest(M, refScale);
       let any = false;
@@ -194,7 +206,14 @@ export class Stage {
       mesh.splatRgba = rgba;
       mesh.updateGenerator(); // attach ONCE; mode changes only rewrite the array
       this.scene.add(mesh);
-      this.layers[i] = { mesh, n, orig, label: lab, rgba, style: null, pts: acc.map((a) => (a ? new Float32Array(a) : undefined)) };
+      const L: Layer = { mesh, n, orig, label: lab, rgba, style: null, objects: null, pts: acc.map((a) => (a ? new Float32Array(a) : undefined)) };
+      L.objects = buildObjects(L);
+      if (L.objects) {
+        await L.objects.mesh.initialized;
+        this.scene.add(L.objects.mesh);
+        this.timings[`objects c${i}`] = L.objects.n;
+      }
+      this.layers[i] = L;
       this.timings[`load c${i}`] = Math.round(performance.now() - t0);
       useStore.getState().markLoaded(i, n);
     } catch (e) {
@@ -227,7 +246,11 @@ export class Stage {
     const nObj = M.objects.length;
     // emphasis is selection only: hovering never changes what the room looks like
     const sel = s.selected === null ? -1 : s.selected + 1;
-    for (const L of this.layers) if (L) L.mesh.visible = false;
+    for (const L of this.layers) {
+      if (!L) continue;
+      L.mesh.visible = false;
+      if (L.objects) L.objects.mesh.visible = false;
+    }
 
     if (s.mode.kind === "diff") {
       const { a: ca, b: cb } = s.mode;
@@ -245,27 +268,44 @@ export class Stage {
       }
       for (const L of [A, B]) {
         L.mesh.visible = true;
-        if (L.mesh.opacity !== 1) {
-          L.mesh.opacity = 1;
-          L.mesh.updateVersion();
-        }
+        setOpacity(L.mesh, 1);
       }
       paint(B, sb);
       paint(A, sa);
-    } else {
-      const shown = s.mode.kind === "onion" ? this.layers.map((L, i) => (L ? i : -1)).filter((i) => i >= 0) : [s.head];
-      for (const i of shown) {
-        const L = this.layers[i];
-        if (!L) continue;
-        L.mesh.visible = true;
-        const opacity = i === s.head ? 1 : GHOST_OPACITY;
-        if (L.mesh.opacity !== opacity) {
-          L.mesh.opacity = opacity;
-          L.mesh.updateVersion(); // opacity is baked at generation time
-        }
+    } else if (s.mode.kind === "onion") {
+      // Every state at once, standing in the commit you are on: HEAD's own capture is the room, and every
+      // other commit lends only its objects. The room is untouched between captures, so drawing it once
+      // per commit would cost N× and blur N copies of the same wall at the registration residual.
+      // With an object selected this becomes a trace of that one object: only its past states appear.
+      const traced = s.selected === null ? null : new Set(traceChain(M, s.selected));
+      const shell = this.layers[s.head];
+      if (shell) {
+        shell.mesh.visible = true;
+        setOpacity(shell.mesh, 1);
         const st = makeStyle(nObj);
-        // emphasis applies to HEAD only; ghosts keep their style
-        if (i === s.head && sel > 0) for (let o = 0; o <= nObj; o++) if (o !== sel) setDim(st, o, UNFOCUSED_DIM);
+        const lit = (o: number) => (traced ? traced.has(o - 1) : o === sel);
+        if (traced || sel > 0) for (let o = 0; o <= nObj; o++) if (!lit(o)) setDim(st, o, UNFOCUSED_DIM);
+        paint(shell, st);
+      }
+      const chain = traced;
+      const ghost = makeStyle(nObj);
+      // when tracing, every other object's splats are hidden rather than drawn faintly
+      if (chain) for (let o = 0; o <= nObj; o++) if (!chain.has(o - 1)) setHidden(ghost, o);
+      for (let i = 0; i < this.layers.length; i++) {
+        if (i === s.head) continue;
+        const objects = this.layers[i]?.objects;
+        if (!objects) continue;
+        objects.mesh.visible = true;
+        setOpacity(objects.mesh, chain === null ? GHOST_OPACITY : GHOST_FOCUS_OPACITY);
+        paint(objects, ghost);
+      }
+    } else {
+      const L = this.layers[s.head];
+      if (L) {
+        L.mesh.visible = true;
+        setOpacity(L.mesh, 1);
+        const st = makeStyle(nObj);
+        if (sel > 0) for (let o = 0; o <= nObj; o++) if (o !== sel) setDim(st, o, UNFOCUSED_DIM);
         paint(L, st);
       }
     }
@@ -286,13 +326,13 @@ export class Stage {
     this.ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     this.ray.setFromCamera(this.ndc, this.camera);
     const ray = this.ray.ray;
-    const vis = s.mode.kind === "diff" ? [s.mode.a, s.mode.b] : [s.head];
+    const vis = s.mode.kind === "diff" ? [s.mode.a, s.mode.b] : s.mode.kind === "onion" ? M.commits.map((c) => c.index) : [s.head];
     let best: { id: number; d: number } | null = null;
     const hit = new THREE.Vector3();
     const p = new THREE.Vector3();
     for (const ob of M.objects) {
       if (!vis.some((v) => ob.present.includes(v))) continue;
-      if (!ray.intersectBox(this.boxes[ob.id], hit)) continue;
+      if (!ray.intersectBox(this.cull[ob.id], hit)) continue;
       let d2min = Infinity;
       let d = 0;
       for (const v of vis) {
@@ -371,6 +411,48 @@ export class Stage {
     this.stepTween();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+    this.overlay.draw(this.camera, this.boxItems(useStore.getState()));
+  }
+
+  /**
+   * What the detection overlay should box, given the mode: what is present now, what changed, or —
+   * when tracing — every position one object has occupied. Labels carry measured values only.
+   */
+  private boxItems(s: State): BoxItem[] {
+    const M = this.M;
+    if (!M) return [];
+    const vol = (o: number) => `${M.objects[o].volume_vox_m3.toFixed(2)} m³`;
+    const tag = (o: number) => {
+      const name = M.objects[o].name;
+      const id = String(o).padStart(2, "0");
+      return `${/^object \d+$/i.test(name) ? `obj ${id}` : `${id} ${name}`} · ${vol(o)}`;
+    };
+    const items: BoxItem[] = [];
+    const push = (o: number, label: string, tone: BoxItem["tone"], emphasis: boolean) => items.push({ box: this.boxes[o], label, tone, emphasis });
+
+    if (s.mode.kind === "diff") {
+      const { added, removed } = objectsChanged(M, s.mode.a, s.mode.b);
+      for (const o of added) push(o, `+ ${tag(o)}`, "add", o === s.selected || o === s.hover);
+      for (const o of removed) push(o, `− ${tag(o)}`, "rem", o === s.selected || o === s.hover);
+      return items;
+    }
+    if (s.mode.kind === "onion") {
+      const chain = s.selected === null ? null : traceChain(M, s.selected);
+      if (chain) {
+        for (const o of chain) {
+          const at = M.objects[o].present.map((c) => `c${c}`).join(" ");
+          push(o, `${at} · ${vol(o)}`, "trace", o === s.selected);
+        }
+        return items;
+      }
+      for (const ob of M.objects) push(ob.id, tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
+      return items;
+    }
+    for (const ob of M.objects) {
+      if (!ob.present.includes(s.head)) continue;
+      push(ob.id, tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
+    }
+    return items;
   }
 
   private loop = () => {
@@ -391,6 +473,7 @@ export class Stage {
     if (!this.needsFrame && t > this.activeUntil) return;
     this.needsFrame = false;
     this.renderer.render(this.scene, this.camera);
+    this.overlay.draw(this.camera, this.boxItems(useStore.getState()));
     this.frames++;
   };
 
@@ -433,6 +516,7 @@ export class Stage {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    this.overlay.resize(w, h);
     this.touch();
   };
 
@@ -456,9 +540,12 @@ export class Stage {
       if (!L) continue;
       L.rgba.dispose();
       L.mesh.dispose();
+      L.objects?.rgba.dispose();
+      L.objects?.mesh.dispose();
     }
     this.layers = [];
     this.spark.dispose();
+    this.overlay.dispose();
     this.renderer.dispose();
     dom.remove();
     useStore.setState({ liveCamera: null });
@@ -473,7 +560,18 @@ export class Stage {
       const a = L.rgba.array;
       let changed = 0;
       if (a) for (let k = 0; k < L.n * 4; k += 4) if (a[k] !== L.orig[k] || a[k + 3] !== L.orig[k + 3]) changed++;
-      return { i, loaded: true, n: L.n, labelled, changed, visible: L.mesh.visible, opacity: L.mesh.opacity, injected: L.mesh.splatRgba === L.rgba };
+      return {
+        i,
+        loaded: true,
+        n: L.n,
+        labelled,
+        changed,
+        visible: L.mesh.visible,
+        opacity: L.mesh.opacity,
+        injected: L.mesh.splatRgba === L.rgba,
+        objects: L.objects?.n ?? 0,
+        drawn: (L.mesh.visible ? L.n : 0) + (L.objects?.mesh.visible ? L.objects.n : 0),
+      };
     });
   }
 

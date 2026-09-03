@@ -50,7 +50,7 @@ const commit = (v: unknown, i: number): Commit => {
   };
 };
 
-const object = (v: unknown, i: number, nCommits: number): Obj => {
+const object = (v: unknown, i: number, nCommits: number, nObjects: number): Obj => {
   const p = `objects[${i}]`;
   if (!isObj(v)) throw new ManifestError(p, "must be an object");
   const id = num(v.id, `${p}.id`);
@@ -58,6 +58,12 @@ const object = (v: unknown, i: number, nCommits: number): Obj => {
   const present = nums(v.present, `${p}.present`);
   if (present.some((c) => c < 0 || c >= nCommits)) throw new ManifestError(`${p}.present`, "references a missing commit");
   const added_in = num(v.added_in, `${p}.added_in`);
+  const link = (x: unknown, field: string) => {
+    if (x === null || x === undefined) return null;
+    const n = num(x, `${p}.${field}`);
+    if (n < 0 || n >= nObjects) throw new ManifestError(`${p}.${field}`, "references a missing object");
+    return n;
+  };
   const removed_in = v.removed_in === null ? null : num(v.removed_in, `${p}.removed_in`);
   if (!Array.isArray(v.bbox) || v.bbox.length !== 2) throw new ManifestError(`${p}.bbox`, "must be [lo, hi]");
   const bbox: [number[], number[]] = [nums(v.bbox[0], `${p}.bbox[0]`, 3), nums(v.bbox[1], `${p}.bbox[1]`, 3)];
@@ -67,6 +73,8 @@ const object = (v: unknown, i: number, nCommits: number): Obj => {
     added_in,
     removed_in,
     present,
+    moved_from: link(v.moved_from, "moved_from"),
+    moved_to: link(v.moved_to, "moved_to"),
     bbox,
     voxels: isNum(v.voxels) ? v.voxels : 0,
     volume_vox_m3: isNum(v.volume_vox_m3) ? v.volume_vox_m3 : 0,
@@ -78,7 +86,8 @@ export function parseManifest(raw: unknown): Manifest {
   if (!Array.isArray(raw.commits) || raw.commits.length === 0) throw new ManifestError("commits", "must be a non-empty array");
   const commits = raw.commits.map(commit);
   if (!Array.isArray(raw.objects)) throw new ManifestError("objects", "must be an array");
-  const objects = raw.objects.map((o, i) => object(o, i, commits.length));
+  const rawObjects: unknown[] = raw.objects;
+  const objects = rawObjects.map((o, i) => object(o, i, commits.length, rawObjects.length));
   const shape = nums(raw.shape, "shape", 3);
   if (shape.some((s) => s < 1 || !Number.isInteger(s))) throw new ManifestError("shape", "must be positive integers");
   if (!Array.isArray(raw.world_from_ref) || raw.world_from_ref.length < 3) throw new ManifestError("world_from_ref", "must be a 3×4 or 4×4 matrix");
