@@ -3,7 +3,7 @@
   {
    "id": "c0",
    "index": 0,
-   "hash": "fab5a87",
+   "hash": "068c314",
    "message": "Garage, empty. Door open.",
    "captured": "2026-09-02T16:00:00-07:00",
    "file": "commits/c0.spz",
@@ -13,7 +13,7 @@
   {
    "id": "c1",
    "index": 1,
-   "hash": "45dfc75",
+   "hash": "12eff7f",
    "message": "Plants and things.",
    "captured": "2026-09-02T18:38:00-07:00",
    "file": "commits/c1.spz",

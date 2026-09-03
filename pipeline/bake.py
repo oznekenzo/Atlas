@@ -36,7 +36,7 @@ for ci in range(N_COMMITS):
     aligned = f"{OUT}/c{ci}.aligned.ply"; write_ply(aligned, raw, d["names"])
     spz = f"{PUB}/commits/c{ci}.spz"
     # SPZ via Spark's own SpzWriter (splat-transform 3.x writes SPZ v4, which Spark 2.1 does not read)
-    subprocess.run(["node", os.path.join(ROOT, "viewer", "ply2spz.mjs"), aligned, spz, "1"], check=True, capture_output=True)
+    subprocess.run(["node", os.path.join(ROOT, "viewer", "ply2spz.mjs"), aligned, spz, os.environ.get("PATINA_SH", "0")], check=True, capture_output=True)
     h = hashlib.sha1(open(spz, "rb").read()).hexdigest()[:7]
     tc = META[ci]
     commits.append({"id": f"c{ci}", "index": ci, "hash": h, "message": tc["message"], "captured": tc["captured"],
