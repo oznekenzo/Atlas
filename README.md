@@ -23,6 +23,8 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
                 src/engine/layer.ts    one commit on the GPU; declarative Style → RGBA repaint only when the style changes;
                                        also the objects-only copy (labelled splats compacted) that onion layers and traces
                 src/engine/gestures.ts camera gesture recording (orbit / pan / dolly, clicks excluded, dolly coalesced)
+                src/engine/overlay.ts  detection overlay: 2D boxes projected from the object bboxes, tags placed by
+                                       priority and dropped where they would collide with each other or the chrome
                 src/components/        Stage (mounts the engine), Hud, Nav (wordmark · rail · hints), Legend, Card, ActionLog, Terminal
                 src/git.ts             the git command parser (pure); src/actions.ts adapts it to the store
                 ply2spz.mjs            ply → SPZ v3 using Spark's SpzWriter (NOT splat-transform: it writes SPZ v4, Spark 2.1 can't read it)
@@ -65,7 +67,10 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
 - Hidden splats need rgb=0 AND alpha=0 (premultiplied blending; alpha 0 with rgb>0 adds light).
 - Onion draws the commit you are standing in whole, and every other commit as objects only: the room is untouched
   between captures, so N copies of the walls cost N× and blur against each other at the ~1 cm registration residual.
-  Selecting an object first turns onion into a trace of that one object — only its own past states appear.
+  Selecting an object first turns onion into a trace of that one object — only its own past states appear, following
+  the tracker's moved_from / moved_to links so a thing that was moved keeps its identity across commits.
+- B toggles the detection overlay. Every value on a tag is measured (id, name, occupied volume, the commits a state
+  belongs to); nothing invents a confidence score, because there is no detector here to be confident.
 - Spark regenerates a mesh only when its version moves: after rewriting rgba.array call mesh.updateVersion(), and again
   after changing mesh.opacity (it is baked at generation time). Visibility changes land only after Spark's async sort
   completes — give it frames (SparkRenderer's onDirty callback says when) and never stop the loop while spark.sorting.

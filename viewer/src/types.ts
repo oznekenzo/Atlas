@@ -5,6 +5,9 @@ export type Obj = {
   added_in: number;
   removed_in: number | null;
   present: number[];
+  /** The same physical object before/after it was moved, if the tracker matched one. */
+  moved_from: number | null;
+  moved_to: number | null;
   bbox: [number[], number[]];
   voxels: number;
   volume_vox_m3: number;

@@ -57,6 +57,8 @@ moves; register 100 s, diff 12 s, bake 3 min on a 4-core cloud box.
 Numbers (synthetic set, 6 commits × ~400 k splats, software GL in the sandbox): first commit on screen 1.6 s,
 all six in 4.6 s after the manifest; diff repaint 17–24 ms; select 16 ms; hover in diff 0 ms; idle 0 fps.
 
+| V21 | med | The legend multiplied `volume_vox_m3` by `refScale³`, but the pipeline already emits metric volume — "m³ changed" read ~40 % low. | fixed — found while sourcing numbers for the detection overlay's tags |
+
 ## Contracts that now hold
 
 - `dataset.json` is the only place tuning lives; splat files carry nothing but splats.

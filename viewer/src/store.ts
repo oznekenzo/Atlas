@@ -39,6 +39,7 @@ export type State = {
   loadErrors: Record<number, string>;
   splatCount: number[]; // per commit, once loaded
   terminalOpen: boolean;
+  boxes: boolean; // detection overlay
   moving: boolean; // camera in motion → chrome fades
 
   setManifest: (m: Manifest, refScale: number) => void;
@@ -57,7 +58,29 @@ export type State = {
   select: (id: number | null) => void;
   setHover: (id: number | null) => void;
   setTerminal: (open: boolean) => void;
+  toggleBoxes: () => void;
   setMoving: (m: boolean) => void;
+};
+
+/**
+ * One physical object across the commits: the tracker splits a thing that moved into separate ids
+ * linked by moved_from / moved_to, so following the links is what makes a trace a trail.
+ */
+export const traceChain = (m: Manifest, id: number): number[] => {
+  const chain = [id];
+  for (let o = m.objects[id]; o?.moved_from != null;) {
+    const prev = m.objects[o.moved_from];
+    if (!prev || chain.includes(prev.id)) break;
+    chain.unshift(prev.id);
+    o = prev;
+  }
+  for (let o = m.objects[id]; o?.moved_to != null;) {
+    const next = m.objects[o.moved_to];
+    if (!next || chain.includes(next.id)) break;
+    chain.push(next.id);
+    o = next;
+  }
+  return chain;
 };
 
 /** Objects that differ between two commits. Shared by the engine, the terminal, the legend and the log. */
@@ -90,6 +113,7 @@ export const useStore = create<State>((set, get) => ({
   loadErrors: {},
   splatCount: [],
   terminalOpen: false,
+  boxes: false,
   moving: false,
 
   setManifest: (m, refScale) =>
@@ -184,6 +208,12 @@ export const useStore = create<State>((set, get) => ({
     if (open === st.terminalOpen) return;
     st.log("terminal", open ? "open" : "close");
     set({ terminalOpen: open });
+  },
+  toggleBoxes: () => {
+    const st = get();
+    const boxes = !st.boxes;
+    st.log("boxes", boxes ? "on" : "off");
+    set({ boxes });
   },
   setMoving: (moving) => set((s) => (s.moving === moving ? {} : { moving })),
 }));

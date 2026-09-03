@@ -112,6 +112,20 @@ async def main():
         await pg.wait_for_timeout(100)
         check(await ev("!document.getElementById('term')"), "terminal closes on Escape")
 
+        # --- detection overlay -------------------------------------------------------------------
+        ink = "(() => { const c = document.querySelector('#stage .overlay'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++; return n; })()"
+        check(await ev(ink) == 0, "overlay is empty until asked for")
+        await pg.keyboard.press("b")
+        await pg.wait_for_timeout(600)
+        painted = await ev(ink)
+        check(painted > 500, f"B draws detection boxes ({painted:,} px)")
+        check(await ev("window.__patina.S.boxes") is True, "boxes state is on")
+        await pg.keyboard.press("b")
+        await pg.wait_for_timeout(600)
+        check(await ev(ink) == 0, "B again clears them")
+        await pg.keyboard.press("b")
+        await pg.wait_for_timeout(400)
+
         # --- keys ignore modifiers ---------------------------------------------------------------
         head0 = await ev("window.__patina.S.head")
         await pg.keyboard.press("Meta+ArrowLeft")
@@ -139,6 +153,8 @@ async def main():
         check("TRACING" in tl, f"onion + selection traces one object: {tl.replace(chr(10), ' | ')}")
         st2 = await ev("window.__patina.stats()")
         check(sum(L["drawn"] for L in st2 if L["loaded"]) <= drawn, "tracing draws no more than full onion")
+        traced_ink = await ev(ink)
+        check(traced_ink > 0, f"tracing boxes each state of the object ({traced_ink:,} px)")
         await ev("window.__patina.select(null)")
         await pg.keyboard.press("o")
         await pg.wait_for_timeout(400)

@@ -8,9 +8,10 @@ import { SparkRenderer, SplatMesh, RgbaArray, unpackSplat } from "@sparkjsdev/sp
 import type { Manifest } from "../types";
 import { parseManifest } from "../manifest";
 import { loadLabels, makeVoxelLookup, refScaleOf, roomBox, worldBox } from "../labels";
-import { useStore, objectsChanged, type State, type Cam } from "../store";
+import { useStore, objectsChanged, traceChain, type State, type Cam } from "../store";
 import { ADD, REM, buildObjects, makeStyle, paint, setColor, setDim, setHidden, setOpacity, type Layer, type Style } from "./layer";
 import { Gestures } from "./gestures";
+import { Overlay, type BoxItem } from "./overlay";
 
 const CLICK_MS = 250;
 const GHOST_OPACITY = 0.12;
@@ -43,6 +44,7 @@ export class Stage {
   private boxes: THREE.Box3[] = [];
   private voxelOf: (x: number, y: number, z: number) => number = () => -1;
   private gestures: Gestures;
+  private overlay: Overlay;
   private tween: Tween | null = null;
   private activeUntil = performance.now() + SETTLE_MS;
   private needsFrame = true; // a change is guaranteed at least one frame, however slow the GPU
@@ -80,6 +82,8 @@ export class Stage {
     this.spark = new SparkRenderer({ renderer: this.renderer, onDirty: () => this.touch() });
     this.scene.add(this.spark);
     this.gestures = new Gestures(this.camera, this.controls);
+    this.overlay = new Overlay(el);
+    this.overlay.resize(el.clientWidth, el.clientHeight);
 
     useStore.setState({ liveCamera: () => this.gestures.snapshot() });
     this.controls.addEventListener("change", this.onControlsChange);
@@ -96,6 +100,7 @@ export class Stage {
         if (s.camRequest && s.camRequest !== prev.camRequest) this.tweenTo(s.camRequest.cam);
       }),
       useStore.subscribe((s, prev) => {
+        if (s.boxes !== prev.boxes) this.touch();
         if (s.head !== prev.head || s.mode !== prev.mode || s.selected !== prev.selected || s.hover !== prev.hover || s.loaded !== prev.loaded) {
           this.applyMode(s);
         }
@@ -250,24 +255,26 @@ export class Stage {
       // other commit lends only its objects. The room is untouched between captures, so drawing it once
       // per commit would cost N× and blur N copies of the same wall at the registration residual.
       // With an object selected this becomes a trace of that one object: only its past states appear.
+      const traced = s.selected === null ? null : new Set(traceChain(M, s.selected));
       const shell = this.layers[s.head];
       if (shell) {
         shell.mesh.visible = true;
         setOpacity(shell.mesh, 1);
         const st = makeStyle(nObj);
-        if (anyEmph) for (let o = 0; o <= nObj; o++) if (!isEmph(o)) setDim(st, o, UNFOCUSED_DIM);
+        const lit = (o: number) => (traced ? traced.has(o - 1) : isEmph(o));
+        if (traced || anyEmph) for (let o = 0; o <= nObj; o++) if (!lit(o)) setDim(st, o, UNFOCUSED_DIM);
         paint(shell, st);
       }
-      const focus = s.selected;
+      const chain = traced;
       const ghost = makeStyle(nObj);
-      // when tracing one object, the other objects' splats are hidden rather than drawn faintly
-      if (focus !== null) for (let o = 0; o <= nObj; o++) if (o - 1 !== focus) setHidden(ghost, o);
+      // when tracing, every other object's splats are hidden rather than drawn faintly
+      if (chain) for (let o = 0; o <= nObj; o++) if (!chain.has(o - 1)) setHidden(ghost, o);
       for (let i = 0; i < this.layers.length; i++) {
         if (i === s.head) continue;
         const objects = this.layers[i]?.objects;
         if (!objects) continue;
         objects.mesh.visible = true;
-        setOpacity(objects.mesh, focus === null ? GHOST_OPACITY : GHOST_FOCUS_OPACITY);
+        setOpacity(objects.mesh, chain === null ? GHOST_OPACITY : GHOST_FOCUS_OPACITY);
         paint(objects, ghost);
       }
     } else {
@@ -362,6 +369,48 @@ export class Stage {
     this.stepTween();
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+    this.overlay.draw(this.camera, this.boxItems(useStore.getState()));
+  }
+
+  /**
+   * What the detection overlay should box, given the mode: what is present now, what changed, or —
+   * when tracing — every position one object has occupied. Labels carry measured values only.
+   */
+  private boxItems(s: State): BoxItem[] {
+    const M = this.M;
+    if (!M || !s.boxes) return [];
+    const vol = (o: number) => `${M.objects[o].volume_vox_m3.toFixed(2)} m³`;
+    const tag = (o: number) => {
+      const name = M.objects[o].name;
+      const id = String(o).padStart(2, "0");
+      return `${/^object \d+$/i.test(name) ? `obj ${id}` : `${id} ${name}`} · ${vol(o)}`;
+    };
+    const items: BoxItem[] = [];
+    const push = (o: number, label: string, tone: BoxItem["tone"], emphasis: boolean) => items.push({ box: this.boxes[o], label, tone, emphasis });
+
+    if (s.mode.kind === "diff") {
+      const { added, removed } = objectsChanged(M, s.mode.a, s.mode.b);
+      for (const o of added) push(o, `+ ${tag(o)}`, "add", o === s.selected || o === s.hover);
+      for (const o of removed) push(o, `− ${tag(o)}`, "rem", o === s.selected || o === s.hover);
+      return items;
+    }
+    if (s.mode.kind === "onion") {
+      const chain = s.selected === null ? null : traceChain(M, s.selected);
+      if (chain) {
+        for (const o of chain) {
+          const at = M.objects[o].present.map((c) => `c${c}`).join(" ");
+          push(o, `${at} · ${vol(o)}`, "trace", o === s.selected);
+        }
+        return items;
+      }
+      for (const ob of M.objects) push(ob.id, tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
+      return items;
+    }
+    for (const ob of M.objects) {
+      if (!ob.present.includes(s.head)) continue;
+      push(ob.id, tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
+    }
+    return items;
   }
 
   private loop = () => {
@@ -382,6 +431,7 @@ export class Stage {
     if (!this.needsFrame && t > this.activeUntil) return;
     this.needsFrame = false;
     this.renderer.render(this.scene, this.camera);
+    this.overlay.draw(this.camera, this.boxItems(useStore.getState()));
     this.frames++;
   };
 
@@ -424,6 +474,7 @@ export class Stage {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    this.overlay.resize(w, h);
     this.touch();
   };
 
@@ -452,6 +503,7 @@ export class Stage {
     }
     this.layers = [];
     this.spark.dispose();
+    this.overlay.dispose();
     this.renderer.dispose();
     dom.remove();
     useStore.setState({ liveCamera: null });

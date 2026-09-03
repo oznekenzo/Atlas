@@ -44,6 +44,13 @@ body {
   position: fixed;
   inset: 0;
 }
+/* detection overlay: 2D boxes drawn above the splats, never in the way of the pointer */
+#stage .overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
 canvas {
   display: block;
 }
