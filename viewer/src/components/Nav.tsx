@@ -1,32 +1,58 @@
+import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 
-const stamp = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).toUpperCase();
+const stamp = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "UNDATED";
+  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).toUpperCase();
+};
 
 function Rail() {
-  const { manifest: M, head, mode, loaded, checkout, diff } = useStore();
+  const { M, head, mode, loaded, loadErrors, checkout, diff } = useStore(
+    useShallow((s) => ({
+      M: s.manifest,
+      head: s.head,
+      mode: s.mode,
+      loaded: s.loaded,
+      loadErrors: s.loadErrors,
+      checkout: s.checkout,
+      diff: s.diff,
+    })),
+  );
   if (!M) return null;
   const d = mode.kind === "diff" ? mode : null;
   return (
     <div id="rail">
       <div className="line" />
-      {d && <div className="bracket" style={{ left: 72 * d.a + 36, width: 72 * (d.b - d.a) }} />}
-      {M.commits.map(c => (
-        <div key={c.id} className={`dot${c.index === head && !d ? " active" : ""}${loaded[c.index] ? "" : " pending"}`}
-          onClick={(e) => (e.shiftKey && mode.kind !== "onion") ? diff(head, c.index) : checkout(c.index)}>
-          <i />
-          <div className="tip"><div className="hh">{c.hash}</div><div className="mm">{c.message}</div><div className="tt k">{stamp(c.captured)}</div></div>
-        </div>
-      ))}
+      {d && <div className="bracket" style={{ "--a": d.a, "--n": d.b - d.a } as React.CSSProperties} />}
+      {M.commits.map((c) => {
+        const err = loadErrors[c.index];
+        const cls = ["dot", c.index === head && !d ? "active" : "", loaded[c.index] ? "" : err ? "failed" : "pending"].join(" ").trim();
+        return (
+          <div key={c.id} className={cls} onClick={(e) => (e.shiftKey && mode.kind !== "onion" ? diff(head, c.index) : checkout(c.index))}>
+            <i />
+            <div className="tip">
+              <div className="hh">{c.hash}</div>
+              <div className="mm">{err ? `failed: ${err}` : c.message}</div>
+              <div className="tt k">{stamp(c.captured)}</div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function Hints() {
-  const { mode, selected } = useStore();
-  const text = mode.kind === "diff" ? "D  exit diff   ·   click  inspect"
-    : mode.kind === "onion" ? "O  exit onion   ·   ← →  commits"
-    : selected !== null ? "ESC  deselect"
-    : "← →  commits   ·   D  diff   ·   O  onion   ·   /  commands";
+  const { mode, selected } = useStore(useShallow((s) => ({ mode: s.mode, selected: s.selected })));
+  const text =
+    mode.kind === "diff"
+      ? "D  exit diff   ·   click  inspect"
+      : mode.kind === "onion"
+        ? "O  exit onion   ·   ← →  commits"
+        : selected !== null
+          ? "ESC  deselect"
+          : "← →  commits   ·   D  diff   ·   O  onion   ·   /  commands";
   return <div className="hints k">{text}</div>;
 }
 

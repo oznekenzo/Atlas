@@ -1,174 +1,481 @@
 /**
- * The 3D side. Owns three.js, Spark, the splat meshes and the per-splat RGBA arrays.
+ * The 3D side. Owns three.js, Spark, the layers (one per commit) and the camera.
  * Subscribes to the store; never touches React. React never touches this except to mount it.
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { SparkRenderer, SplatMesh, RgbaArray } from "@sparkjsdev/spark";
+import { SparkRenderer, SplatMesh, RgbaArray, unpackSplat } from "@sparkjsdev/spark";
 import type { Manifest } from "../types";
-import { loadLabels, makeVoxelLookup, worldBox } from "../labels";
-import { useStore, objectsChanged, type State } from "../store";
+import { parseManifest } from "../manifest";
+import { loadLabels, makeVoxelLookup, refScaleOf, roomBox, worldBox } from "../labels";
+import { useStore, objectsChanged, type State, type Cam } from "../store";
+import { ADD, REM, makeStyle, paint, setColor, setDim, setHidden, type Layer, type Style } from "./layer";
+import { Gestures } from "./gestures";
 
-type Loaded = { mesh: SplatMesh; n: number; orig: Uint8Array; label: Uint16Array; rgba: RgbaArray };
-const ADD = [127, 214, 164], REM = [224, 112, 92];
+const CLICK_MS = 250;
+const GHOST_OPACITY = 0.12;
+const UNFOCUSED_DIM = 0.45;
+const DIFF_CONTEXT_DIM = 0.28;
+const REMOVED_ALPHA = 0.85;
+const LABEL_CHUNK = 262144; // splats labelled per task before yielding to the render loop
+const SETTLE_MS = 1200; // keep rendering this long after the last change (damping tails, Spark's async sort results)
+const MOVING_SETTLE_MS = 900;
+const TWEEN_MS = 700;
+const WATCHDOG_MS = 250;
+
+type Tween = { from: THREE.Vector3; to: THREE.Vector3; tFrom: THREE.Vector3; tTo: THREE.Vector3; t0: number; ms: number };
+
+const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const yieldToLoop = () => new Promise<void>((r) => setTimeout(r, 0));
 
 export class Stage {
-  renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera: THREE.PerspectiveCamera; controls: OrbitControls;
-  spark: SparkRenderer; loaded: (Loaded | undefined)[] = []; boxes: THREE.Box3[] = [];
-  M!: Manifest; voxelOf!: (x: number, y: number, z: number) => number;
-  timings: Record<string, number> = {}; paused = false; private frames = 0; private fpsT = performance.now();
-  private unsub: () => void; private unsubCam: () => void = () => {}; private raf = 0; private moveTimer = 0;
-  private pendingDolly: { d0: number; timer: number } | null = null;
-  private dollyRun: { d0: number } | null = null;   // one dolly row per zoom session: amended in place until another action intervenes
-  private flushDolly() { const pd = this.pendingDolly; if (!pd) return; clearTimeout(pd.timer); this.pendingDolly = null;
-    const d1 = this.camera.position.distanceTo(this.controls.target); if (Math.abs(d1 - pd.d0) < 0.01) return;
-    const st = useStore.getState(); const last = st.history[st.history.length - 1];
-    if (!(last?.verb === "dolly" && this.dollyRun)) this.dollyRun = { d0: pd.d0 };
-    const p = this.camera.position, t = this.controls.target; const cam = { pos: [p.x, p.y, p.z] as [number, number, number], target: [t.x, t.y, t.z] as [number, number, number] };
-    st.setCamera(cam); st.amend("dolly", `${this.dollyRun.d0.toFixed(2)} → ${d1.toFixed(2)} m`, { cam }); }
-  private tween: { from: THREE.Vector3; to: THREE.Vector3; tFrom: THREE.Vector3; tTo: THREE.Vector3; t0: number; ms: number } | null = null;
+  readonly renderer: THREE.WebGLRenderer;
+  readonly scene = new THREE.Scene();
+  readonly camera: THREE.PerspectiveCamera;
+  readonly controls: OrbitControls;
+  readonly spark: SparkRenderer;
+  readonly timings: Record<string, number> = {};
+  paused = false;
+
+  private M: Manifest | null = null;
+  layers: (Layer | undefined)[] = [];
+  private boxes: THREE.Box3[] = [];
+  private voxelOf: (x: number, y: number, z: number) => number = () => -1;
+  private gestures: Gestures;
+  private tween: Tween | null = null;
+  private activeUntil = performance.now() + SETTLE_MS;
+  private needsFrame = true; // a change is guaranteed at least one frame, however slow the GPU
+  private frames = 0;
+  private fpsT = performance.now();
+  private raf = 0;
+  private watchdog = 0;
+  private lastTick = performance.now();
+  private moveTimer = 0;
+  private dragging = false;
+  private downAt = 0;
+  private disposed = false;
+  private readonly abort = new AbortController();
+  private readonly unsubs: (() => void)[] = [];
+  private readonly ray = new THREE.Raycaster();
+  private readonly ndc = new THREE.Vector2();
 
   constructor(private el: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); this.renderer.setSize(el.clientWidth, el.clientHeight);
-    this.renderer.setClearColor(0x050506, 1); el.appendChild(this.renderer.domElement);
-    this.camera = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.05, 100); this.camera.position.set(4.2, 2.1, 5.4);
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.renderer.setSize(el.clientWidth, el.clientHeight);
+    this.renderer.setClearColor(0x050506, 1);
+    el.appendChild(this.renderer.domElement);
+
+    this.camera = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.05, 100);
+    this.camera.position.set(4.2, 2.1, 5.4);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.target.set(0, 1.0, 0); this.controls.enableDamping = true; this.controls.dampingFactor = 0.08;
-    this.controls.maxPolarAngle = Math.PI * 0.49; this.controls.minDistance = 1; this.controls.maxDistance = 14;
-    this.spark = new SparkRenderer({ renderer: this.renderer }); this.scene.add(this.spark);
-    this.controls.addEventListener("change", () => { useStore.getState().setMoving(true); clearTimeout(this.moveTimer);
-      this.moveTimer = window.setTimeout(() => useStore.getState().setMoving(false), 900); });
-    useStore.setState({ liveCamera: () => { const p = this.camera.position, t = this.controls.target; return { pos: [p.x, p.y, p.z], target: [t.x, t.y, t.z] }; } });
-    // every gesture is recorded on release, classified by the largest motion in metres: orbit (arc), pan (target), dolly (distance).
-    // A click (short, negligible motion) is not a camera action — it is a selection, and the selection snapshot carries the camera.
-    let gesture: { pos: THREE.Vector3; target: THREE.Vector3; t0: number } | null = null;
-    this.controls.addEventListener("start", () => { gesture = { pos: this.camera.position.clone(), target: this.controls.target.clone(), t0: performance.now() }; });
-    this.controls.addEventListener("end", () => {
-      if (!gesture) return; const g = gesture; gesture = null; const p = this.camera.position, t = this.controls.target;
-      const d0 = g.pos.distanceTo(g.target), d1 = p.distanceTo(t);
-      const mPan = t.distanceTo(g.target), mDolly = Math.abs(d1 - d0), ang = g.pos.clone().sub(g.target).angleTo(p.clone().sub(t)), mOrbit = ang * d0;
-      const biggest = Math.max(mPan, mDolly, mOrbit); const click = performance.now() - g.t0 < 250;
-      if (biggest < (click ? 0.05 : 0.01)) return;                       // a click, or nothing moved
-      const verb = biggest === mPan ? "pan" : biggest === mDolly ? "dolly" : "orbit";
-      if (verb === "dolly") {                                             // wheel ticks arrive as separate gestures: coalesce them
-        if (!this.pendingDolly) this.pendingDolly = { d0, timer: 0 }; clearTimeout(this.pendingDolly.timer);
-        this.pendingDolly.timer = window.setTimeout(() => this.flushDolly(), 800); return;
-      }
-      this.flushDolly();
-      const detail = verb === "pan" ? `→ ${t.x.toFixed(2)} ${t.y.toFixed(2)} ${t.z.toFixed(2)}` : `${(ang * 180 / Math.PI).toFixed(0)}°  ${p.x.toFixed(2)} ${p.y.toFixed(2)} ${p.z.toFixed(2)}`;
-      this.recordCamera(verb, detail);
-    });
-    this.renderer.domElement.addEventListener("pointerdown", () => this.flushDolly());   // a click or drag after zooming closes the zoom entry first
-    // restore requests: tween the camera back to a logged state
-    this.unsubCam = useStore.subscribe((s, prev) => { if (s.camRequest && s.camRequest !== prev.camRequest) this.tweenTo(s.camRequest.cam); });
-    this.onResize = this.onResize.bind(this); addEventListener("resize", this.onResize);
-    this.unsub = useStore.subscribe((s, prev) => { if (s.head !== prev.head || s.mode !== prev.mode || s.selected !== prev.selected || s.hover !== prev.hover) this.applyMode(s); });
-    this.renderer.domElement.addEventListener("pointermove", (ev) => useStore.getState().setHover(this.pick(ev)));
-    let downAt = 0; this.renderer.domElement.addEventListener("pointerdown", () => { downAt = performance.now(); });
-    this.renderer.domElement.addEventListener("pointerup", (ev) => { if (performance.now() - downAt < 250) useStore.getState().select(this.pick(ev)); });
-    this.loop = this.loop.bind(this); this.raf = requestAnimationFrame(this.loop);
+    this.controls.target.set(0, 1.0, 0);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
+    this.controls.maxPolarAngle = Math.PI * 0.49;
+    this.controls.minDistance = 1;
+    this.controls.maxDistance = 14;
+    // Spark generates and sorts asynchronously; onDirty fires when new results land, so the idle gate reopens for them
+    this.spark = new SparkRenderer({ renderer: this.renderer, onDirty: () => this.touch() });
+    this.scene.add(this.spark);
+    this.gestures = new Gestures(this.camera, this.controls);
+
+    useStore.setState({ liveCamera: () => this.gestures.snapshot() });
+    this.controls.addEventListener("change", this.onControlsChange);
+    const dom = this.renderer.domElement;
+    dom.addEventListener("pointermove", this.onPointerMove);
+    dom.addEventListener("pointerdown", this.onPointerDown);
+    dom.addEventListener("pointerup", this.onPointerUp);
+    dom.addEventListener("pointerleave", this.onPointerLeave);
+    addEventListener("resize", this.onResize);
+
+    this.unsubs.push(
+      // restore requests: tween the camera back to a logged state
+      useStore.subscribe((s, prev) => {
+        if (s.camRequest && s.camRequest !== prev.camRequest) this.tweenTo(s.camRequest.cam);
+      }),
+      useStore.subscribe((s, prev) => {
+        if (s.head !== prev.head || s.mode !== prev.mode || s.selected !== prev.selected || s.hover !== prev.hover || s.loaded !== prev.loaded) {
+          this.applyMode(s);
+        }
+      }),
+    );
+    this.raf = requestAnimationFrame(this.loop);
+    // watchdog: headless and throttled contexts can stop issuing animation frames; keep the loop alive at a low rate
+    this.watchdog = window.setInterval(() => {
+      if (performance.now() - this.lastTick > WATCHDOG_MS) this.loop();
+    }, WATCHDOG_MS);
   }
 
+  /** Fetch the set's manifest, then its commits: HEAD first (first frame), then the rest newest-first. */
   async boot(set = new URLSearchParams(location.search).get("set") ?? "garage") {
-    const base = `sets/${set}/`; const M: Manifest = await (await fetch(base + "commits.json")).json(); this.M = M;
-    for (const c of M.commits) { c.file = base + c.file; c.labels = base + c.labels; }   // manifest paths are relative to the set
-    const refScale = Math.cbrt(Math.abs(new THREE.Matrix3().set(...(M.world_from_ref.slice(0, 3).flatMap(r => r.slice(0, 3)) as [number, number, number, number, number, number, number, number, number])).determinant()));
-    this.voxelOf = makeVoxelLookup(M); this.boxes = M.objects.map(o => worldBox(M, o.bbox));
-    useStore.getState().setManifest(M, refScale);
-    const t0 = performance.now(); const head = M.commits.length - 1;
-    await this.loadCommit(head); this.applyMode(useStore.getState()); this.timings.firstFrameMs = Math.round(performance.now() - t0);
-    for (let i = head - 1; i >= 0; i--) await this.loadCommit(i);
-    this.timings.allLoadedMs = Math.round(performance.now() - t0);
-  }
-
-  private async loadCommit(i: number) {
-    const c = this.M.commits[i]; const t0 = performance.now();
-    const mesh = new SplatMesh({ url: c.file });            // no lod: per-splat rgba injection is disabled under LOD
-    mesh.visible = false; this.scene.add(mesh);
-    const [, label] = await Promise.all([mesh.initialized, loadLabels(c.labels, this.M.shape)]);
-    const n = mesh.numSplats; const orig = new Uint8Array(n * 4); const lab = new Uint16Array(n);
-    mesh.forEachSplat((idx, center, _s, _q, opacity, color) => {
-      orig[idx * 4] = color.r * 255; orig[idx * 4 + 1] = color.g * 255; orig[idx * 4 + 2] = color.b * 255; orig[idx * 4 + 3] = opacity * 255;
-      const v = this.voxelOf(center.x, center.y, center.z); lab[idx] = v < 0 ? 0 : label[v];
-    });
-    const rgba = new RgbaArray({ array: orig.slice(), count: n });
-    mesh.splatRgba = rgba; mesh.updateGenerator();          // attach ONCE; mode changes only rewrite the array
-    this.loaded[i] = { mesh, n, orig, label: lab, rgba }; this.timings[`load c${i}`] = Math.round(performance.now() - t0);
-    useStore.getState().markLoaded(i, n);
-  }
-
-  private paint(i: number, f: (obj: number, a: Uint8Array, o: number) => void) {
-    const L = this.loaded[i]!; const a = L.rgba.array!; const lab = L.label;
-    for (let k = 0; k < L.n; k++) f(lab[k] - 1, a, k * 4);
-    L.rgba.needsUpdate = true;
-  }
-
-  applyMode(s: State) {
-    const t0 = performance.now(); const M = this.M; if (!M) return;
-    for (const L of this.loaded) if (L) { L.mesh.visible = false; L.mesh.opacity = 1; }
-    const emph = (obj: number) => (s.selected !== null && obj === s.selected) || (s.hover !== null && obj === s.hover);
-    const anyEmph = s.selected !== null || s.hover !== null;
-    if (s.mode.kind === "normal" || s.mode.kind === "onion") {
-      const show = (s.mode.kind === "onion" ? this.loaded.map((_, i) => i) : [s.head]).filter(i => this.loaded[i]);
-      for (const i of show) {
-        const L = this.loaded[i]!; L.mesh.visible = true; L.mesh.opacity = i === s.head ? 1 : 0.12;
-        this.paint(i, (obj, a, o) => { const d = anyEmph && !emph(obj) ? 0.45 : 1;
-          a[o] = L.orig[o] * d; a[o + 1] = L.orig[o + 1] * d; a[o + 2] = L.orig[o + 2] * d; a[o + 3] = L.orig[o + 3]; });
+    const base = `sets/${encodeURIComponent(set)}/`;
+    const store = useStore.getState();
+    const t0 = performance.now();
+    try {
+      const res = await fetch(base + "commits.json", { signal: this.abort.signal });
+      // SPA hosts answer missing files with index.html and a 200, so check the type, not just the status
+      if (!res.ok || !(res.headers.get("content-type") ?? "").includes("json")) throw new Error(`no such set '${set}'`);
+      const M = parseManifest(await res.json());
+      if (this.disposed) return;
+      this.M = M;
+      this.voxelOf = makeVoxelLookup(M);
+      this.boxes = M.objects.map((o) => worldBox(M, o.bbox));
+      this.frameRoom(roomBox(M));
+      store.setManifest(M, refScaleOf(M));
+      const head = M.commits.length - 1;
+      const order = [head, ...Array.from({ length: head }, (_, k) => head - 1 - k)];
+      let any = false;
+      for (const i of order) {
+        try {
+          await this.loadCommit(base, i);
+          any = true;
+          if (i === head) this.timings.firstFrameMs = Math.round(performance.now() - t0);
+        } catch (e) {
+          if (this.disposed) return;
+          store.markFailed(i, errMsg(e));
+        }
       }
-      if (s.diffStats) useStore.getState().setDiffStats(null);
-    } else {
-      const { a: ca, b: cb } = s.mode; const A = this.loaded[ca], B = this.loaded[cb]; if (!A || !B) return;
-      const { added, removed } = objectsChanged(M, ca, cb);
-      B.mesh.visible = true; A.mesh.visible = true;
-      this.paint(cb, (obj, a, o) => { if (added.has(obj)) { a[o] = ADD[0]; a[o + 1] = ADD[1]; a[o + 2] = ADD[2]; a[o + 3] = B.orig[o + 3]; }
-        else { a[o] = B.orig[o] * 0.28; a[o + 1] = B.orig[o + 1] * 0.28; a[o + 2] = B.orig[o + 2] * 0.28; a[o + 3] = B.orig[o + 3]; } });
-      // hidden splats need rgb=0 AND alpha=0: colour is premultiplied downstream
-      this.paint(ca, (obj, a, o) => { if (removed.has(obj)) { a[o] = REM[0]; a[o + 1] = REM[1]; a[o + 2] = REM[2]; a[o + 3] = A.orig[o + 3] * 0.85; } else { a[o] = 0; a[o + 1] = 0; a[o + 2] = 0; a[o + 3] = 0; } });
-      const vol = [...added, ...removed].reduce((acc, id) => acc + M.objects[id].volume_vox_m3, 0) * s.refScale ** 3;
-      useStore.getState().setDiffStats({ added: added.size, removed: removed.size, volumeM3: vol });
+      if (!any) throw new Error(`no commit of '${set}' could be loaded`);
+      this.timings.allLoadedMs = Math.round(performance.now() - t0);
+      store.setStatus("ready");
+    } catch (e) {
+      if (!this.disposed) store.fail(errMsg(e));
     }
+  }
+
+  private async loadCommit(base: string, i: number) {
+    const M = this.M!;
+    const c = M.commits[i];
+    const t0 = performance.now();
+    const mesh = new SplatMesh({ url: base + c.file }); // no LOD: per-splat rgba injection is disabled under LOD
+    mesh.visible = false;
+    try {
+      const [, label] = await Promise.all([mesh.initialized, loadLabels(base + c.labels, M.shape, this.abort.signal)]);
+      if (this.disposed) throw new Error("disposed");
+      const n = mesh.numSplats;
+      const packed = mesh.packedSplats?.packedArray;
+      if (!packed) throw new Error(`${c.file}: splats not unpacked`);
+      const enc = mesh.packedSplats?.splatEncoding;
+      const orig = new Uint8Array(n * 4);
+      const lab = new Uint16Array(n);
+      // Label in chunks so a 4M-splat commit does not freeze the frame it lands in.
+      for (let k0 = 0; k0 < n; k0 += LABEL_CHUNK) {
+        const k1 = Math.min(n, k0 + LABEL_CHUNK);
+        for (let k = k0; k < k1; k++) {
+          const s = unpackSplat(packed, k, enc);
+          orig[k * 4] = s.color.r * 255;
+          orig[k * 4 + 1] = s.color.g * 255;
+          orig[k * 4 + 2] = s.color.b * 255;
+          orig[k * 4 + 3] = s.opacity * 255;
+          const v = this.voxelOf(s.center.x, s.center.y, s.center.z);
+          lab[k] = v < 0 ? 0 : label[v];
+        }
+        if (k1 < n) await yieldToLoop();
+        if (this.disposed) throw new Error("disposed");
+      }
+      const rgba = new RgbaArray({ array: orig.slice(), count: n });
+      mesh.splatRgba = rgba;
+      mesh.updateGenerator(); // attach ONCE; mode changes only rewrite the array
+      this.scene.add(mesh);
+      this.layers[i] = { mesh, n, orig, label: lab, rgba, style: null };
+      this.timings[`load c${i}`] = Math.round(performance.now() - t0);
+      useStore.getState().markLoaded(i, n);
+    } catch (e) {
+      mesh.dispose();
+      throw e;
+    }
+  }
+
+  /** Start inside the room, near a corner at standing height, looking at its centre; bound the orbit to the room. */
+  private frameRoom(box: THREE.Box3) {
+    const size = box.getSize(new THREE.Vector3());
+    const c = box.getCenter(new THREE.Vector3());
+    const span = Math.max(size.x, size.z) || 1;
+    const diag = size.length() || 1;
+    this.controls.target.set(c.x, box.min.y + size.y * 0.3, c.z);
+    this.camera.position.set(c.x + size.x * 0.46, box.min.y + Math.min(size.y * 0.6, 1.7), c.z + size.z * 0.46);
+    this.controls.minDistance = span * 0.1;
+    this.controls.maxDistance = diag * 0.9;
+    this.camera.far = span * 20;
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    this.touch();
+  }
+
+  /** Recompute every layer's visibility, opacity and per-object style from the store. Unchanged layers are not repainted. */
+  applyMode(s: State) {
+    const M = this.M;
+    if (!M) return;
+    const t0 = performance.now();
+    const nObj = M.objects.length;
+    const isEmph = (o: number) => o - 1 === s.selected || o - 1 === s.hover;
+    const anyEmph = s.selected !== null || s.hover !== null;
+    for (const L of this.layers) if (L) L.mesh.visible = false;
+
+    if (s.mode.kind === "diff") {
+      const { a: ca, b: cb } = s.mode;
+      const A = this.layers[ca];
+      const B = this.layers[cb];
+      if (!A || !B) return;
+      const { added, removed } = objectsChanged(M, ca, cb);
+      const sb: Style = makeStyle(nObj);
+      const sa: Style = makeStyle(nObj);
+      for (let o = 0; o <= nObj; o++) {
+        if (added.has(o - 1)) setColor(sb, o, ADD, 1);
+        else setDim(sb, o, DIFF_CONTEXT_DIM);
+        if (removed.has(o - 1)) setColor(sa, o, REM, REMOVED_ALPHA);
+        else setHidden(sa, o);
+      }
+      for (const L of [A, B]) {
+        L.mesh.visible = true;
+        if (L.mesh.opacity !== 1) {
+          L.mesh.opacity = 1;
+          L.mesh.updateVersion();
+        }
+      }
+      paint(B, sb);
+      paint(A, sa);
+    } else {
+      const shown = s.mode.kind === "onion" ? this.layers.map((L, i) => (L ? i : -1)).filter((i) => i >= 0) : [s.head];
+      for (const i of shown) {
+        const L = this.layers[i];
+        if (!L) continue;
+        L.mesh.visible = true;
+        const opacity = i === s.head ? 1 : GHOST_OPACITY;
+        if (L.mesh.opacity !== opacity) {
+          L.mesh.opacity = opacity;
+          L.mesh.updateVersion(); // opacity is baked at generation time
+        }
+        const st = makeStyle(nObj);
+        // emphasis applies to HEAD only; ghosts keep their style, so hovering never repaints them
+        if (i === s.head && anyEmph) for (let o = 0; o <= nObj; o++) if (!isEmph(o)) setDim(st, o, UNFOCUSED_DIM);
+        paint(L, st);
+      }
+    }
+    this.touch();
     this.timings.lastModeMs = Math.round(performance.now() - t0);
   }
 
-  private ray = new THREE.Raycaster(); private ndc = new THREE.Vector2();
+  /** Object under the pointer, among objects present in the visible commit(s). Ghost layers are not pickable. */
   pick(ev: PointerEvent): number | null {
-    const s = useStore.getState(); if (!this.M) return null;
+    const M = this.M;
+    if (!M) return null;
+    const s = useStore.getState();
     const r = this.renderer.domElement.getBoundingClientRect();
-    this.ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1); this.ray.setFromCamera(this.ndc, this.camera);
+    this.ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    this.ray.setFromCamera(this.ndc, this.camera);
     const vis = s.mode.kind === "diff" ? [s.mode.a, s.mode.b] : [s.head];
     let best: { id: number; d: number } | null = null;
-    for (const ob of this.M.objects) { if (!vis.some(v => ob.present.includes(v))) continue;
-      const hit = this.ray.ray.intersectBox(this.boxes[ob.id], new THREE.Vector3()); if (!hit) continue;
-      const d = hit.distanceTo(this.camera.position); if (!best || d < best.d) best = { id: ob.id, d }; }
-    this.renderer.domElement.style.cursor = best ? "pointer" : ""; return best?.id ?? null;
+    const hit = new THREE.Vector3();
+    for (const ob of M.objects) {
+      if (!vis.some((v) => ob.present.includes(v))) continue;
+      if (!this.ray.ray.intersectBox(this.boxes[ob.id], hit)) continue;
+      const d = hit.distanceTo(this.camera.position);
+      if (!best || d < best.d) best = { id: ob.id, d };
+    }
+    return best?.id ?? null;
   }
 
-  lookAt(id: number, dist = 3.5, h = 1.5) { const c = this.boxes[id].getCenter(new THREE.Vector3()); const dir = new THREE.Vector3(c.x, 0, c.z).normalize().multiplyScalar(-1);
-    this.camera.position.set(c.x + dir.x * dist, h, c.z + dir.z * dist); this.controls.target.copy(c); this.controls.update(); this.recordCamera("frame", `obj ${String(id).padStart(2, "0")}`); }
-  recordCamera(verb: string, detail: string) { const p = this.camera.position, t = this.controls.target;
-    const cam = { pos: [p.x, p.y, p.z] as [number, number, number], target: [t.x, t.y, t.z] as [number, number, number] }; const st = useStore.getState(); st.setCamera(cam); st.log(verb, detail, { cam }); }
-  setCam(x: number, y: number, z: number) { this.camera.position.set(x, y, z); this.controls.update(); }
-  tweenTo(cam: { pos: number[]; target: number[] }, ms = 700) {
-    this.tween = { from: this.camera.position.clone(), to: new THREE.Vector3(...(cam.pos as [number, number, number])),
-      tFrom: this.controls.target.clone(), tTo: new THREE.Vector3(...(cam.target as [number, number, number])), t0: performance.now(), ms }; }
-  private stepTween() { const tw = this.tween; if (!tw) return; const u = Math.min(1, (performance.now() - tw.t0) / tw.ms); const e = 1 - Math.pow(1 - u, 3);
-    this.camera.position.lerpVectors(tw.from, tw.to, e); this.controls.target.lerpVectors(tw.tFrom, tw.tTo, e);
-    if (u >= 1) { this.tween = null; const p = this.camera.position, t = this.controls.target; useStore.getState().setCamera({ pos: [p.x, p.y, p.z], target: [t.x, t.y, t.z] }); } }
-  renderOnce() { this.stepTween(); this.controls.update(); this.renderer.render(this.scene, this.camera); }
-  private onResize() { const w = this.el.clientWidth, h = this.el.clientHeight; this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); this.renderer.setSize(w, h); }
-  private loop() { if (!this.paused) { this.renderOnce(); this.frames++; const t = performance.now(); if (t - this.fpsT > 1000) { this.timings.fps = Math.round(this.frames * 1000 / (t - this.fpsT)); this.frames = 0; this.fpsT = t; } } this.raf = requestAnimationFrame(this.loop); }
-  dispose() { this.flushDolly(); cancelAnimationFrame(this.raf); this.unsub(); this.unsubCam(); removeEventListener("resize", this.onResize); for (const L of this.loaded) L?.mesh.dispose(); this.renderer.dispose(); this.el.innerHTML = ""; }
+  /** Frame an object from the room's centre side and log it. */
+  lookAt(id: number, dist = 3.5, h = 1.5) {
+    const box = this.boxes[id];
+    if (!box) return;
+    this.cancelTween();
+    const c = box.getCenter(new THREE.Vector3());
+    const dir = new THREE.Vector3(c.x, 0, c.z).normalize().multiplyScalar(-1);
+    this.camera.position.set(c.x + dir.x * dist, h, c.z + dir.z * dist);
+    this.controls.target.copy(c);
+    this.controls.update();
+    this.gestures.record("frame", `obj ${String(id).padStart(2, "0")}`);
+  }
 
-  /** Test/debug hooks (used by test_viewer.py). */
-  debug() { const L = this.loaded[useStore.getState().head]; const gl = this.renderer.getContext() as WebGL2RenderingContext; this.renderOnce();
-    const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight; const px = new Uint8Array(4 * 512); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  setCam(x: number, y: number, z: number) {
+    this.cancelTween();
+    this.camera.position.set(x, y, z);
+    this.controls.update();
+    this.touch();
+  }
+
+  tweenTo(cam: Cam, ms = TWEEN_MS) {
+    this.gestures.flushDolly();
+    this.controls.enabled = false; // user input during a tween would fight it; a pointerdown cancels instead
+    this.tween = {
+      from: this.camera.position.clone(),
+      to: new THREE.Vector3(...cam.pos),
+      tFrom: this.controls.target.clone(),
+      tTo: new THREE.Vector3(...cam.target),
+      t0: performance.now(),
+      ms,
+    };
+  }
+
+  private cancelTween() {
+    if (!this.tween) return;
+    this.tween = null;
+    this.controls.enabled = true;
+  }
+
+  /** Advance the camera tween; returns true while one is running. */
+  private stepTween(): boolean {
+    const tw = this.tween;
+    if (!tw) return false;
+    const u = Math.min(1, (performance.now() - tw.t0) / tw.ms);
+    const e = 1 - Math.pow(1 - u, 3);
+    this.camera.position.lerpVectors(tw.from, tw.to, e);
+    this.controls.target.lerpVectors(tw.tFrom, tw.tTo, e);
+    if (u >= 1) {
+      this.cancelTween();
+      useStore.getState().setCamera(this.gestures.snapshot());
+    }
+    return true;
+  }
+
+  renderOnce() {
+    this.stepTween();
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  private loop = () => {
+    cancelAnimationFrame(this.raf);
+    this.raf = requestAnimationFrame(this.loop);
+    this.lastTick = performance.now();
+    if (this.paused) return;
+    const tweening = this.stepTween();
+    const moved = this.controls.update();
+    if (tweening || moved) this.touch();
+    const t = performance.now();
+    if (t - this.fpsT > 1000) {
+      this.timings.fps = Math.round((this.frames * 1000) / (t - this.fpsT));
+      this.frames = 0;
+      this.fpsT = t;
+    }
+    // idle gate: nothing changed recently. Spark's async sort needs no frames to progress; onDirty reopens the gate when it lands
+    if (!this.needsFrame && t > this.activeUntil) return;
+    this.needsFrame = false;
+    this.renderer.render(this.scene, this.camera);
+    this.frames++;
+  };
+
+  /** Something changed: render for a while, then go idle again. */
+  touch() {
+    this.needsFrame = true;
+    this.activeUntil = performance.now() + SETTLE_MS;
+  }
+
+  private onControlsChange = () => {
+    this.touch();
+    const st = useStore.getState();
+    st.setMoving(true);
+    clearTimeout(this.moveTimer);
+    this.moveTimer = window.setTimeout(() => useStore.getState().setMoving(false), MOVING_SETTLE_MS);
+  };
+  private onPointerMove = (ev: PointerEvent) => {
+    if (this.dragging) return; // no hover churn mid-gesture
+    const id = this.pick(ev);
+    this.renderer.domElement.style.cursor = id === null ? "" : "pointer";
+    useStore.getState().setHover(id);
+  };
+  private onPointerDown = () => {
+    this.downAt = performance.now();
+    this.dragging = true;
+    this.cancelTween();
+    this.gestures.flushDolly(); // a click or drag after zooming closes the zoom entry first
+  };
+  private onPointerUp = (ev: PointerEvent) => {
+    this.dragging = false;
+    if (performance.now() - this.downAt < CLICK_MS) useStore.getState().select(this.pick(ev));
+  };
+  private onPointerLeave = () => {
+    this.dragging = false;
+    useStore.getState().setHover(null);
+  };
+  private onResize = () => {
+    const w = this.el.clientWidth;
+    const h = this.el.clientHeight;
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+    this.touch();
+  };
+
+  dispose() {
+    this.disposed = true;
+    this.abort.abort();
+    cancelAnimationFrame(this.raf);
+    clearInterval(this.watchdog);
+    clearTimeout(this.moveTimer);
+    for (const u of this.unsubs) u();
+    this.gestures.dispose();
+    this.controls.removeEventListener("change", this.onControlsChange);
+    this.controls.dispose();
+    const dom = this.renderer.domElement;
+    dom.removeEventListener("pointermove", this.onPointerMove);
+    dom.removeEventListener("pointerdown", this.onPointerDown);
+    dom.removeEventListener("pointerup", this.onPointerUp);
+    dom.removeEventListener("pointerleave", this.onPointerLeave);
+    removeEventListener("resize", this.onResize);
+    for (const L of this.layers) {
+      if (!L) continue;
+      L.rgba.dispose();
+      L.mesh.dispose();
+    }
+    this.layers = [];
+    this.spark.dispose();
+    this.renderer.dispose();
+    dom.remove();
+    useStore.setState({ liveCamera: null });
+  }
+
+  /** Test/debug hooks (used by smoke.py). */
+  stats() {
+    return this.layers.map((L, i) => {
+      if (!L) return { i, loaded: false };
+      let labelled = 0;
+      for (let k = 0; k < L.n; k++) if (L.label[k]) labelled++;
+      const a = L.rgba.array;
+      let changed = 0;
+      if (a) for (let k = 0; k < L.n * 4; k += 4) if (a[k] !== L.orig[k] || a[k + 3] !== L.orig[k + 3]) changed++;
+      return { i, loaded: true, n: L.n, labelled, changed, visible: L.mesh.visible, opacity: L.mesh.opacity, injected: L.mesh.splatRgba === L.rgba };
+    });
+  }
+
+  debug() {
+    const L = this.layers[useStore.getState().head];
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    this.renderOnce();
+    const w = gl.drawingBufferWidth;
+    const h = gl.drawingBufferHeight;
+    const px = new Uint8Array(4 * 512);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     gl.readPixels(Math.floor(w / 2) - 256, Math.floor(h / 2), 512, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    let sum = 0, nz = 0; for (let i = 0; i < 512; i++) { const v = px[i * 4] + px[i * 4 + 1] + px[i * 4 + 2]; sum += v; if (v > 30) nz++; }
-    return { info: { ...this.renderer.info.render }, numSplats: L?.n, centreRowMeanRGB: sum / 512, centreRowLitPixels: nz }; }
-  grab() { for (let i = 0; i < 8; i++) this.renderOnce(); const gl = this.renderer.getContext() as WebGL2RenderingContext; const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); const px = new Uint8Array(w * h * 4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
-    const c = document.createElement("canvas"); c.width = w; c.height = h; const ctx = c.getContext("2d")!; const img = ctx.createImageData(w, h);
+    let sum = 0;
+    let nz = 0;
+    for (let i = 0; i < 512; i++) {
+      const v = px[i * 4] + px[i * 4 + 1] + px[i * 4 + 2];
+      sum += v;
+      if (v > 30) nz++;
+    }
+    return { info: { ...this.renderer.info.render }, numSplats: L?.n, centreRowMeanRGB: sum / 512, centreRowLitPixels: nz };
+  }
+
+  grab() {
+    for (let i = 0; i < 8; i++) this.renderOnce();
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    const w = gl.drawingBufferWidth;
+    const h = gl.drawingBufferHeight;
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    const px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext("2d")!;
+    const img = ctx.createImageData(w, h);
     for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
-    for (let i = 3; i < img.data.length; i += 4) img.data[i] = 255; ctx.putImageData(img, 0, 0); return c.toDataURL("image/png"); }
+    for (let i = 3; i < img.data.length; i += 4) img.data[i] = 255;
+    ctx.putImageData(img, 0, 0);
+    return c.toDataURL("image/png");
+  }
 }

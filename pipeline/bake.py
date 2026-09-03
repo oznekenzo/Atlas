@@ -1,54 +1,105 @@
-"""Apply registration to each raw .ply, write aligned .ply, compress to .spz (Spark loads it natively),
-   and write viewer/public/commits.json. Order of splats is irrelevant downstream (label grids are spatial)."""
-import numpy as np, json, os, subprocess, hashlib, shutil
-from splat_io import read_ply, write_ply, transform_raw
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+"""
+Apply the registration to each raw .ply, write the aligned .ply, compress it to .spz with Spark's own
+SpzWriter (splat-transform 3.x writes SPZ v4, which Spark 2.1 does not read), copy the label grids and
+write viewer/public/sets/<name>/commits.json. Splat order is irrelevant downstream (label grids are spatial).
 
-DATA = os.environ.get("PATINA_DATA", os.path.join(ROOT, "data")); RAW = os.path.join(DATA, "raw"); OUT = os.path.join(DATA, "out")
-PUB = os.environ.get("PATINA_PUB", os.path.join(ROOT, "viewer", "public")); os.makedirs(f"{PUB}/commits", exist_ok=True)
-TJ = json.load(open(f"{OUT}/transforms.json")); T = TJ["transforms"]
-# commit metadata + bake parameters: dataset.json (real sets) or truth.json (synthetic)
-DS = json.load(open(f"{DATA}/dataset.json")) if os.path.exists(f"{DATA}/dataset.json") else None
-if DS:
-    META = DS["commits"]; CAL_M = float(DS["calibration_m"]); bp = DS.get("bake", {})
-    PRUNE_OPACITY = float(bp.get("prune_opacity", 0.05)); SH = str(bp.get("sh", 0))
-else:
-    truth = json.load(open(f"{RAW}/truth.json")); META = truth["commits"]; CAL_M = 6.5; PRUNE_OPACITY = 0.0; SH = "1"
-N_COMMITS = len(META)
-# world frame for the viewer: c0 raw -> unit room frame (floor z=0) -> metres -> y-up (three.js)
-Tcanon = np.array(TJ["ref_canon"]); Tm = np.diag([CAL_M, CAL_M, CAL_M, 1.0])
-# The canonical frame's vertical sign is arbitrary (floor and ceiling are both horizontal planes). Resolve it from c0:
-# in a handheld capture the floor is far denser than the ceiling, so the denser end of the z range is DOWN.
-_d0 = read_ply(f"{RAW}/c0.ply"); _p = _d0["xyz"][_d0["opacity"] > .35]; _q = _p @ Tcanon[:3, :3].T + Tcanon[:3, 3]
-_q = _q[np.all(np.abs(_q) < 0.75, axis=1)]; _zlo, _zhi = np.percentile(_q[:, 2], [2, 98]); _h = _zhi - _zlo
-_bottom = (_q[:, 2] < _zlo + 0.15 * _h).sum(); _top = (_q[:, 2] > _zhi - 0.15 * _h).sum()
-Tflip = np.diag([1.0, -1.0, -1.0, 1.0]) if _top > _bottom else np.eye(4)      # 180 deg about x: proper rotation, swaps up/down
-_qz = (_q @ Tflip[:3, :3].T)[:, 2]; _floor = np.percentile(_qz, 2)
-Tfloor = np.eye(4); Tfloor[2, 3] = -_floor                                        # floor to z=0
-print(f"vertical: bottom {_bottom:,} vs top {_top:,} solid pts -> {'flipped' if _top > _bottom else 'kept'}; floor at z={_floor:.3f} (canonical) -> 0")
-Tyup = np.array([[1,0,0,0],[0,0,1,0],[0,-1,0,0],[0,0,0,1]], float)          # z-up -> y-up
-WORLD_FROM_REF = Tyup @ Tm @ Tfloor @ Tflip @ Tcanon
+World frame for the viewer: c0 raw -> canonical unit room frame (z up, floor at z = 0; from register.py)
+-> metres (calibration_m) -> y-up (three.js).
+"""
+import hashlib
+import json
+import logging
+import os
+import shutil
+import subprocess
+import sys
 
-commits = []
-for ci in range(N_COMMITS):
-    d = read_ply(f"{RAW}/c{ci}.ply")
-    keep = d["opacity"] >= PRUNE_OPACITY if PRUNE_OPACITY > 0 else np.ones(len(d["opacity"]), bool)
-    raw = transform_raw(d["raw"][keep].copy(), d["names"], WORLD_FROM_REF @ np.array(T[f"c{ci}"]))
-    aligned = f"{OUT}/c{ci}.aligned.ply"; write_ply(aligned, raw, d["names"])
-    spz = f"{PUB}/commits/c{ci}.spz"
-    # SPZ via Spark's own SpzWriter (splat-transform 3.x writes SPZ v4, which Spark 2.1 does not read)
-    subprocess.run(["node", os.path.join(ROOT, "viewer", "ply2spz.mjs"), aligned, spz, SH], check=True, capture_output=True)
-    h = hashlib.sha1(open(spz, "rb").read()).hexdigest()[:7]
-    tc = META[ci]
-    commits.append({"id": f"c{ci}", "index": ci, "hash": h, "message": tc["message"], "captured": tc["captured"],
-                    "file": f"commits/c{ci}.spz", "splats": len(raw), "labels": f"commits/c{ci}.labels.bin"})
-    shutil.copy(f"{OUT}/c{ci}.labels.bin", f"{PUB}/commits/c{ci}.labels.bin")
-    print(f"c{ci}  {len(d['raw']):>9,} -> {len(raw):>9,} splats (pruned <{PRUNE_OPACITY})   spz {os.path.getsize(spz)/1e6:5.1f} MB   {h}")
+import numpy as np
 
-objs = json.load(open(f"{OUT}/objects.json"))
-# names: hand-labelled in production; here from ground truth by location so the viewer test is honest
-json.dump({"commits": commits, "voxel": objs["voxel"], "origin": objs["origin"], "shape": objs["shape"],
-           "world_from_ref": WORLD_FROM_REF.tolist(), "calibration_m": CAL_M,
-           "objects": [{**o, "name": f"Object {o['id']:02d}"} for o in objs["objects"]]},
-          open(f"{PUB}/commits.json", "w"), indent=1)
-print("wrote", f"{PUB}/commits.json")
+from dataset import Dataset, PipelineError, ROOT
+from splat_io import read_ply, sh_band_count, transform_raw, write_ply
+
+log = logging.getLogger("bake")
+
+PLY2SPZ = os.path.join(ROOT, "viewer", "ply2spz.mjs")
+Z_UP_TO_Y_UP = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, -1, 0, 0], [0, 0, 0, 1]], float)
+
+
+def world_from_ref(ref_canon, calibration_m):
+    metres = np.diag([calibration_m, calibration_m, calibration_m, 1.0])
+    return Z_UP_TO_Y_UP @ metres @ ref_canon
+
+
+def ply_to_spz(aligned, spz, sh):
+    result = subprocess.run(["node", PLY2SPZ, aligned, spz, str(sh)], capture_output=True, text=True)
+    if result.returncode:
+        raise PipelineError(f"ply2spz failed on {aligned} (exit {result.returncode}):\n{result.stderr.strip()}")
+    for line in result.stderr.strip().splitlines():
+        log.warning(f"  ply2spz: {line}")
+    if result.stdout.strip():
+        log.info(f"  {result.stdout.strip()}")
+
+
+def bake_commit(ds, commit, T, params):
+    d = read_ply(ds.raw_ply(commit.index))
+    if params.sh >= 2:
+        raise PipelineError(f"bake.sh = {params.sh}: only SH degrees 0 and 1 are supported "
+                            f"(rotating bands >= 2 is not implemented)")
+    if params.sh == 1 and sh_band_count(d["names"]) < 3:
+        raise PipelineError(f"bake.sh = 1 but {ds.raw_ply(commit.index)} carries no SH band 1 coefficients")
+    if params.prune_opacity > 0:
+        keep = d["opacity"] >= params.prune_opacity
+    else:
+        keep = np.ones(len(d["opacity"]), bool)
+    raw = transform_raw(np.asarray(d["raw"][keep]), d["names"], T)     # boolean indexing copies out of the memmap
+    aligned = ds.aligned_ply(commit.index)
+    write_ply(aligned, raw, d["names"])
+    spz = os.path.join(ds.pub_dir, "commits", f"c{commit.index}.spz")
+    ply_to_spz(aligned, spz, params.sh)
+    with open(spz, "rb") as fh:
+        digest = hashlib.sha1(fh.read()).hexdigest()[:7]
+    shutil.copy(ds.labels_path(commit.index), os.path.join(ds.pub_dir, "commits", f"c{commit.index}.labels.bin"))
+    log.info(f"c{commit.index}  {len(d['raw']):>9,} -> {len(raw):>9,} splats (pruned <{params.prune_opacity})   "
+             f"spz {os.path.getsize(spz) / 1e6:5.1f} MB   {digest}")
+    return {"id": f"c{commit.index}", "index": commit.index, "hash": digest, "message": commit.message,
+            "captured": commit.captured, "file": f"commits/c{commit.index}.spz", "splats": int(len(raw)),
+            "labels": f"commits/c{commit.index}.labels.bin"}
+
+
+def run(ds):
+    params = ds.bake
+    TJ = ds.load_transforms()
+    objs = ds.load_objects()
+    for c in ds.commits:
+        if not os.path.exists(ds.labels_path(c.index)):
+            raise PipelineError(f"{ds.labels_path(c.index)} not found: run the diff step first")
+    os.makedirs(os.path.join(ds.pub_dir, "commits"), exist_ok=True)
+    W = world_from_ref(np.array(TJ["ref_canon"]), ds.calibration_m)
+    commits = []
+    for c in ds.commits:
+        commits.append(bake_commit(ds, c, W @ np.array(TJ["transforms"][f"c{c.index}"]), params))
+    objects = []
+    for o in objs["objects"]:
+        name = ds.object_names.get(o["id"], f"Object {o['id']:02d}")
+        objects.append({**o, "name": name})
+    # the room box (walls, floor, ceiling) is axis-aligned in the canonical frame; the viewer frames the camera with it
+    world_from_canon = W @ np.linalg.inv(np.array(TJ["ref_canon"]))
+    lo, hi = np.array(objs["room_canon"])
+    corners = np.array([[x, y, z, 1.0] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]) @ world_from_canon.T
+    room = [corners[:, :3].min(axis=0).round(4).tolist(), corners[:, :3].max(axis=0).round(4).tolist()]
+    manifest = {"commits": commits, "voxel": objs["voxel"], "origin": objs["origin"], "shape": objs["shape"], "room": room,
+                "world_from_ref": W.tolist(), "calibration_m": ds.calibration_m, "objects": objects}
+    path = os.path.join(ds.pub_dir, "commits.json")
+    with open(path, "w") as fh:
+        json.dump(manifest, fh, indent=1)
+    log.info(f"wrote {path}")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if len(sys.argv) != 2:
+        sys.exit("usage: python3 bake.py <set-name>")
+    try:
+        run(Dataset(sys.argv[1]))
+    except PipelineError as e:
+        sys.exit(f"bake: {e}")

@@ -3,93 +3,105 @@
   {
    "id": "c0",
    "index": 0,
-   "hash": "6b7160c",
+   "hash": "54b2647",
    "message": "As found.",
    "captured": "2026-09-02T18:12:00-07:00",
    "file": "commits/c0.spz",
-   "splats": 356388,
+   "splats": 395544,
    "labels": "commits/c0.labels.bin"
   },
   {
    "id": "c1",
    "index": 1,
-   "hash": "a5e1163",
+   "hash": "fdbcbfb",
    "message": "Cleared to one side.",
    "captured": "2026-09-02T19:40:00-07:00",
    "file": "commits/c1.spz",
-   "splats": 356388,
+   "splats": 395544,
    "labels": "commits/c1.labels.bin"
   },
   {
    "id": "c2",
    "index": 2,
-   "hash": "d89d9de",
+   "hash": "ec105eb",
    "message": "Shelving and bench in.",
    "captured": "2026-09-02T21:05:00-07:00",
    "file": "commits/c2.spz",
-   "splats": 323288,
+   "splats": 362444,
    "labels": "commits/c2.labels.bin"
   },
   {
    "id": "c3",
    "index": 3,
-   "hash": "b45a7e6",
+   "hash": "b706d26",
    "message": "Tooled up. Bins on the racks.",
    "captured": "2026-09-02T22:18:00-07:00",
    "file": "commits/c3.spz",
-   "splats": 350488,
+   "splats": 389644,
    "labels": "commits/c3.labels.bin"
   },
   {
    "id": "c4",
    "index": 4,
-   "hash": "c60859e",
+   "hash": "04c16f5",
    "message": "First job on the bench.",
    "captured": "2026-09-03T00:02:00-07:00",
    "file": "commits/c4.spz",
-   "splats": 361288,
+   "splats": 400444,
    "labels": "commits/c4.labels.bin"
   },
   {
    "id": "c5",
    "index": 5,
-   "hash": "2ce9017",
+   "hash": "b8aa3df",
    "message": "Car in.",
    "captured": "2026-09-03T00:51:00-07:00",
    "file": "commits/c5.spz",
-   "splats": 440488,
+   "splats": 479644,
    "labels": "commits/c5.labels.bin"
   }
  ],
- "voxel": 0.11874286135067029,
+ "voxel": 0.0762654238313733,
  "origin": [
-  -9.276141429623694,
-  -3.5249355338596198,
-  -0.23463444298080777
+  -9.852288895911038,
+  -4.07590119678384,
+  -0.45930669437503785
  ],
  "shape": [
-  111,
-  109,
-  40
+  187,
+  183,
+  67
+ ],
+ "room": [
+  [
+   -3.2491,
+   -0.0,
+   -3.0163
+  ],
+  [
+   3.2462,
+   2.701,
+   3.0156
+  ]
  ],
  "world_from_ref": [
   [
-   -0.34760133181624303,
-   0.5855062001582658,
-   -0.010453883415939488,
-   -2.617004642482235
+   0.5862425367928956,
+   0.34812504675924005,
+   -0.004452467238061476,
+   0.6356028790018833
   ],
   [
-   -0.0019855631339764554,
-   0.010978358712473454,
-   0.6809030864680322,
-   -0.09932029409148821
+   -0.0014829061680152191,
+   0.011216507713809653,
+   0.6817354146111243,
+   -0.08878944644225932
   ],
   [
-   0.5855961506373537,
-   0.3475851625125564,
-   -0.003896555210014805,
-   0.6345033544249858
+   0.3481503606703946,
+   -0.5861521358526143,
+   0.010401182216030938,
+   2.6204517894222565
   ],
   [
    0.0,
@@ -107,20 +119,22 @@
    "present": [
     0
    ],
-   "voxels": 1068,
+   "voxels": 2116,
+   "moved_from": null,
+   "moved_to": 10,
    "bbox": [
     [
-     -6.545,
-     3.481,
-     0.122
+     -6.497,
+     3.551,
+     0.151
     ],
     [
-     -4.289,
-     5.5,
-     1.547
+     -4.361,
+     5.457,
+     1.524
     ]
    ],
-   "volume_vox_m3": 1.7881,
+   "volume_vox_m3": 0.2975,
    "name": "Object 00"
   },
   {
@@ -130,20 +144,22 @@
    "present": [
     0
    ],
-   "voxels": 1419,
+   "voxels": 1346,
+   "moved_from": null,
+   "moved_to": 9,
    "bbox": [
     [
-     -3.814,
-     -0.319,
-     0.24
+     -3.751,
+     -0.263,
+     0.151
     ],
     [
-     -0.37,
-     1.106,
-     1.547
+     -2.455,
+     1.034,
+     0.837
     ]
    ],
-   "volume_vox_m3": 2.3758,
+   "volume_vox_m3": 0.1893,
    "name": "Object 01"
   },
   {
@@ -153,20 +169,22 @@
    "present": [
     0
    ],
-   "voxels": 741,
+   "voxels": 1605,
+   "moved_from": null,
+   "moved_to": 8,
    "bbox": [
     [
-     -2.864,
-     0.75,
-     0.953
+     -2.76,
+     0.881,
+     1.066
     ],
     [
-     -1.439,
-     2.175,
-     1.903
+     -1.539,
+     2.178,
+     1.829
     ]
    ],
-   "volume_vox_m3": 1.2406,
+   "volume_vox_m3": 0.2257,
    "name": "Object 02"
   },
   {
@@ -176,265 +194,413 @@
    "present": [
     0
    ],
-   "voxels": 1945,
+   "voxels": 1038,
+   "moved_from": null,
+   "moved_to": null,
    "bbox": [
     [
-     -0.489,
-     1.225,
-     0.122
+     -2.455,
+     -0.11,
+     0.227
     ],
     [
-     2.123,
-     4.075,
-     1.665
+     -1.463,
+     1.034,
+     0.837
     ]
    ],
-   "volume_vox_m3": 3.2564,
+   "volume_vox_m3": 0.146,
    "name": "Object 03"
   },
   {
    "id": 4,
-   "added_in": 1,
+   "added_in": 0,
+   "removed_in": 1,
    "present": [
-    1
+    0
    ],
-   "voxels": 3102,
-   "removed_in": 2,
+   "voxels": 957,
+   "moved_from": null,
+   "moved_to": 12,
    "bbox": [
     [
-     -5.358,
-     -1.981,
-     0.24
+     -1.311,
+     -0.186,
+     0.608
     ],
     [
-     -1.202,
-     1.106,
-     1.903
+     -0.395,
+     0.653,
+     1.524
     ]
    ],
-   "volume_vox_m3": 5.1936,
+   "volume_vox_m3": 0.1346,
    "name": "Object 04"
   },
   {
    "id": 5,
-   "added_in": 1,
+   "added_in": 0,
+   "removed_in": 1,
    "present": [
-    1
+    0
    ],
-   "voxels": 694,
-   "removed_in": 2,
+   "voxels": 1818,
+   "moved_from": null,
+   "moved_to": 11,
    "bbox": [
     [
-     -1.439,
-     1.7,
-     0.834
+     -0.472,
+     2.788,
+     0.837
     ],
     [
-     -0.014,
-     3.006,
-     1.665
+     0.825,
+     4.008,
+     1.6
     ]
    ],
-   "volume_vox_m3": 1.1619,
+   "volume_vox_m3": 0.2556,
    "name": "Object 05"
   },
   {
    "id": 6,
-   "added_in": 1,
+   "added_in": 0,
+   "removed_in": 1,
    "present": [
-    1
+    0
    ],
-   "voxels": 1136,
-   "removed_in": 2,
+   "voxels": 2990,
+   "moved_from": null,
+   "moved_to": null,
    "bbox": [
     [
-     -1.32,
-     0.156,
-     0.24
+     -0.319,
+     1.263,
+     0.227
     ],
     [
-     1.292,
-     1.581,
-     1.547
+     2.121,
+     2.559,
+     1.447
     ]
    ],
-   "volume_vox_m3": 1.902,
+   "volume_vox_m3": 0.4204,
    "name": "Object 06"
   },
   {
    "id": 7,
-   "added_in": 2,
+   "added_in": 1,
+   "removed_in": 2,
    "present": [
-    2,
-    3,
-    4,
-    5
+    1
    ],
-   "voxels": 4596,
+   "voxels": 4103,
+   "moved_from": null,
+   "moved_to": 14,
    "bbox": [
     [
-     -7.732,
-     -1.15,
-     0.122
+     -5.276,
+     -1.788,
+     0.227
     ],
     [
-     -5.12,
-     2.531,
-     3.446
+     -2.378,
+     0.042,
+     1.6
     ]
    ],
-   "volume_vox_m3": 7.6949,
-   "removed_in": null,
+   "volume_vox_m3": 0.5769,
    "name": "Object 07"
   },
   {
    "id": 8,
-   "added_in": 2,
+   "added_in": 1,
+   "removed_in": null,
    "present": [
+    1,
     2,
     3,
     4,
     5
    ],
-   "voxels": 112,
+   "voxels": 1685,
+   "moved_from": 2,
+   "moved_to": null,
    "bbox": [
     [
-     -3.458,
-     0.275,
-     0.24
+     -3.675,
+     -0.186,
+     1.066
     ],
     [
-     -2.983,
-     0.75,
-     1.072
+     -2.455,
+     1.11,
+     1.829
     ]
    ],
-   "volume_vox_m3": 0.1875,
-   "removed_in": null,
+   "volume_vox_m3": 0.2369,
    "name": "Object 08"
   },
   {
    "id": 9,
+   "added_in": 1,
+   "removed_in": 2,
+   "present": [
+    1
+   ],
+   "voxels": 1289,
+   "moved_from": 1,
+   "moved_to": null,
+   "bbox": [
+    [
+     -2.226,
+     -1.254,
+     0.608
+    ],
+    [
+     -1.311,
+     -0.339,
+     1.524
+    ]
+   ],
+   "volume_vox_m3": 0.1812,
+   "name": "Object 09"
+  },
+  {
+   "id": 10,
+   "added_in": 1,
+   "removed_in": 2,
+   "present": [
+    1
+   ],
+   "voxels": 1713,
+   "moved_from": 0,
+   "moved_to": null,
+   "bbox": [
+    [
+     -1.387,
+     1.72,
+     0.837
+    ],
+    [
+     -0.09,
+     3.017,
+     1.6
+    ]
+   ],
+   "volume_vox_m3": 0.2409,
+   "name": "Object 10"
+  },
+  {
+   "id": 11,
+   "added_in": 1,
+   "removed_in": 2,
+   "present": [
+    1
+   ],
+   "voxels": 1869,
+   "moved_from": 5,
+   "moved_to": null,
+   "bbox": [
+    [
+     -1.234,
+     0.271,
+     0.532
+    ],
+    [
+     0.138,
+     1.491,
+     1.447
+    ]
+   ],
+   "volume_vox_m3": 0.2628,
+   "name": "Object 11"
+  },
+  {
+   "id": 12,
+   "added_in": 1,
+   "removed_in": 2,
+   "present": [
+    1
+   ],
+   "voxels": 898,
+   "moved_from": 4,
+   "moved_to": null,
+   "bbox": [
+    [
+     0.138,
+     0.271,
+     0.151
+    ],
+    [
+     1.206,
+     1.339,
+     0.761
+    ]
+   ],
+   "volume_vox_m3": 0.1263,
+   "name": "Object 12"
+  },
+  {
+   "id": 13,
    "added_in": 2,
+   "removed_in": null,
    "present": [
     2,
     3,
     4,
     5
    ],
-   "voxels": 1365,
+   "voxels": 10737,
+   "moved_from": null,
+   "moved_to": null,
    "bbox": [
     [
-     -3.102,
-     -0.556,
-     0.122
+     -7.717,
+     -1.102,
+     0.227
     ],
     [
-     -0.133,
-     2.056,
-     1.665
+     -5.2,
+     2.483,
+     3.354
     ]
    ],
-   "volume_vox_m3": 2.2854,
-   "removed_in": null,
-   "name": "Object 09"
-  },
-  {
-   "id": 10,
-   "added_in": 3,
-   "present": [
-    3,
-    4,
-    5
-   ],
-   "voxels": 1071,
-   "bbox": [
-    [
-     -7.614,
-     -0.913,
-     1.547
-    ],
-    [
-     -5.358,
-     2.412,
-     2.14
-    ]
-   ],
-   "volume_vox_m3": 1.7931,
-   "removed_in": null,
-   "name": "Object 10"
-  },
-  {
-   "id": 11,
-   "added_in": 3,
-   "present": [
-    3,
-    4,
-    5
-   ],
-   "voxels": 845,
-   "bbox": [
-    [
-     -7.614,
-     -0.794,
-     2.496
-    ],
-    [
-     -5.358,
-     2.412,
-     3.09
-    ]
-   ],
-   "volume_vox_m3": 1.4147,
-   "removed_in": null,
-   "name": "Object 11"
-  },
-  {
-   "id": 12,
-   "added_in": 4,
-   "present": [
-    4,
-    5
-   ],
-   "voxels": 363,
-   "bbox": [
-    [
-     -2.864,
-     0.037,
-     1.547
-    ],
-    [
-     -1.202,
-     1.462,
-     1.903
-    ]
-   ],
-   "volume_vox_m3": 0.6078,
-   "removed_in": null,
-   "name": "Object 12"
-  },
-  {
-   "id": 13,
-   "added_in": 5,
-   "present": [
-    5
-   ],
-   "voxels": 19424,
-   "bbox": [
-    [
-     -6.664,
-     1.344,
-     0.122
-    ],
-    [
-     0.58,
-     7.281,
-     2.615
-    ]
-   ],
-   "volume_vox_m3": 32.5208,
-   "removed_in": null,
+   "volume_vox_m3": 1.5097,
    "name": "Object 13"
+  },
+  {
+   "id": 14,
+   "added_in": 2,
+   "removed_in": null,
+   "present": [
+    2,
+    3,
+    4,
+    5
+   ],
+   "voxels": 3075,
+   "moved_from": 7,
+   "moved_to": null,
+   "bbox": [
+    [
+     -3.065,
+     -0.491,
+     0.227
+    ],
+    [
+     -0.243,
+     2.025,
+     1.6
+    ]
+   ],
+   "volume_vox_m3": 0.4324,
+   "name": "Object 14"
+  },
+  {
+   "id": 15,
+   "added_in": 3,
+   "removed_in": null,
+   "present": [
+    3,
+    4,
+    5
+   ],
+   "voxels": 2366,
+   "moved_from": null,
+   "moved_to": null,
+   "bbox": [
+    [
+     -7.564,
+     -0.873,
+     1.6
+    ],
+    [
+     -5.353,
+     2.33,
+     2.134
+    ]
+   ],
+   "volume_vox_m3": 0.3327,
+   "name": "Object 15"
+  },
+  {
+   "id": 16,
+   "added_in": 3,
+   "removed_in": null,
+   "present": [
+    3,
+    4,
+    5
+   ],
+   "voxels": 2027,
+   "moved_from": null,
+   "moved_to": null,
+   "bbox": [
+    [
+     -7.564,
+     -0.873,
+     2.591
+    ],
+    [
+     -5.353,
+     2.33,
+     2.973
+    ]
+   ],
+   "volume_vox_m3": 0.285,
+   "name": "Object 16"
+  },
+  {
+   "id": 17,
+   "added_in": 4,
+   "removed_in": null,
+   "present": [
+    4,
+    5
+   ],
+   "voxels": 769,
+   "moved_from": null,
+   "moved_to": null,
+   "bbox": [
+    [
+     -2.836,
+     0.042,
+     1.524
+    ],
+    [
+     -1.234,
+     1.415,
+     1.905
+    ]
+   ],
+   "volume_vox_m3": 0.1081,
+   "name": "Object 17"
+  },
+  {
+   "id": 18,
+   "added_in": 5,
+   "removed_in": null,
+   "present": [
+    5
+   ],
+   "voxels": 52080,
+   "moved_from": null,
+   "moved_to": null,
+   "bbox": [
+    [
+     -6.573,
+     1.415,
+     0.151
+    ],
+    [
+     0.52,
+     7.211,
+     2.591
+    ]
+   ],
+   "volume_vox_m3": 7.3229,
+   "name": "Object 18"
   }
  ]
 }

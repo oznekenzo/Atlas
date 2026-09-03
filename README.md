@@ -5,41 +5,63 @@ WORLDSTATE (working name: Patina) — spatial version control for gaussian-splat
 Six captures of one room → registered → voxel-diffed → objects tracked across commits → browser viewer with git semantics.
 
 ## Layout
-    pipeline/   make_synthetic.py  (test data: 6 commits as real 3DGS .ply, arbitrary frame+scale each)
-                register.py        room-frame registration (floor/walls → 8 symmetry candidates → ICP → similarity refine)
-                diff.py            voxel occupancy diff, component tracking, per-commit label grids
-                bake.py            world frame (metric, y-up), SPZ via Spark's own writer, commits.json
-                splat_io.py        3DGS ply read/write/transform
+    pipeline/   run.py             the CLI: python3 pipeline/run.py <set> [--only register|diff|bake]
+                dataset.py         Dataset (paths, dataset.json validation) + RegisterParams / DiffParams / BakeParams defaults
+                register.py        room-frame registration (floor/walls → 8 symmetry candidates → ICP → similarity refine);
+                                   decides up/down once and folds it into ref_canon (z up, floor at z = 0, unit span)
+                diff.py            voxel occupancy diff, object tracking (partial removals, moves, originals), label grids
+                bake.py            world frame (metric, y-up), SPZ via Spark's own writer, commits.json (object names from dataset.json)
+                splat_io.py        3DGS ply read (memmap) / write / similarity transform incl. SH band 1
+                make_synthetic.py  test data: 6 commits as real 3DGS .ply, arbitrary frame+scale each → data/sets/synthetic/
+                test_synthetic.py  end-to-end check against truth.json (registration < 15 mm, objects found, contract kept)
+                requirements.txt   pinned numpy / scipy / open3d
     viewer/     Vite + React + zustand + three.js + @sparkjsdev/spark
-                src/store.ts          app state (head, mode, selection, load progress) — the only thing React and the engine share
-                src/engine/stage.ts   three.js + Spark: meshes, per-splat RGBA, diff recolor, picking. Subscribes to the store; no React
-                src/components/       Stage (mounts the engine), Hud, Rail, Legend, Card, Terminal, Footer
-                src/git.ts            the git command parser; src/actions.ts adapts it to the store
-                ply2spz.mjs        ply → SPZ v3 using Spark's SpzWriter (NOT splat-transform: it writes SPZ v4, Spark 2.1 can't read it)
-    test_viewer.py  headless Chromium driver
+                src/store.ts           app state + the action log / reflog — the only thing React and the engine share
+                src/manifest.ts        commits.json validation: a bad bake fails with the field name, not a stack trace
+                src/engine/stage.ts    three.js + Spark: boot, layers, mode → per-object style, picking, camera, idle render gate
+                src/engine/layer.ts    one commit on the GPU; declarative Style → RGBA repaint only when the style changes
+                src/engine/gestures.ts camera gesture recording (orbit / pan / dolly, clicks excluded, dolly coalesced)
+                src/components/        Stage (mounts the engine), Hud, Nav (wordmark · rail · hints), Legend, Card, ActionLog, Terminal
+                src/git.ts             the git command parser (pure); src/actions.ts adapts it to the store
+                ply2spz.mjs            ply → SPZ v3 using Spark's SpzWriter (NOT splat-transform: it writes SPZ v4, Spark 2.1 can't read it)
+                smoke.py               headless end-to-end check of the built viewer (npm run build && npx vite preview, then python3 smoke.py)
+    AUDIT.md    architecture + performance audit: findings, what was fixed, known limitations
 
 ## Run
-    cd pipeline && python3 make_synthetic.py && python3 register.py && python3 diff.py && python3 bake.py
-    cd ../viewer && npm install && npm run dev
+    pip install -r pipeline/requirements.txt
+    python3 pipeline/make_synthetic.py && python3 pipeline/run.py synthetic      # or: python3 pipeline/test_synthetic.py
+    python3 pipeline/run.py garage
+    cd viewer && npm install && npm run dev            # npm run check = typecheck + prettier; npm run build typechecks first
+    ?debug on the URL exposes window.__patina (the hooks smoke.py drives); the dev server exposes it always
 
 ## Datasets
     viewer/public/sets/<name>/{commits.json, commits/*.spz, commits/*.labels.bin}
     open the viewer with ?set=<name>  (default: garage — the real captures; synthetic — the generated test set)
 
 ## Bringing in a new set of captures
-    1. mkdir data/sets/<name>; write data/sets/<name>/dataset.json (see pipeline/run.py docstring):
+    1. mkdir data/sets/<name>; write data/sets/<name>/dataset.json (schema in pipeline/run.py, defaults in pipeline/dataset.py):
        the capture files (any path), a message + timestamp per commit, calibration_m (tape-measure the longest wall),
-       and the tuning block — wall_margin_m ignores anything near the walls; everything else has sane defaults.
-    2. python3 pipeline/run.py <name>        (needs: pip install numpy scipy open3d; node + viewer/node_modules)
-    3. open the viewer with ?set=<name>; name objects by editing "name" in viewer/public/sets/<name>/commits.json.
+       and optional tuning blocks — "diff": wall_margin_m ignores anything near the walls; "registration": up
+       ("auto" = the denser end of the vertical range is the floor, "keep"/"flip" override it), min_inlier_frac and
+       min_candidate_margin (the run fails loudly when the registration is weak or the room's symmetry is ambiguous).
+    2. python3 pipeline/run.py <name>        (needs: pip install -r pipeline/requirements.txt; node + viewer/node_modules)
+    3. open the viewer with ?set=<name>; name objects with "objects": {"<id>": "name"} in dataset.json and re-run
+       --only bake (names live in dataset.json, so re-baking never loses them).
     Tuning lives in dataset.json, never in code; the splat files carry nothing but splats.
 
 ## Gotchas found the hard way
 - Generic FPFH+RANSAC registration fails on box-shaped rooms (flips 180°, reports 0.99 fitness). Use register.py's room-frame method.
 - Splat surfaces are 1-voxel shells: never binary-open them; dilate → label → filter by size.
-- Voxel size must track splat spacing (adaptive in diff.py); a fixed 3 cm voxel is wrong for sparse or dense data.
+- Voxel size must track the room (voxel_frac of the span in diff.py); a fixed 3 cm voxel is wrong for sparse or dense data.
+- A near-square empty room is ambiguous under 90/180-degree yaw once scale is free; register.py refuses when the best
+  symmetry candidate does not clearly beat the runner-up. Real rooms have fixtures; the synthetic one had to be given some.
 - SpzWriter.setScale wants LINEAR scale (it logs internally). Passing log scales gives invisible 45 µm splats.
 - Static hosts add Content-Encoding for .gz files; the label loader sniffs the gzip magic and copes either way.
 - mesh.splatRgba must be followed by mesh.updateGenerator(); after that, mutate rgba.array + rgba.needsUpdate (no rebuild).
 - Per-splat RGBA injection is disabled when Spark LOD is on. Don't pass lod: true.
 - Hidden splats need rgb=0 AND alpha=0 (premultiplied blending; alpha 0 with rgb>0 adds light).
+- Spark regenerates a mesh only when its version moves: after rewriting rgba.array call mesh.updateVersion(), and again
+  after changing mesh.opacity (it is baked at generation time). Visibility changes land only after Spark's async sort
+  completes — give it frames (SparkRenderer's onDirty callback says when) and never stop the loop while spark.sorting.
+- Software-GL Chromium (the sandbox smoke test) never completes Spark's sort, so diff/onion/checkout look stale there.
+  Everything that changes the visible set has to be eyeballed on a real GPU; smoke.py asserts state, not pixels.

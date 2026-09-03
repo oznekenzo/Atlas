@@ -1,173 +1,349 @@
 """
 Voxel-occupancy diff between registered commits.
 
-  occupancy[c] : bool grid, voxel = VOX (in ref units), a voxel is on if it holds enough splat mass
-  added(a,b)   = occ[b] & ~dilate(occ[a])      (dilate absorbs registration + reconstruction jitter)
-  removed(a,b) = occ[a] & ~dilate(occ[b])
-  then: binary opening (kills speckle) -> connected components -> drop blobs below MIN_VOXELS
-Objects are tracked across the whole timeline: a component in commit N that overlaps a
-component in commit N-1 is the same object.
-Writes data/out/objects.json and per-commit per-splat status (0 same / 1 added / 2 removed vs previous).
+  occ[c]       : bool grid, voxel = VOX (in ref units); a voxel is on if it holds enough solid splats
+  added(a,b)   = occ[b] & (distance to occ[a] > JITTER)      (jitter absorbs registration + reconstruction slop)
+  removed(a,b) = occ[a] & (distance to occ[b] > JITTER)
+  then: dilate (bridges the 1-voxel shells splat surfaces produce) -> connected components -> filter:
+        too small / unobserved by the other capture / floor patch / too close to a wall
+Objects are tracked across the whole timeline:
+  - a removal that overlaps a live object shrinks it; the object closes when < 30% of it remains
+  - an unmatched removal is an object that was there before we noticed: its first commit is found by
+    scanning earlier occupancies backwards (an "original" only if c0 held >= 50% of its voxels)
+  - a removal and an addition of similar size in the same step are recorded as a move (moved_from / moved_to)
+Label grids: per commit a uint16 grid (value = object id + 1, 0 = static). Each object's label support is
+its blob grown through the commit's occupancy (above the floor, not through static geometry), then dilated.
+
+Writes out/objects.json and out/c<i>.labels.bin (gzipped uint16, C order).
 """
-import numpy as np, json, os
+import gzip
+import json
+import logging
+import sys
+import time
+from collections import Counter
+
+import numpy as np
 from scipy import ndimage
+
+from dataset import Dataset, PipelineError
 from splat_io import read_ply
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-DATA = os.environ.get("PATINA_DATA", os.path.join(ROOT, "data")); RAW = os.path.join(DATA, "raw"); OUT = os.path.join(DATA, "out")
-N_COMMITS = len([f for f in os.listdir(RAW) if f.startswith("c") and f.endswith(".ply") and f[1:-4].isdigit()])
-VOX = None            # 0.8% of room span (~5 cm in a garage); set in main
-MIN_VOLUME = None     # (5 voxels)^3 — set in main
-JITTER = 2            # voxels of positional slop tolerated before something counts as changed (splat surfaces are fuzzy)
-COVERAGE = 12         # voxels (~60 cm): "observed" = within this distance of the OTHER capture's geometry
-COVERAGE_FRAC = 0.25  # a candidate object survives if this fraction of it is observed (partial floor holes are common)
-OPACITY_SOLID = 0.2   # a voxel is occupied if it holds >= MIN_COUNT splats at least this opaque (density-independent)
-MIN_COUNT = 2
-WALL_MARGIN_M = 0.0   # metres: objects whose centroid lies this close to a wall are ignored (set per dataset)
-CAL_M = None
-HEIGHT_VOX = None; ROOM_LO = None; ROOM_HI = None
-LABEL_DILATE = 2      # voxels: how far an object's label reaches to catch its thin parts (leaves, wire)
-FLOOR_BAND = 2        # voxels: a candidate with >= FLOOR_FRAC of its voxels this close to the floor plane is a floor patch, not an object
-FLOOR_FRAC = 0.8
-MIN_VOXELS = None     # derived from MIN_VOLUME / VOX^3
+log = logging.getLogger("diff")
 
-def load_all():
-    TJ = json.load(open(f"{OUT}/transforms.json")); T = TJ["transforms"]
-    global REF_CANON; REF_CANON = np.array(TJ["ref_canon"])
-    cs = []
-    for ci in range(N_COMMITS):
-        d = read_ply(f"{RAW}/c{ci}.ply"); M = np.array(T[f"c{ci}"])
-        d["xyz"] = d["xyz"] @ M[:3,:3].T + M[:3,3]
-        cs.append(d)
-    return cs
+STRUCT_6 = ndimage.generate_binary_structure(3, 1)      # face neighbours
+STRUCT_26 = np.ones((3, 3, 3), bool)                    # face + edge + corner neighbours
+PARTIAL_OVERLAP = 0.2       # a removal blob overlapping a live object by this fraction of the blob belongs to it
+CLOSE_REMAINING = 0.3       # an object closes when less than this fraction of its voxels remain
+ORIGINAL_OCCUPIED = 0.5     # an object existed in an earlier commit if that commit held this fraction of its voxels
+MOVE_SIZE_TOL = 0.3         # removed/added blobs within this relative size count as one object moving
+MIN_LABEL_HEIGHT = 0.5      # voxels above the floor a voxel must be to join an object's label support
 
-def choose_voxel(cs):
-    """3x the median nearest-neighbour spacing of solid splats: a surface voxel then holds ~5-10 splats."""
-    from scipy.spatial import cKDTree
-    spac = []
-    for c in cs:
-        p = c["xyz"][c["opacity"] > .5]; p = p[np.random.default_rng(0).choice(len(p), min(60000, len(p)), replace=False)]
-        d, _ = cKDTree(p).query(p, k=2, workers=-1); spac.append(np.median(d[:, 1]))
-    return float(3.0 * np.median(spac))
 
-def room_points(c):
-    """Solid splats inside the room, judged in the registration's canonical unit frame (drops background splats)."""
-    p = c["xyz"][c["opacity"] > .35]; q = p @ REF_CANON[:3, :3].T + REF_CANON[:3, 3]
+class Grid:
+    """The voxel grid shared by all commits, with per-voxel room geometry in the reference's canonical frame."""
+
+    def __init__(self, room0, ref_canon, vox, calibration_m):
+        self.vox = vox
+        self.ref_canon = ref_canon
+        lo = np.percentile(room0, 1, axis=0)
+        hi = np.percentile(room0, 99, axis=0)
+        pad = (hi - lo) * 0.08
+        self.origin = lo - pad - 2 * vox
+        self.shape = tuple(int(x) for x in np.ceil((hi + pad + 2 * vox - self.origin) / vox).astype(int) + 1)
+        self.calibration_m = calibration_m
+        span = float(np.abs(np.linalg.det(ref_canon[:3, :3])) ** (-1 / 3))
+        self.m_per_ref = calibration_m / span                                  # metres per reference unit
+        centres = self.origin + (np.indices(self.shape).reshape(3, -1).T + 0.5) * vox
+        canon = centres @ ref_canon[:3, :3].T + ref_canon[:3, 3]
+        self.height_vox = (canon[:, 2] * span / vox).reshape(self.shape)      # voxels above the floor plane
+        self.xy_canon = canon[:, :2].reshape(*self.shape, 2)
+        q0 = room0 @ ref_canon[:3, :3].T + ref_canon[:3, 3]
+        self.room_lo = np.percentile(q0[:, :2], 2, axis=0)                     # walls, canonical xy
+        self.room_hi = np.percentile(q0[:, :2], 98, axis=0)
+        ceiling = float(np.percentile(q0[:, 2], 98))
+        self.room_canon = [[*self.room_lo.tolist(), 0.0], [*self.room_hi.tolist(), ceiling]]   # floor at z = 0
+
+    def occupancy(self, xyz, opacity, params):
+        ijk = np.floor((xyz - self.origin) / self.vox).astype(np.int64)
+        ok = np.all((ijk >= 0) & (ijk < self.shape), axis=1)
+        solid = ok & (opacity > params.opacity_solid)
+        flat = np.ravel_multi_index(tuple(ijk[solid].T), self.shape)
+        count = np.bincount(flat, minlength=int(np.prod(self.shape))).reshape(self.shape)
+        return count >= params.min_count
+
+    def bbox_ref(self, ijk_lo, ijk_hi):
+        lo = self.origin + np.asarray(ijk_lo) * self.vox
+        hi = self.origin + (np.asarray(ijk_hi) + 1) * self.vox
+        return [lo.round(3).tolist(), hi.round(3).tolist()]
+
+
+def room_points(xyz, opacity, ref_canon):
+    """Solid splats inside the room, judged in the canonical unit frame (drops background splats)."""
+    p = xyz[opacity > .35]
+    q = p @ ref_canon[:3, :3].T + ref_canon[:3, 3]
     return p[np.all(np.abs(q) < 0.75, axis=1)]
 
-def grid_shape(cs):
-    allp = np.vstack([room_points(c) for c in cs]); lo = np.percentile(allp, 1, axis=0); hi = np.percentile(allp, 99, axis=0)
-    pad = (hi - lo) * 0.08; lo -= pad + 2*VOX; hi += pad + 2*VOX
-    return lo, np.ceil((hi - lo) / VOX).astype(int) + 1
 
-def occupancy(c, lo, shape):
-    ijk = np.floor((c["xyz"] - lo) / VOX).astype(int)
-    ok = np.all((ijk >= 0) & (ijk < shape), axis=1)
-    solid = ok & (c["opacity"] > OPACITY_SOLID)
-    cnt = np.zeros(shape, np.int32); np.add.at(cnt, tuple(ijk[solid].T), 1)
-    return cnt >= MIN_COUNT, ijk, ok
+def load_commit(ds, index, transforms):
+    """Positions (in the reference frame) and opacities of one commit; nothing else is retained."""
+    d = read_ply(ds.raw_ply(index))
+    M = np.array(transforms[f"c{index}"])
+    return d["xyz"] @ M[:3, :3].T + M[:3, 3], d["opacity"]
 
-def components(mask, seen=None):
-    """Splat surfaces are thin shells: never erode them. Dilate to bridge gaps, label, filter by the ORIGINAL mask's
-    voxel count, and drop candidates that lie almost entirely where the other capture has nothing nearby
-    (unobserved, not changed). Returns labels on the dilated support (for tracking/bbox)."""
-    grown = ndimage.binary_dilation(mask, np.ones((3,3,3)), iterations=1)
-    lab, n = ndimage.label(grown, structure=np.ones((3,3,3)))
-    sizes = ndimage.sum(mask, lab, range(1, n+1))
+
+def distance_to(mask):
+    """Euclidean distance (in voxels) from every voxel to the nearest voxel of mask."""
+    return ndimage.distance_transform_edt(~mask)
+
+
+def components(mask, seen, grid, params, what):
+    """Splat surfaces are thin shells: never erode them. Dilate to bridge gaps, label, filter by the ORIGINAL
+    mask's voxel count, and drop candidates that lie almost entirely where the other capture has nothing nearby
+    (unobserved, not changed), floor patches, and near-wall blobs. Returns labels on the dilated support."""
+    grown = ndimage.binary_dilation(mask, STRUCT_26)
+    lab, n = ndimage.label(grown, structure=STRUCT_26)
+    if n == 0:
+        return lab, 0
+    core = np.where(mask, lab, 0)                      # labels restricted to the original mask
+    index = np.arange(1, n + 1)
+    size = ndimage.sum(mask, core, index)
+    covered = ndimage.sum(seen, core, index)
+    near_floor = ndimage.sum(np.abs(grid.height_vox) <= params.floor_band_voxels, core, index)
+    median_height = np.array(ndimage.median(grid.height_vox, core, index))
+    cx = np.array(ndimage.mean(grid.xy_canon[..., 0], core, index))
+    cy = np.array(ndimage.mean(grid.xy_canon[..., 1], core, index))
+    reject = Counter()
     keep = []
-    for i, sz in enumerate(sizes):
-        if sz < MIN_VOXELS: continue
-        m = (lab == i+1) & mask
-        if seen is not None and (m & seen).sum() < COVERAGE_FRAC * m.sum(): continue
-        hm = HEIGHT_VOX[m]
-        if (np.abs(hm) <= FLOOR_BAND).mean() >= FLOOR_FRAC or np.median(hm) <= FLOOR_BAND: continue   # floor patch / under-floor fuzz, not an object
-        if WALL_MARGIN_M and CAL_M:                                                                   # near-wall objects are out of scope
-            c = XY_CANON[m].mean(0); mg = WALL_MARGIN_M / CAL_M
-            if np.any(c < ROOM_LO + mg) or np.any(c > ROOM_HI - mg): continue
-        keep.append(i+1)
-    out = np.zeros_like(lab)
-    for k, i in enumerate(keep, 1): out[lab == i] = k
-    return out, len(keep)
+    for i in range(n):
+        if size[i] < params.min_voxels:
+            reject["size"] += 1
+        elif covered[i] < params.coverage_frac * size[i]:
+            reject["coverage"] += 1
+        elif near_floor[i] / size[i] >= params.floor_frac or median_height[i] <= params.floor_band_voxels:
+            reject["floor"] += 1
+        elif params.wall_margin_m and _near_wall(cx[i], cy[i], grid, params):
+            reject["wall"] += 1
+        else:
+            keep.append(i + 1)
+    lut = np.zeros(n + 1, np.int32)
+    lut[keep] = np.arange(1, len(keep) + 1)
+    log.info(f"  {what}: {len(keep)} kept of {n} candidates; rejected size {reject['size']}, "
+             f"coverage {reject['coverage']}, floor {reject['floor']}, wall {reject['wall']}")
+    return lut[lab], len(keep)
 
-def load_params():
-    """Per-dataset tuning lives in data/<set>/dataset.json, never in code."""
-    p = os.path.join(DATA, "dataset.json")
-    if not os.path.exists(p): return {}
-    return json.load(open(p))
+
+def _near_wall(cx, cy, grid, params):
+    """Centroid (canonical xy) within wall_margin_m of a wall; one canonical unit is calibration_m metres."""
+    margin = params.wall_margin_m / grid.calibration_m
+    c = np.array([cx, cy])
+    return bool(np.any(c < grid.room_lo + margin) or np.any(c > grid.room_hi - margin))
+
+
+def grow_support(seed, growable_labels):
+    """Seed plus every connected component of the growable set the seed touches."""
+    hit = np.unique(growable_labels[seed])
+    hit = hit[hit > 0]
+    if len(hit) == 0:
+        return seed.copy()
+    lut = np.zeros(growable_labels.max() + 1, bool)
+    lut[hit] = True
+    return seed | lut[growable_labels]
+
+
+def label_reach(support, blocked, params):
+    """Where an object's label applies: its support, plus a dilation that stops at blocked voxels."""
+    grown = ndimage.binary_dilation(support, STRUCT_6, iterations=params.label_dilate_voxels)
+    return support | (grown & ~blocked)
+
+
+class Tracker:
+    """Objects across the timeline, plus the per-commit label grids."""
+
+    def __init__(self, grid, occ, params):
+        self.grid = grid
+        self.occ = occ
+        self.params = params
+        self.objects = []
+        self.live = {}                  # object id -> voxel mask on the dilated support
+        self.labels = []                # per commit: uint16 grid, value = object id + 1
+
+    def new_object(self, mask, added_in, removed_in, present):
+        ijk = np.argwhere(mask)
+        o = {"id": len(self.objects), "added_in": added_in, "removed_in": removed_in, "present": list(present),
+             "voxels": int(mask.sum()), "bbox_vox": [ijk.min(0).tolist(), ijk.max(0).tolist()],
+             "moved_from": None, "moved_to": None}
+        self.objects.append(o)
+        return o["id"]
+
+    def first_commit(self, core, ci):
+        """Earliest commit, scanning back from ci-1, that still held most of these voxels."""
+        added_in = ci - 1
+        for cj in range(ci - 2, -1, -1):
+            if self.occ[cj][core].mean() >= ORIGINAL_OCCUPIED:
+                added_in = cj
+            else:
+                break
+        return added_in
+
+    def step(self, ci, dist_prev, dist_cur):
+        """Detect changes between commits ci-1 and ci and update the object list."""
+        p = self.params
+        a = self.occ[ci - 1]
+        b = self.occ[ci]
+        added = b & (dist_prev > p.jitter_voxels)
+        removed = a & (dist_cur > p.jitter_voxels)
+        labA, nA = components(added, dist_prev <= p.coverage_voxels, self.grid, p, f"c{ci - 1}->c{ci} added")
+        labR, nR = components(removed, dist_cur <= p.coverage_voxels, self.grid, p, f"c{ci - 1}->c{ci} removed")
+        closed = []
+        for k in range(1, nR + 1):
+            m = labR == k
+            n_m = int(m.sum())
+            hits = [oid for oid, g in self.live.items()
+                    if (g & m).sum() > PARTIAL_OVERLAP * min(n_m, g.sum())]      # one blob can take several objects
+            for hit in hits:
+                g = self.live[hit]
+                g &= ~m
+                g &= dist_cur <= p.jitter_voxels                # what is left must still be there in this commit
+                remaining = g.sum() / self.objects[hit]["voxels"]
+                if remaining < CLOSE_REMAINING:
+                    self.objects[hit]["removed_in"] = ci
+                    del self.live[hit]
+                    closed.append(hit)
+                else:
+                    log.info(f"  object {hit}: partial removal, {remaining:.0%} remains")
+            if hits:
+                continue
+            added_in = self.first_commit(m & removed, ci)
+            oid = self.new_object(m, added_in, ci, range(added_in, ci))
+            self.backfill(oid, m, added_in, ci, dist_cur)
+            closed.append(oid)
+        opened = []
+        for k in range(1, nA + 1):
+            m = labA == k
+            oid = self.new_object(m, ci, None, [ci])
+            self.live[oid] = m
+            opened.append(oid)
+        self.match_moves(closed, opened)
+        for oid in self.live:
+            if ci not in self.objects[oid]["present"]:
+                self.objects[oid]["present"].append(ci)
+        log.info(f"c{ci - 1}->c{ci}: {nA} added, {nR} removed components")
+
+    def match_moves(self, closed, opened):
+        """Pair removed and added blobs of similar voxel count (one to one, closest size first)."""
+        pairs = []
+        for r in closed:
+            for a in opened:
+                vr = self.objects[r]["voxels"]
+                va = self.objects[a]["voxels"]
+                if abs(va - vr) <= MOVE_SIZE_TOL * vr:
+                    pairs.append((abs(va - vr) / vr, r, a))
+        used = set()
+        for _, r, a in sorted(pairs):
+            if r in used or a in used:
+                continue
+            used.update((r, a))
+            self.objects[r]["moved_to"] = a
+            self.objects[a]["moved_from"] = r
+            log.info(f"  object {r} -> {a}: moved (removed and added in the same step, similar size)")
+
+    def backfill(self, oid, blob, added_in, removed_in, dist_after):
+        """Label an object discovered by its removal in every earlier commit it was present in. What remains
+        after the removal is the static geometry the label must not grow into, nor may it take voxels that
+        those commits already gave to other objects."""
+        static = dist_after <= 1
+        for cj in range(added_in, removed_in):
+            lab = self.labels[cj]
+            blocked = static | (lab != 0)
+            growable = self.occ[cj] & (self.grid.height_vox > MIN_LABEL_HEIGHT) & ~blocked
+            comp, _ = ndimage.label(growable, structure=STRUCT_26)
+            reach = label_reach(grow_support(blob, comp), blocked, self.params)
+            lab[reach & (lab == 0)] = oid + 1
+
+    def label_commit(self, ci, dist_prev):
+        """Label grid for commit ci from the live objects. Each object's support grows from its blob through
+        the commit's occupancy above the floor, but not into static geometry (the previous commit's dilated
+        occupancy, minus what was labelled as this object there) nor into other objects' blobs."""
+        lab = np.zeros(self.grid.shape, np.uint16)
+        if ci > 0:
+            prev_near = dist_prev <= 1
+            prev_lab = self.labels[ci - 1]
+        else:
+            prev_near = np.zeros(self.grid.shape, bool)
+            prev_lab = lab
+        base = self.occ[ci] & (self.grid.height_vox > MIN_LABEL_HEIGHT)
+        all_seeds = np.zeros(self.grid.shape, bool)
+        for g in self.live.values():
+            all_seeds |= g
+        for oid, g in self.live.items():
+            blocked = (prev_near & (prev_lab != oid + 1)) | (all_seeds & ~g)
+            comp, _ = ndimage.label(base & ~blocked, structure=STRUCT_26)
+            reach = label_reach(grow_support(g, comp), blocked, self.params)
+            lab[reach & (lab == 0)] = oid + 1
+        self.labels.append(lab)
+
+
+def run(ds):
+    t0 = time.time()
+    p = ds.diff
+    TJ = ds.load_transforms()
+    ref_canon = np.array(TJ["ref_canon"])
+    transforms = TJ["transforms"]
+    span = float(np.abs(np.linalg.det(ref_canon[:3, :3])) ** (-1 / 3))       # canonical frame divides by the room span
+    vox = p.voxel_frac * span
+    xyz0, opacity0 = load_commit(ds, 0, transforms)
+    grid = Grid(room_points(xyz0, opacity0, ref_canon), ref_canon, vox, ds.calibration_m)
+    if p.wall_margin_m:
+        log.info(f"wall margin {p.wall_margin_m} m -> ignoring objects within {p.wall_margin_m / ds.calibration_m:.3f} "
+                 f"of the room edge (canonical)")
+    log.info(f"voxel {vox:.4f} ref-units ({vox * grid.m_per_ref * 100:.1f} cm)  min blob {p.min_voxels} vox  "
+             f"grid {grid.shape} ({np.prod(grid.shape) / 1e6:.1f} M voxels)")
+    occ = [grid.occupancy(xyz0, opacity0, p)]
+    del xyz0, opacity0
+    for c in ds.commits[1:]:
+        xyz, opacity = load_commit(ds, c.index, transforms)
+        occ.append(grid.occupancy(xyz, opacity, p))
+        del xyz, opacity
+    tracker = Tracker(grid, occ, p)
+    dist_prev = None
+    dist_cur = distance_to(occ[0])
+    for ci in range(len(occ)):
+        if ci > 0:
+            dist_prev = dist_cur
+            dist_cur = distance_to(occ[ci])
+            tracker.step(ci, dist_prev, dist_cur)
+        tracker.label_commit(ci, dist_prev)
+    objects = tracker.objects
+    for o in objects:
+        ijk_lo, ijk_hi = o.pop("bbox_vox")
+        o["bbox"] = grid.bbox_ref(ijk_lo, ijk_hi)
+        o["volume_vox_m3"] = round(o["voxels"] * (vox * grid.m_per_ref) ** 3, 4)
+    for ci, lab in enumerate(tracker.labels):
+        with gzip.open(ds.labels_path(ci), "wb", compresslevel=6) as fh:
+            fh.write(np.ascontiguousarray(lab).tobytes())
+    with open(ds.objects_path, "w") as fh:
+        json.dump({"voxel": vox, "origin": grid.origin.tolist(), "shape": list(grid.shape),
+                   "room_canon": grid.room_canon, "objects": objects},
+                  fh, indent=1)
+    log.info(f"\n{len(objects)} objects:")
+    for o in objects:
+        removed = f"c{o['removed_in']}" if o["removed_in"] is not None else "—"
+        moved = ""
+        if o["moved_from"] is not None:
+            moved = f"  moved from #{o['moved_from']}"
+        if o["moved_to"] is not None:
+            moved = f"  moved to #{o['moved_to']}"
+        log.info(f"  #{o['id']:>2}  added c{o['added_in']}  removed {removed:>3}  present {o['present']}  "
+                 f"{o['voxels']:>5} vox  {o['volume_vox_m3']:.3f} m3{moved}")
+    log.info(f"diff done in {time.time() - t0:.0f}s")
+
 
 if __name__ == "__main__":
-    P = load_params(); dp = P.get("diff", {})
-    globals().update(JITTER=int(dp.get("jitter_voxels", JITTER)), COVERAGE=int(dp.get("coverage_voxels", COVERAGE)),
-                     COVERAGE_FRAC=float(dp.get("coverage_frac", COVERAGE_FRAC)), OPACITY_SOLID=float(dp.get("opacity_solid", OPACITY_SOLID)),
-                     MIN_COUNT=int(dp.get("min_count", MIN_COUNT)), LABEL_DILATE=int(dp.get("label_dilate_voxels", LABEL_DILATE)),
-                     FLOOR_BAND=int(dp.get("floor_band_voxels", FLOOR_BAND)), FLOOR_FRAC=float(dp.get("floor_frac", FLOOR_FRAC)),
-                     WALL_MARGIN_M=float(dp.get("wall_margin_m", 0.0)), CAL_M=float(P.get("calibration_m", 0) or 0) or None)
-    cs = load_all()
-    span = float(np.abs(np.linalg.det(REF_CANON[:3, :3])) ** (-1 / 3))       # canonical frame divides by the room span
-    VOX = float(dp.get("voxel_frac", 0.008)) * span; MIN_VOXELS = int(dp.get("min_voxels", 60))
-    globals().update(VOX=VOX, MIN_VOXELS=MIN_VOXELS)
-    lo, shape = grid_shape(cs)
-    # signed height of every voxel above the floor plane, in voxels (canonical z, floor = 2nd percentile of solid c0 z, sign resolved by density)
-    I, J, K = np.indices(shape); cen = lo + (np.stack([I, J, K], -1).reshape(-1, 3) + .5) * VOX
-    zc = (cen @ REF_CANON[:3, :3].T + REF_CANON[:3, 3])[:, 2].reshape(shape)
-    q0 = room_points(cs[0]) @ REF_CANON[:3, :3].T + REF_CANON[:3, 3]; zlo, zhi = np.percentile(q0[:, 2], [2, 98]); h = zhi - zlo
-    floor_is_high = (q0[:, 2] > zhi - .15 * h).sum() > (q0[:, 2] < zlo + .15 * h).sum()
-    floor_z = zhi if floor_is_high else zlo; up = -1.0 if floor_is_high else 1.0
-    HEIGHT_VOX = up * (zc - floor_z) / (VOX * float(np.abs(np.linalg.det(REF_CANON[:3, :3])) ** (1 / 3)))   # canonical units per voxel
-    ROOM_LO, ROOM_HI = np.percentile(q0[:, :2], 2, axis=0), np.percentile(q0[:, :2], 98, axis=0)               # walls, canonical xy
-    XY_CANON = (cen @ REF_CANON[:3, :3].T + REF_CANON[:3, 3])[:, :2].reshape(*shape, 2)
-    globals().update(ROOM_LO=ROOM_LO, ROOM_HI=ROOM_HI, XY_CANON=XY_CANON)
-    if WALL_MARGIN_M and CAL_M: print(f"wall margin {WALL_MARGIN_M} m -> ignoring objects within {WALL_MARGIN_M / CAL_M:.3f} of the room edge (canonical)")
-    globals().update(HEIGHT_VOX=HEIGHT_VOX)
-    print(f"voxel {VOX:.4f} ref-units  min blob {MIN_VOXELS} vox  grid {shape} ({np.prod(shape)/1e6:.1f} M voxels)")
-    occ, ijks, oks = zip(*[occupancy(c, lo, shape) for c in cs])
-    st = ndimage.generate_binary_structure(3, 1)
-    objects = []          # {id, present:[...], bbox}
-    live = {}             # object id -> voxel mask on the dilated support (for tracking)
-    labels = []           # per commit: uint16 grid, value = object id + 1, 0 = untracked/static
-    for ci in range(N_COMMITS):
-        if ci > 0:
-            a, b = occ[ci-1], occ[ci]
-            seen_a = ndimage.binary_dilation(a, st, iterations=COVERAGE)     # where capture a has geometry nearby at all
-            seen_b = ndimage.binary_dilation(b, st, iterations=COVERAGE)
-            added   = b & ~ndimage.binary_dilation(a, st, iterations=JITTER)
-            removed = a & ~ndimage.binary_dilation(b, st, iterations=JITTER)
-            labA, nA = components(added, seen_a); labR, nR = components(removed, seen_b)
-            for k in range(1, nR+1):                      # removals close live objects, or reveal c0 originals
-                m = labR == k; hit = None
-                for oid, g in live.items():
-                    if (g & m).sum() > 0.2 * m.sum(): hit = oid; break
-                if hit is not None:
-                    objects[hit]["removed_in"] = ci; del live[hit]
-                else:
-                    ijk = np.argwhere(m); oid = len(objects)
-                    objects.append({"id": oid, "added_in": 0, "removed_in": ci, "present": list(range(0, ci)),
-                                    "bbox_vox": [ijk.min(0).tolist(), ijk.max(0).tolist()], "voxels": int(m.sum())})
-                    for cj in range(0, ci): labels[cj][m & (labels[cj] == 0)] = oid + 1     # back-fill earlier commits
-            for k in range(1, nA+1):
-                m = labA == k; ijk = np.argwhere(m); oid = len(objects)
-                objects.append({"id": oid, "added_in": ci, "present": [ci],
-                                "bbox_vox": [ijk.min(0).tolist(), ijk.max(0).tolist()], "voxels": int(m.sum())})
-                live[oid] = m
-            for oid in live:
-                if ci not in objects[oid]["present"]: objects[oid]["present"].append(ci)
-            print(f"c{ci-1}->c{ci}: {nA} added, {nR} removed components")
-        lab = np.zeros(shape, np.uint16)
-        prev = ndimage.binary_dilation(occ[ci-1], st, iterations=1) if ci > 0 else np.zeros(shape, bool)
-        for oid, g in live.items():
-            reach = ndimage.binary_dilation(g, st, iterations=LABEL_DILATE) & ~(prev & ~g)
-            lab[reach & (lab == 0)] = oid + 1
-        labels.append(lab)
-    # finalize bboxes in ref units
-    for o in objects:
-        (i0,j0,k0),(i1,j1,k1) = o.pop("bbox_vox")
-        o["bbox"] = [(lo + np.array([i0,j0,k0])*VOX).round(3).tolist(), (lo + (np.array([i1,j1,k1])+1)*VOX).round(3).tolist()]
-        o["volume_vox_m3"] = round(o["voxels"] * VOX**3, 4)
-        o.setdefault("removed_in", None)
-    import gzip
-    for ci, lab in enumerate(labels):
-        with gzip.open(f"{OUT}/c{ci}.labels.bin", "wb", compresslevel=6) as fh: fh.write(np.ascontiguousarray(lab).tobytes())
-    json.dump({"voxel": VOX, "origin": lo.tolist(), "shape": [int(x) for x in shape], "objects": objects},
-              open(f"{OUT}/objects.json","w"), indent=1)
-    print(f"\n{len(objects)} objects:")
-    for o in objects: print(f"  #{o['id']:>2}  added c{o['added_in']}  removed {('c'+str(o['removed_in'])) if o['removed_in'] is not None else '—':>3}  present {o['present']}  {o['voxels']:>5} vox")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    if len(sys.argv) != 2:
+        sys.exit("usage: python3 diff.py <set-name>")
+    try:
+        run(Dataset(sys.argv[1]))
+    except PipelineError as e:
+        sys.exit(f"diff: {e}")
