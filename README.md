@@ -14,6 +14,7 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
                 splat_io.py        3DGS ply read (memmap) / write / similarity transform incl. SH band 1
                 make_synthetic.py  test data: 6 commits as real 3DGS .ply, arbitrary frame+scale each → data/sets/synthetic/
                 test_synthetic.py  end-to-end check against truth.json (registration < 15 mm, objects found, contract kept)
+                slim_ply.py        drops SH bands + sub-0.05 splats from a full export (943 MB → ~120 MB); numpy only
                 requirements.txt   pinned numpy / scipy / open3d
     viewer/     Vite + React + zustand + three.js + @sparkjsdev/spark
                 src/store.ts           app state + the action log / reflog — the only thing React and the engine share
@@ -39,6 +40,7 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
     open the viewer with ?set=<name>  (default: garage — the real captures; synthetic — the generated test set)
 
 ## Bringing in a new set of captures
+    0. python3 pipeline/slim_ply.py <export.ply> data/sets/<name>/source/cN.ply   (sources stay untracked)
     1. mkdir data/sets/<name>; write data/sets/<name>/dataset.json (schema in pipeline/run.py, defaults in pipeline/dataset.py):
        the capture files (any path), a message + timestamp per commit, calibration_m (tape-measure the longest wall),
        and optional tuning blocks — "diff": wall_margin_m ignores anything near the walls; "registration": up

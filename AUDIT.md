@@ -25,8 +25,9 @@ Status key — **fixed** in this pass · **mitigated** (reduced, not eliminated)
 | P12 | low | A box replaced in place by a similar box stays ~35 % "alive" (shared voxels). | open — inherent to occupancy diff without appearance |
 | P13 | low | Registration assumes a rectangular room with a dominant floor plane. | open — documented; L-shaped rooms need a second wall pair |
 
-Numbers (garage, two real captures, 1.6 M and 3.9 M splats): registration 72 % inliers at 0.2 % of span RMS;
-8 interior objects incl. the lamp at wall margin 0.6 m; diff step 52 s, bake 40 s on a laptop-class CPU.
+Numbers (garage, five HD captures, ~2.1 M splats each after slimming): registration 75–80 % inliers at 0.2 % of
+span RMS (≈1.2 cm) with a 0.31+ margin over the runner-up symmetry on every commit; 14 tracked objects incl. two
+moves; register 100 s, diff 12 s, bake 3 min on a 4-core cloud box.
 
 ## Viewer
 
@@ -34,7 +35,7 @@ Numbers (garage, two real captures, 1.6 M and 3.9 M splats): registration 72 % i
 |---|---|---|---|
 | V1 | high | Hover repainted every splat of every visible layer through a closure (O(N) with a call per splat, ~4 M in the garage). | fixed — per-object `Style` tables; a tight closure-free loop; layers whose style is unchanged are skipped. Hover in diff mode and hover over the selected object cost 0 ms (asserted by the smoke test) |
 | V2 | high | No error state: a missing set, a 404 on a commit or a malformed manifest hung on a black screen. | fixed — `status`/`error` in the store, `parseManifest` names the bad field, SPA index.html fallbacks are detected, per-commit load failures show on the rail |
-| V3 | high | The render loop ran flat out while idle (100 % of a GPU for a still image). | fixed — idle gate: renders on change, for 1.2 s after, while Spark sorts, and at least once per change; Spark's `onDirty` reopens it |
+| V3 | high | The render loop ran flat out while idle (100 % of a GPU for a still image). | fixed — idle gate: renders on change, for 1.2 s after, and at least once per change; Spark's `onDirty` reopens it when async sort results land; a watchdog keeps the loop alive where rAF stalls |
 | V4 | med | Labelling a 4 M-splat commit blocked the main thread for the whole pass. | fixed — chunked (256 k splats per task) with yields, using Spark's `unpackSplat` |
 | V5 | med | Onion mode ignored commits that finished loading after it was entered. | fixed — `applyMode` also runs on `loaded` changes |
 | V6 | med | `diffStats` were written into the store by the engine; two sources of truth for one number. | fixed — the legend derives them from the manifest |

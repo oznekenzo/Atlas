@@ -1,0 +1,64 @@
+
+=== register (garage) ===
+c0: 8 wall planes voted on the yaw; vertical density bottom 59,561 vs top 21,255 (ratio 2.802) -> kept [auto]; floor at z=-0.289 -> 0
+c1: cand fit 0.796 (runner-up 0.465)  inliers(0.5% span) 0.75  rms 0.18% of span  scale 1.057
+c2: cand fit 0.795 (runner-up 0.481)  inliers(0.5% span) 0.75  rms 0.19% of span  scale 1.466
+c3: cand fit 0.831 (runner-up 0.520)  inliers(0.5% span) 0.80  rms 0.20% of span  scale 1.640
+c4: cand fit 0.792 (runner-up 0.477)  inliers(0.5% span) 0.77  rms 0.18% of span  scale 0.885
+register done in 100s
+
+=== diff (garage) ===
+wall margin 0.6 m -> ignoring objects within 0.098 of the room edge (canonical)
+voxel 0.0579 ref-units (4.9 cm)  min blob 60 vox  grid (145, 159, 104) (2.4 M voxels)
+  c0->c1 added: 4 kept of 911 candidates; rejected size 907, coverage 0, floor 0, wall 0
+  c0->c1 removed: 0 kept of 1062 candidates; rejected size 1062, coverage 0, floor 0, wall 0
+c0->c1: 4 added, 0 removed components
+  c1->c2 added: 5 kept of 944 candidates; rejected size 938, coverage 0, floor 0, wall 1
+  c1->c2 removed: 1 kept of 935 candidates; rejected size 933, coverage 0, floor 0, wall 1
+c1->c2: 5 added, 1 removed components
+  c2->c3 added: 2 kept of 1027 candidates; rejected size 1023, coverage 0, floor 2, wall 0
+  c2->c3 removed: 6 kept of 887 candidates; rejected size 879, coverage 0, floor 0, wall 2
+  object 3 -> 9: moved (removed and added in the same step, similar size)
+  object 5 -> 10: moved (removed and added in the same step, similar size)
+c2->c3: 2 added, 6 removed components
+  c3->c4 added: 3 kept of 1037 candidates; rejected size 1034, coverage 0, floor 0, wall 0
+  c3->c4 removed: 3 kept of 1005 candidates; rejected size 1001, coverage 0, floor 1, wall 0
+  object 9 -> 11: moved (removed and added in the same step, similar size)
+c3->c4: 3 added, 3 removed components
+
+14 objects:
+  # 0  added c1  removed  c2  present [1]   1889 vox  0.220 m3
+  # 1  added c1  removed  c3  present [1, 2]   3050 vox  0.354 m3
+  # 2  added c1  removed  c3  present [1, 2]   1222 vox  0.142 m3
+  # 3  added c1  removed  c3  present [1, 2]   4279 vox  0.497 m3  moved to #9
+  # 4  added c2  removed  c3  present [2]    697 vox  0.081 m3
+  # 5  added c2  removed  c3  present [2]    675 vox  0.078 m3  moved to #10
+  # 6  added c2  removed  c4  present [2, 3]    871 vox  0.101 m3
+  # 7  added c2  removed  c3  present [2]   1010 vox  0.117 m3
+  # 8  added c2  removed   —  present [2, 3, 4]   1019 vox  0.118 m3
+  # 9  added c3  removed  c4  present [3]   4229 vox  0.491 m3  moved to #11
+  #10  added c3  removed  c4  present [3]    580 vox  0.067 m3  moved from #5
+  #11  added c4  removed   —  present [4]   3271 vox  0.380 m3  moved from #9
+  #12  added c4  removed   —  present [4]   1164 vox  0.135 m3
+  #13  added c4  removed   —  present [4]   1791 vox  0.208 m3
+diff done in 12s
+
+=== bake (garage) ===
+  Compressed 41067116 bytes to 34176195 bytes
+/root/patina/data/sets/garage/out/c0.aligned.ply -> /root/patina/viewer/public/sets/garage/commits/c0.spz: 2053355 splats, sh0, 34.18 MB, clipped 0
+c0  2,053,355 -> 2,053,355 splats (pruned <0.05)   spz  34.2 MB   db55e7d
+  Compressed 41506636 bytes to 34597029 bytes
+/root/patina/data/sets/garage/out/c1.aligned.ply -> /root/patina/viewer/public/sets/garage/commits/c1.spz: 2075331 splats, sh0, 34.60 MB, clipped 0
+c1  2,075,331 -> 2,075,331 splats (pruned <0.05)   spz  34.6 MB   61b3e34
+  Compressed 42902056 bytes to 35759442 bytes
+/root/patina/data/sets/garage/out/c2.aligned.ply -> /root/patina/viewer/public/sets/garage/commits/c2.spz: 2145102 splats, sh0, 35.76 MB, clipped 0
+c2  2,145,102 -> 2,145,102 splats (pruned <0.05)   spz  35.8 MB   1f58985
+  Compressed 44481336 bytes to 37202273 bytes
+/root/patina/data/sets/garage/out/c3.aligned.ply -> /root/patina/viewer/public/sets/garage/commits/c3.spz: 2224066 splats, sh0, 37.20 MB, clipped 0
+c3  2,224,066 -> 2,224,066 splats (pruned <0.05)   spz  37.2 MB   427e1a6
+  Compressed 42005756 bytes to 35023257 bytes
+/root/patina/data/sets/garage/out/c4.aligned.ply -> /root/patina/viewer/public/sets/garage/commits/c4.spz: 2100287 splats, sh0, 35.02 MB, clipped 0
+c4  2,100,287 -> 2,100,287 splats (pruned <0.05)   spz  35.0 MB   b7e9af8
+wrote /root/patina/viewer/public/sets/garage/commits.json
+
+done -> /root/patina/viewer/public/sets/garage   (open the viewer with ?set=garage)

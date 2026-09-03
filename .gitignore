@@ -1,11 +1,14 @@
 node_modules/
 dist/
-data/raw/
-data/out/
 shots/
 __pycache__/
 *.zip
+*.part*
 .DS_Store
+# captures and intermediates stay local; the baked set under viewer/public/sets/ is what deploys
+data/raw/
+data/out/
 data/sets/*/raw/
-data/sets/*/out/
-viewer/public/sets/*/commits/
+data/sets/*/source/
+data/sets/*/out/*.ply
+Claude outputs/
