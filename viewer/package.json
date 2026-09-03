@@ -1,5 +1,5 @@
 {
-  "name": "worldstate",
+  "name": "state-atlas",
   "private": true,
   "type": "module",
   "scripts": {

@@ -18,7 +18,7 @@ export function Intro() {
   const done = M !== null && loaded.every(Boolean);
   return (
     <div id="intro" className={intro ? "" : "gone"} aria-live="polite">
-      <div className="wordmark">WORLDSTATE</div>
+      <div className="wordmark">STATE ATLAS</div>
       <div className="thesis k">git for the physical world</div>
       <div className="log">
         {M?.commits.map((c) =>

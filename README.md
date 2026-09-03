@@ -1,6 +1,6 @@
 # Statefield
 
-WORLDSTATE (working name: Patina) — spatial version control for gaussian-splat captures.
+STATE ATLAS (working names: Worldstate, Patina) — spatial version control for gaussian-splat captures.
 
 Six captures of one room → registered → voxel-diffed → objects tracked across commits → browser viewer with git semantics.
 
