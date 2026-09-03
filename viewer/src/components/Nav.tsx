@@ -44,18 +44,17 @@ function Rail() {
 }
 
 function Hints() {
-  const { mode, selected, boxes } = useStore(useShallow((s) => ({ mode: s.mode, selected: s.selected, boxes: s.boxes })));
-  const b = boxes ? "B  hide boxes" : "B  detect";
+  const { mode, selected } = useStore(useShallow((s) => ({ mode: s.mode, selected: s.selected })));
   const text =
     mode.kind === "diff"
-      ? `D  exit diff   ·   ${b}   ·   click  inspect`
+      ? "D  exit diff   ·   click  inspect"
       : mode.kind === "onion"
         ? selected !== null
-          ? `ESC  all states   ·   ${b}   ·   O  exit onion`
-          : `click  trace an object   ·   ${b}   ·   O  exit onion`
+          ? "ESC  all states   ·   O  exit onion"
+          : "click  trace an object   ·   O  exit onion"
         : selected !== null
-          ? `ESC  deselect   ·   ${b}`
-          : `← →  commits   ·   D  diff   ·   O  onion   ·   ${b}`;
+          ? "ESC  deselect"
+          : "← →  commits   ·   D  diff   ·   O  onion   ·   /  commands";
   return <div className="hints k">{text}</div>;
 }
 

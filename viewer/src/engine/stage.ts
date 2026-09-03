@@ -100,7 +100,6 @@ export class Stage {
         if (s.camRequest && s.camRequest !== prev.camRequest) this.tweenTo(s.camRequest.cam);
       }),
       useStore.subscribe((s, prev) => {
-        if (s.boxes !== prev.boxes) this.touch();
         if (s.head !== prev.head || s.mode !== prev.mode || s.selected !== prev.selected || s.hover !== prev.hover || s.loaded !== prev.loaded) {
           this.applyMode(s);
         }
@@ -378,7 +377,7 @@ export class Stage {
    */
   private boxItems(s: State): BoxItem[] {
     const M = this.M;
-    if (!M || !s.boxes) return [];
+    if (!M) return [];
     const vol = (o: number) => `${M.objects[o].volume_vox_m3.toFixed(2)} m³`;
     const tag = (o: number) => {
       const name = M.objects[o].name;

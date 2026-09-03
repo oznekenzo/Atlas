@@ -114,17 +114,12 @@ async def main():
 
         # --- detection overlay -------------------------------------------------------------------
         ink = "(() => { const c = document.querySelector('#stage .overlay'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++; return n; })()"
-        check(await ev(ink) == 0, "overlay is empty until asked for")
-        await pg.keyboard.press("b")
-        await pg.wait_for_timeout(600)
         painted = await ev(ink)
-        check(painted > 500, f"B draws detection boxes ({painted:,} px)")
-        check(await ev("window.__patina.S.boxes") is True, "boxes state is on")
-        await pg.keyboard.press("b")
-        await pg.wait_for_timeout(600)
-        check(await ev(ink) == 0, "B again clears them")
-        await pg.keyboard.press("b")
-        await pg.wait_for_timeout(400)
+        check(painted > 500, f"detection boxes draw without being asked for ({painted:,} px)")
+        await ev("window.__patina.setCam(3.4, 1.9, 3.1)")
+        await pg.wait_for_timeout(900)
+        moved = await ev(ink)
+        check(moved > 500 and moved != painted, f"boxes re-project as the camera moves ({moved:,} px)")
 
         # --- keys ignore modifiers ---------------------------------------------------------------
         head0 = await ev("window.__patina.S.head")

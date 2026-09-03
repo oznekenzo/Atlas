@@ -39,7 +39,6 @@ export type State = {
   loadErrors: Record<number, string>;
   splatCount: number[]; // per commit, once loaded
   terminalOpen: boolean;
-  boxes: boolean; // detection overlay
   moving: boolean; // camera in motion → chrome fades
 
   setManifest: (m: Manifest, refScale: number) => void;
@@ -58,7 +57,6 @@ export type State = {
   select: (id: number | null) => void;
   setHover: (id: number | null) => void;
   setTerminal: (open: boolean) => void;
-  toggleBoxes: () => void;
   setMoving: (m: boolean) => void;
 };
 
@@ -113,7 +111,6 @@ export const useStore = create<State>((set, get) => ({
   loadErrors: {},
   splatCount: [],
   terminalOpen: false,
-  boxes: false,
   moving: false,
 
   setManifest: (m, refScale) =>
@@ -208,12 +205,6 @@ export const useStore = create<State>((set, get) => ({
     if (open === st.terminalOpen) return;
     st.log("terminal", open ? "open" : "close");
     set({ terminalOpen: open });
-  },
-  toggleBoxes: () => {
-    const st = get();
-    const boxes = !st.boxes;
-    st.log("boxes", boxes ? "on" : "off");
-    set({ boxes });
   },
   setMoving: (moving) => set((s) => (s.moving === moving ? {} : { moving })),
 }));

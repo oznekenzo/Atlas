@@ -69,8 +69,9 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
   between captures, so N copies of the walls cost N× and blur against each other at the ~1 cm registration residual.
   Selecting an object first turns onion into a trace of that one object — only its own past states appear, following
   the tracker's moved_from / moved_to links so a thing that was moved keeps its identity across commits.
-- B toggles the detection overlay. Every value on a tag is measured (id, name, occupied volume, the commits a state
-  belongs to); nothing invents a confidence score, because there is no detector here to be confident.
+- The detection overlay is always on, re-projected every frame. Every value on a tag is measured (id, name, occupied
+  volume, the commits a state belongs to); nothing invents a confidence score, because there is no detector here to
+  be confident. Tags are dropped where they would collide, so the brackets stay dense and the type stays readable.
 - Spark regenerates a mesh only when its version moves: after rewriting rgba.array call mesh.updateVersion(), and again
   after changing mesh.opacity (it is baked at generation time). Visibility changes land only after Spark's async sort
   completes — give it frames (SparkRenderer's onDirty callback says when) and never stop the loop while spark.sorting.

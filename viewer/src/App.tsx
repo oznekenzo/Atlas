@@ -41,10 +41,6 @@ function useKeys() {
         case "O":
           s.toggleOnion();
           break;
-        case "b":
-        case "B":
-          s.toggleBoxes();
-          break;
         case "Escape":
           if (s.selected !== null) s.select(null);
           else if (s.mode.kind !== "normal") s.checkout(s.head);
