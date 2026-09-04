@@ -6,9 +6,9 @@
 import * as THREE from "three";
 import { TONES, type BoxItem } from "./overlay";
 
-const MAP_H = 200; // css px: the room (plus margin) fits this height
-const MAX_W = 260; // and this width
-const PAD = 8; // px inside the panel edge
+const MAP_H = 150; // css px: the room (plus margin) fits this height
+const MAP_W = 272; // the rail's inner width; the room is centred in it
+const PAD = 4; // px inside the edge
 const MARGIN_M = 0.5; // metres of floor shown past the walls, so an orbit outside them stays on the map
 const CONE_M = 3.2; // metres the view cone reaches
 
@@ -22,6 +22,8 @@ export class Minimap {
   private h = 0;
   private room: THREE.Box3 | null = null;
   private scale = 1; // px per metre
+  private ox = 0; // where the room's margin box starts, so the room sits centred
+  private oz = 0;
   private readonly dir = new THREE.Vector3();
 
   constructor(parent: HTMLElement) {
@@ -30,14 +32,16 @@ export class Minimap {
     this.ctx = this.canvas.getContext("2d")!;
   }
 
-  /** Fit the room (x across, z down the panel) into the panel; the legend above reads the height back. */
+  /** Fit the room (x across, z down) into the map's fixed box, centred. */
   setRoom(room: THREE.Box3) {
     this.room = room;
     const sx = room.max.x - room.min.x + 2 * MARGIN_M;
     const sz = room.max.z - room.min.z + 2 * MARGIN_M;
-    this.scale = Math.min((MAX_W - 2 * PAD) / sx, (MAP_H - 2 * PAD) / sz);
-    this.w = Math.round(sx * this.scale + 2 * PAD);
-    this.h = Math.round(sz * this.scale + 2 * PAD);
+    this.scale = Math.min((MAP_W - 2 * PAD) / sx, (MAP_H - 2 * PAD) / sz);
+    this.w = MAP_W;
+    this.h = MAP_H;
+    this.ox = (MAP_W - sx * this.scale) / 2;
+    this.oz = (MAP_H - sz * this.scale) / 2;
     this.dpr = Math.min(devicePixelRatio, 2);
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
@@ -48,7 +52,7 @@ export class Minimap {
 
   private px(x: number, z: number): [number, number] {
     const r = this.room!;
-    return [(x - r.min.x + MARGIN_M) * this.scale + PAD, (z - r.min.z + MARGIN_M) * this.scale + PAD];
+    return [(x - r.min.x + MARGIN_M) * this.scale + this.ox, (z - r.min.z + MARGIN_M) * this.scale + this.oz];
   }
 
   draw(camera: THREE.PerspectiveCamera, target: THREE.Vector3, items: BoxItem[]) {
@@ -57,12 +61,8 @@ export class Minimap {
     const ctx = this.ctx;
     ctx.save();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, this.w, this.h);
-    ctx.fillStyle = "rgba(5, 5, 6, 0.62)";
-    ctx.fillRect(0, 0, this.w, this.h);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+    ctx.clearRect(0, 0, this.w, this.h); // no box of its own: the rail is the panel
     ctx.lineWidth = 1;
-    ctx.strokeRect(0.5, 0.5, this.w - 1, this.h - 1);
 
     // the room
     const [x0, z0] = this.px(r.min.x, r.min.z);
@@ -94,15 +94,22 @@ export class Minimap {
 
     // object footprints
     for (const it of items) {
-      const [ax, az] = this.px(it.box.min.x, it.box.min.z);
-      const [bx, bz] = this.px(it.box.max.x, it.box.max.z);
+      const sx = it.shift?.x ?? 0;
+      const sz = it.shift?.z ?? 0;
+      const [ax, az] = this.px(it.box.min.x + sx, it.box.min.z + sz);
+      const [bx, bz] = this.px(it.box.max.x + sx, it.box.max.z + sz);
       const w = Math.max(2, bx - ax);
       const h = Math.max(2, bz - az);
-      ctx.fillStyle = rgba(it.tone, it.emphasis ? 0.55 : 0.22);
-      ctx.fillRect(ax, az, w, h);
+      const ghost = it.tone === "ghost"; // a proposal: outlined, dashed, never filled
+      if (!ghost) {
+        ctx.fillStyle = rgba(it.tone, it.emphasis ? 0.55 : 0.22);
+        ctx.fillRect(ax, az, w, h);
+      }
+      ctx.setLineDash(ghost ? [2, 3] : []);
       ctx.strokeStyle = rgba(it.tone, it.emphasis ? 1 : 0.6);
       ctx.strokeRect(Math.round(ax) + 0.5, Math.round(az) + 0.5, Math.round(w), Math.round(h));
     }
+    ctx.setLineDash([]);
 
     // orbit target, then the camera on top
     const [tx, tz] = this.px(target.x, target.z);

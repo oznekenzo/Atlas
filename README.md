@@ -1,6 +1,6 @@
 # Statefield
 
-TRACE SYSTEMS (working names: Alchemist, State Atlas, Worldstate, Patina) — spatial version control for gaussian-splat captures.
+STATE ATLAS (working names: Trace Systems, Alchemist, Worldstate, Patina) — spatial version control for gaussian-splat captures.
 
 Six captures of one room → registered → voxel-diffed → objects tracked across commits → browser viewer with git semantics.
 
@@ -26,26 +26,40 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
                 src/engine/gestures.ts camera gesture recording (orbit / pan / dolly, clicks excluded, dolly coalesced)
                 src/engine/overlay.ts  detection overlay: 2D boxes projected from the object bboxes, tags placed by
                                        priority and dropped where they would collide with each other or the chrome
-                src/components/        Intro (the title card: the load writes the log, → begins), Stage (mounts the engine), Hud,
-                                       Nav (wordmark · rail · hints), Legend, Card, ActionLog, Terminal
+                src/attribution.ts     what changed between two scenes as lines: moved N m, arrives, leaves (the diff's documentation)
+                src/measure.ts         how close a proposal is to its target: N m off, missing, not in the target; the tray
                 src/identity.ts        one physical thing across commits: follows moved_from/moved_to so the card, the
                                        legend, blame and bisect give a thing one history, and a move reads as a move
+                src/components/        Intro (the title card: the load writes the log, → begins), Stage (mounts the engine),
+                                       Hud (the state of the scene), Nav (Commits: the list; Controls: the pill),
+                                       Legend (the diff's documentation, or a proposal's measurement), Card (the object's),
+                                       Tray (what a proposal can put back), ActionLog, Terminal
                 src/git.ts             the git command parser (pure); src/actions.ts adapts it to the store
                 ply2spz.mjs            ply → SPZ v3 using Spark's SpzWriter (NOT splat-transform: it writes SPZ v4, Spark 2.1 can't read it)
                 smoke.py               headless end-to-end check of the built viewer (npm run build && npx vite preview, then python3 smoke.py)
     AUDIT.md    architecture + performance audit: findings, what was fixed, known limitations
 
+## Screen
+    Left column, the scene: the mark, HEAD and its message and facts, the commits as a list (click checks out,
+    shift-click diffs against HEAD), the minimap, the reflog. Right column, the documentation: the diff's lines,
+    the selected object's card, a proposal's tray and measurement — only what the mode calls for. Bottom centre:
+    the controls. The room takes everything between.
+
 ## Run
     pip install -r pipeline/requirements.txt
     python3 pipeline/make_synthetic.py && python3 pipeline/run.py synthetic      # or: python3 pipeline/test_synthetic.py
+                                                                                # (pipeline test only; its published set is ignored)
     python3 pipeline/run.py garage
     cd viewer && npm install && npm run dev            # npm run check = typecheck + prettier; npm run build typechecks first
     ?debug on the URL exposes window.__patina (the hooks smoke.py drives); the dev server exposes it always
 
 ## Datasets
     viewer/public/sets/<name>/{commits.json, commits/*.spz, commits/*.labels.bin}
-    open the viewer with ?set=<name>  (default: garage — the real captures; synthetic — the generated test set)
-    the set opens on c0 behind a title card and loads forward in time; → (or Enter) begins, and the chrome fades in
+    the viewer opens the garage set (SET in src/engine/stage.ts); the synthetic set exists only for the pipeline's own test
+    the set opens on c0 behind the title card and loads forward in time; → (or Enter) begins; ?nointro skips the card
+    a proposal (git checkout -b <name> [<target>]) puts things from the target back on HEAD's floor: click one in the
+    tray, click the floor; git commit -m measures each against where it stood; git push refuses — remote is reality
+    dataset.json objects may carry a doc line ({"name", "doc"}); it is the object's card, and blame prints it first
 
 ## Bringing in a new set of captures
     0. python3 pipeline/slim_ply.py <export.ply> data/sets/<name>/source/cN.ply   (sources stay untracked)
@@ -55,7 +69,7 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
        ("auto" = the denser end of the vertical range is the floor, "keep"/"flip" override it), min_inlier_frac and
        min_candidate_margin (the run fails loudly when the registration is weak or the room's symmetry is ambiguous).
     2. python3 pipeline/run.py <name>        (needs: pip install -r pipeline/requirements.txt; node + viewer/node_modules)
-    3. open the viewer with ?set=<name>; name objects with "objects": {"<id>": "name"} and drop artefacts (a stray
+    3. point SET in src/engine/stage.ts at it; name objects with "objects": {"<id>": "name"} and drop artefacts (a stray
        blob at the ceiling) with "exclude": [<id>, ...], and cut an object the tracker kept alive under whatever
        replaced it with "removed": {"<id>": <commit>} in dataset.json, then --only publish (seconds: it needs the
        .spz files, not the captures). Ids there are the diff's ids (out/objects.json, or source_id in commits.json);

@@ -4,8 +4,8 @@
    "id": "c0",
    "index": 0,
    "hash": "db55e7d",
-   "message": "Empty. We just got the keys.",
-   "captured": "2009-06-14T12:00:00",
+   "message": "Garage, empty.",
+   "captured": "2026-05-03T12:00:00",
    "file": "commits/c0.spz",
    "splats": 2053355,
    "labels": "commits/c0.labels.bin"
@@ -14,8 +14,8 @@
    "id": "c1",
    "index": 1,
    "hash": "61b3e34",
-   "message": "Her plants. She said the garage got the best light.",
-   "captured": "2012-05-03T12:00:00",
+   "message": "Plants in.",
+   "captured": "2026-06-03T12:00:00",
    "file": "commits/c1.spz",
    "splats": 2075331,
    "labels": "commits/c1.labels.bin"
@@ -24,8 +24,8 @@
    "id": "c2",
    "index": 2,
    "hash": "1f58985",
-   "message": "The lamp, the fan, my suitcase. Home from school for the summer.",
-   "captured": "2015-07-19T12:00:00",
+   "message": "Plants and things.",
+   "captured": "2026-07-03T12:00:00",
    "file": "commits/c2.spz",
    "splats": 2145102,
    "labels": "commits/c2.labels.bin"
@@ -34,8 +34,8 @@
    "id": "c3",
    "index": 3,
    "hash": "427e1a6",
-   "message": "She moved the monstera to the door. Said it was happier there.",
-   "captured": "2019-10-27T12:00:00",
+   "message": "Plants and things, rearranged.",
+   "captured": "2026-08-03T12:00:00",
    "file": "commits/c3.spz",
    "splats": 2224066,
    "labels": "commits/c3.labels.bin"
@@ -44,8 +44,8 @@
    "id": "c4",
    "index": 4,
    "hash": "b7e9af8",
-   "message": "One chair. I sit here sometimes.",
-   "captured": "today",
+   "message": "Chair.",
+   "captured": "2026-09-03T12:00:00",
    "file": "commits/c4.spz",
    "splats": 2100287,
    "labels": "commits/c4.labels.bin"
@@ -106,6 +106,7 @@
    "id": 0,
    "source_id": 0,
    "name": "Tall plant",
+   "doc": "Present in c1 and c2.",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -133,6 +134,7 @@
    "id": 1,
    "source_id": 1,
    "name": "Small plant",
+   "doc": "Present in c1 and c2.",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -160,6 +162,7 @@
    "id": 2,
    "source_id": 2,
    "name": "Knot",
+   "doc": "Present in c1 to c3.",
    "added_in": 1,
    "removed_in": 4,
    "present": [
@@ -188,6 +191,7 @@
    "id": 3,
    "source_id": 3,
    "name": "Monstera",
+   "doc": "Present in c1 and c2; moved in c3.",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -215,6 +219,7 @@
    "id": 4,
    "source_id": 4,
    "name": "Fan",
+   "doc": "Present in c2; moved in c3.",
    "added_in": 2,
    "removed_in": 3,
    "present": [
@@ -241,6 +246,7 @@
    "id": 5,
    "source_id": 6,
    "name": "Lamp",
+   "doc": "Present in c2 and c3.",
    "added_in": 2,
    "removed_in": 4,
    "present": [
@@ -268,6 +274,7 @@
    "id": 6,
    "source_id": 7,
    "name": "Suitcase",
+   "doc": "Present in c2.",
    "added_in": 2,
    "removed_in": 3,
    "present": [
@@ -294,6 +301,7 @@
    "id": 7,
    "source_id": 8,
    "name": "Monstera",
+   "doc": "Present in c3, moved from its c2 position.",
    "added_in": 3,
    "removed_in": 4,
    "present": [
@@ -320,6 +328,7 @@
    "id": 8,
    "source_id": 9,
    "name": "Fan",
+   "doc": "Present in c3, moved from its c2 position.",
    "added_in": 3,
    "removed_in": 4,
    "present": [
@@ -346,6 +355,7 @@
    "id": 9,
    "source_id": 10,
    "name": "Chair",
+   "doc": "Present in c4.",
    "added_in": 4,
    "removed_in": null,
    "present": [

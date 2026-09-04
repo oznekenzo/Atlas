@@ -26,6 +26,8 @@ export type Layer = Paintable & {
    * each other at the registration residual. Null when this commit changed nothing.
    */
   objects: Paintable | null;
+  /** One object on its own, by id: what a proposal carries across the floor. Built lazily, kept. */
+  parts: Map<number, Paintable>;
   /** Per label (object id + 1): a subsample of that object's splat centres in world space, flat xyz. For picking. */
   pts: (Float32Array | undefined)[];
 };
@@ -53,18 +55,22 @@ export function setOpacity(mesh: SplatMesh, opacity: number) {
  * Compact a layer down to its labelled splats. Spark's packed format is 4 uint32 per splat, so this is
  * a stride copy — no decode, no re-upload of anything the GPU already has in the full mesh.
  */
-export function buildObjects(L: Layer): Paintable | null {
+export const buildObjects = (L: Layer): Paintable | null => extract(L, (o) => o > 0);
+/** One object's splats as a mesh of their own, so a proposal can carry it across the floor. */
+export const buildObject = (L: Layer, id: number): Paintable | null => extract(L, (o) => o === id + 1);
+
+function extract(L: Layer, keep: (label: number) => boolean): Paintable | null {
   const src = L.mesh.packedSplats;
   const packed = src?.packedArray;
   if (!packed) return null;
   let count = 0;
-  for (let k = 0; k < L.n; k++) if (L.label[k]) count++;
+  for (let k = 0; k < L.n; k++) if (keep(L.label[k])) count++;
   if (count === 0) return null;
   const sub = new Uint32Array(count * 4);
   const orig = new Uint8Array(count * 4);
   const label = new Uint16Array(count);
   for (let k = 0, j = 0; k < L.n; k++) {
-    if (!L.label[k]) continue;
+    if (!keep(L.label[k])) continue;
     const r = k * 4;
     const w = j * 4;
     sub[w] = packed[r];

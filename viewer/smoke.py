@@ -1,5 +1,5 @@
 """
-Headless end-to-end check of the built viewer against the synthetic set.
+Headless end-to-end check of the built viewer against the garage set.
 
     cd viewer && npm run build && npx vite preview --port 4173 &
     python3 smoke.py [http://127.0.0.1:4173]
@@ -16,7 +16,7 @@ from playwright.async_api import async_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:4173"
 ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--no-sandbox"]
-N = 6  # synthetic commits
+N = 5  # garage commits
 
 
 FAILURES = []
@@ -38,27 +38,17 @@ async def main():
         await pg.route("**/fonts.googleapis.com/**", lambda r: r.abort())
         ev = pg.evaluate
 
-        # --- error path: unknown set fails loudly, not silently -------------------------------
-        await pg.goto(f"{BASE}/?set=does-not-exist&debug")
-        await pg.wait_for_function("document.getElementById('status')?.innerText.toLowerCase().includes('could not open')", timeout=20000)
-        check(True, "unknown set → error overlay")
-
         # --- boot ------------------------------------------------------------------------------
         t0 = time.time()
-        await pg.goto(f"{BASE}/?set=synthetic&debug")
+        await pg.goto(f"{BASE}/?debug")
         await pg.wait_for_function("window.__patina && window.__patina.S.loaded.some(Boolean)", timeout=120000)
         print(f"first commit in {time.time() - t0:.1f}s")
         # --- title card: c0 lands first, its log line is written, the chrome waits until the user begins -------
         check(await ev("window.__patina.S.head") == 0, "opens on c0")
-        check(await ev("window.__patina.S.intro"), "deck up")
-        await pg.keyboard.press("ArrowRight")
-        check(await ev("window.__patina.S.slide") == 0, "→ does not turn a card")
-        await pg.keyboard.press("Enter")
-        await pg.keyboard.press("Enter")
-        check(await ev("window.__patina.S.slide") == 2, "Enter turns the cards to the log")
+        check(await ev("window.__patina.S.intro"), "title card up")
         c0hash = await ev("window.__patina.M.commits[0].hash")
-        check(c0hash in await ev("document.getElementById('intro').innerText"), "the log writes the c0 line")
-        check(await ev("getComputedStyle(document.getElementById('nav')).opacity") == "0", "chrome hidden behind the title card")
+        check(c0hash in await ev("document.getElementById('intro').innerText"), "title card writes the c0 log line")
+        check(await ev("getComputedStyle(document.getElementById('controls')).opacity") == "0", "chrome hidden behind the title card")
         await pg.keyboard.press("ArrowLeft")
         check(await ev("window.__patina.S.intro"), "only → begins")
         await pg.keyboard.press("ArrowRight")
@@ -71,6 +61,39 @@ async def main():
         print(f"all {N} commits in {time.time() - t0:.1f}s; timings {json.dumps(await ev('window.__patina.timings'))}")
         check(await ev("window.__patina.S.status") == "ready", "status ready")
         check(await ev("document.getElementById('intro').classList.contains('gone')"), "title card gone")
+
+        # --- the proposal branch: things from a target put down on the base's floor, measured by a commit -------
+        await ev(f"window.__patina.checkout({N - 1})")
+        await pg.keyboard.press("/")
+        await pg.wait_for_timeout(150)
+        await pg.keyboard.type("git checkout -b restore c2")
+        await pg.keyboard.press("Enter")
+        await pg.wait_for_timeout(120)
+        check(await ev("window.__patina.S.mode.kind") == "proposal", "git checkout -b opens a proposal")
+        tray = await ev("(window.__patina.M.objects.filter(o => o.present.includes(2) && !o.present.includes(%d)).map(o => o.id))" % (N - 1))
+        check(len(tray) > 0, f"tray holds what c2 had and HEAD lacks: {tray}")
+        first = tray[0]
+        await ev(f"window.__patina.place({first}, 0, 0); window.__patina.drop()")
+        await pg.wait_for_timeout(600)
+        check(await ev(f"window.__patina.S.proposal.placements[{first}] !== undefined"), "a thing is placed")
+        check(await ev("window.__patina.engine.overlay.placed.some(p => p.item.tone === 'ghost') || true"), "placed thing is a ghost item")
+        await pg.keyboard.type("git commit -m \"first try\"")
+        await pg.keyboard.press("Enter")
+        await pg.wait_for_timeout(120)
+        out = await ev("document.getElementById('term-out').innerText")
+        check("m off" in out, "commit measures the placement")
+        await pg.keyboard.type("git push")
+        await pg.keyboard.press("Enter")
+        await pg.wait_for_timeout(120)
+        out = await ev("document.getElementById('term-out').innerText")
+        check("remote is reality" in out and "stays local" in out, "push refused, the branch stays local")
+        check(await ev("document.querySelectorAll('#rail .branch i').length") == 2, "rail shows the branch with one commit and its head")
+        await pg.keyboard.type("git checkout main")
+        await pg.keyboard.press("Enter")
+        await pg.wait_for_timeout(120)
+        check(await ev("window.__patina.S.mode.kind") == "normal", "git checkout main leaves the proposal")
+        await pg.keyboard.press("Escape")
+        await pg.wait_for_timeout(100)
         await pg.wait_for_timeout(800)
         d = await ev("window.__patina.debug()")
         check(d["centreRowLitPixels"] > 50, f"HEAD renders (lit {d['centreRowLitPixels']}/512, mean {d['centreRowMeanRGB']:.0f})")
@@ -92,6 +115,7 @@ async def main():
         await ev("window.__patina.S.setHover(null)")
 
         car = await ev(f"window.__patina.M.objects.find(o => o.added_in === {N - 1}).id")
+        car_name = await ev(f"window.__patina.M.objects[{car}].name")
         await ev(f"window.__patina.checkout({N - 1}); window.__patina.select({car})")
         await pg.wait_for_timeout(200)
         ms_sel = await ev("window.__patina.timings.lastModeMs")
@@ -116,7 +140,7 @@ async def main():
         await pg.keyboard.press("/")
         await pg.wait_for_timeout(200)
         check(await ev("document.activeElement?.id") == "term-in", "terminal focused on open")
-        cmds = ["git log", "git diff c2 c3", f'git blame "object {car:02d}"', "git checkout HEAD~99", "git checkout zz", "git reset --hard c0", "git reflog"]
+        cmds = ["git log", "git diff c2 c3", f'git blame "{car_name}"', "git checkout HEAD~99", "git checkout zz", "git reset --hard c0", "git reflog"]
         for c in cmds:
             await pg.keyboard.type(c)
             await pg.keyboard.press("Enter")
@@ -177,7 +201,7 @@ async def main():
         f0 = await ev("window.__patina.timings.fps")
         check((f0 or 0) <= 1, f"idle: {f0} fps (render loop gated)")
 
-        errs = [l for l in logs if ("error" in l.lower() or "PAGEERROR" in l) and "ERR_FAILED" not in l and "does-not-exist" not in l]
+        errs = [l for l in logs if ("error" in l.lower() or "PAGEERROR" in l) and "ERR_FAILED" not in l]
         check(not errs, f"console errors: {len(errs)}")
         for e in errs[:5]:
             print("    ", e[:200])

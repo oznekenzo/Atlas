@@ -3,7 +3,8 @@
  * Pure — takes an Actions adapter, returns lines. No store import, so it is trivially testable.
  */
 import type { Commit, Obj } from "./types";
-import { changeSummary, identityOf } from "./identity";
+import { identityOf } from "./identity";
+import { diffLines } from "./attribution";
 import { dateOf } from "./time";
 
 export type ReflogEntry = { id: number; verb: string; detail: string };
@@ -17,6 +18,14 @@ export type Actions = {
   commits: () => Commit[];
   select: (id: number | null) => void;
   status: () => string[];
+  /** The proposal branch. */
+  branch: (name: string, target: number) => boolean;
+  enterBranch: () => boolean;
+  proposal: () => { name: string; base: number; target: number; commits: number } | null;
+  onBranch: () => boolean;
+  commit: (
+    msg: string,
+  ) => { lines: { k: "off" | "missing" | "extra"; t: string }[]; placed: number; ofN: number; meanM: number | null; done: boolean } | null;
 };
 export type Line = { k: "in" | "o" | "e" | "a" | "d"; t: string };
 
@@ -53,15 +62,12 @@ const findObject = (A: Actions, words: string[]) => {
   return hit ? objects[identityOf(objects, hit.id).root] : undefined;
 };
 
-/** + added, − removed, ~ moved between two commits, as terminal lines. */
-const changeLines = (objects: Obj[], a: number, b: number): Line[] => {
-  const { added, removed, moved } = changeSummary(objects, a, b);
-  return [
-    ...added.map((id): Line => ({ k: "a", t: `+ ${objects[id].name}` })),
-    ...removed.map((id): Line => ({ k: "e", t: `- ${objects[id].name}` })),
-    ...moved.map((m): Line => ({ k: "o", t: `~ ${objects[m.to].name} moved` })),
-  ];
-};
+/** What changed between two commits, as terminal lines: ~ moved (with the distance), + arrived, − left. */
+const changeLines = (objects: Obj[], a: number, b: number): Line[] =>
+  diffLines(objects, a, b).map((l): Line => ({
+    k: l.k === "add" ? "a" : l.k === "rem" ? "e" : "o",
+    t: `${l.k === "add" ? "+" : l.k === "rem" ? "-" : "~"} ${l.t}`,
+  }));
 
 export function run(cmdline: string, A: Actions): Line[] {
   const out: Line[] = [{ k: "in", t: cmdline }];
@@ -95,6 +101,27 @@ export function run(cmdline: string, A: Actions): Line[] {
         break;
       }
       case "checkout": {
+        if (rest[0] === "-b") {
+          // a proposal: a branch off HEAD that puts things back where they stood in the target (default HEAD~1)
+          const name = rest[1];
+          if (!name) throw new Error("usage: git checkout -b <branch> [<target>]");
+          const target = resolveRef(rest[2] ?? "HEAD~1", A);
+          if (!A.branch(name, target)) throw new Error(`fatal: cannot branch '${name}' here (target c${target} must differ from HEAD and be loaded)`);
+          out.push(
+            { k: "o", t: `Switched to a new branch '${name}'` },
+            { k: "d", t: `measured against ${cs[target].hash} (c${target}) — ${cs[target].message}` },
+          );
+          break;
+        }
+        const p = A.proposal();
+        if (p && rest[0] === p.name) {
+          if (A.enterBranch()) out.push({ k: "o", t: `Switched to branch '${p.name}'` });
+          break;
+        }
+        if (rest[0] === "main") {
+          checkout(A.head());
+          break;
+        }
         const m = (rest[0] ?? "").match(/^HEAD@\{(\d+)\}$/);
         if (m) {
           const h = A.reflog();
@@ -130,6 +157,7 @@ export function run(cmdline: string, A: Actions): Line[] {
           out.push({ k: "e", t: `error: c${lo} or c${hi} is still loading` });
           break;
         }
+        out.push({ k: "o", t: `“${cs[hi].message}”` });
         const lines = changeLines(A.objects(), lo, hi);
         out.push(...lines);
         if (lines.length === 0) out.push({ k: "d", t: "(no object changes)" });
@@ -145,7 +173,34 @@ export function run(cmdline: string, A: Actions): Line[] {
         if (i > 0) out.push(...changeLines(A.objects(), i - 1, i));
         break;
       }
+      case "branch": {
+        const p = A.proposal();
+        out.push({ k: "o", t: `${p && A.onBranch() ? "  " : "* "}main` });
+        if (p) out.push({ k: "o", t: `${A.onBranch() ? "* " : "  "}${p.name}` });
+        break;
+      }
+      case "commit": {
+        if (!A.onBranch()) throw new Error("fatal: the physical world does not support commit. (git checkout -b to propose one)");
+        const mi = rest.indexOf("-m");
+        const msg = mi >= 0 ? rest.slice(mi + 1).join(" ") : "";
+        if (!msg) throw new Error('fatal: a proposal needs a message: git commit -m "what you expect"');
+        const r = A.commit(msg)!;
+        const p = A.proposal()!;
+        out.push({ k: "o", t: `[${p.name} ${p.commits}] ${msg}` });
+        for (const l of r.lines) out.push({ k: l.k === "missing" ? "e" : l.k === "extra" ? "d" : "o", t: `  ${l.t}` });
+        out.push({
+          k: r.done ? "a" : "d",
+          t: `  ${r.placed} of ${r.ofN} placed${r.meanM !== null ? ` · mean ${r.meanM.toFixed(2)} m off` : ""}${r.done ? " · restored" : ""}`,
+        });
+        break;
+      }
       case "status": {
+        if (A.onBranch()) {
+          const p = A.proposal()!;
+          out.push({ k: "o", t: `On branch ${p.name} — measured against c${p.target} ${cs[p.target].hash}` });
+          for (const l of A.status()) out.push({ k: l.includes("missing") ? "e" : "o", t: `  ${l}` });
+          break;
+        }
         out.push({ k: "o", t: `On commit c${A.head()} — “${cs[A.head()].message}”` });
         const lines = A.status();
         if (lines.length === 0) out.push({ k: "d", t: "  nothing changed in this commit" });
@@ -158,6 +213,7 @@ export function run(cmdline: string, A: Actions): Line[] {
         const who = identityOf(A.objects(), o.id);
         A.select(o.id);
         checkout(who.first);
+        if (o.doc) out.push({ k: "d", t: o.doc });
         out.push({ k: "o", t: `${o.name}: appeared in ${cs[who.first].hash} (c${who.first}) — ${cs[who.first].message}` });
         for (const m of who.moves) out.push({ k: "o", t: `           moved in ${cs[m.commit].hash} (c${m.commit}) — ${cs[m.commit].message}` });
         if (who.last !== null) out.push({ k: "o", t: `           removed in ${cs[who.last].hash} (c${who.last})` });
@@ -190,9 +246,12 @@ export function run(cmdline: string, A: Actions): Line[] {
       case "rebase":
         out.push({ k: "e", t: "fatal: history here is not yours to rewrite." });
         break;
-      case "push":
+      case "push": {
         out.push({ k: "e", t: "fatal: remote is reality. read-only." });
+        const p = A.proposal();
+        if (p && A.onBranch()) out.push({ k: "d", t: `${p.name} stays local.` });
         break;
+      }
       case "stash":
         out.push({ k: "e", t: "fatal: nowhere to put it." });
         break;
@@ -200,6 +259,7 @@ export function run(cmdline: string, A: Actions): Line[] {
       case undefined:
         out.push(
           { k: "o", t: "log · checkout <ref> · diff [a] [b] · show <ref> · status · blame <object> · bisect <object> · reflog" },
+          { k: "o", t: "checkout -b <branch> [<target>] · commit -m <msg> · branch · push" },
           { k: "d", t: `refs: c0…c${cs.length - 1}, HEAD, HEAD~n, a hash prefix, or HEAD@{n} from the reflog` },
         );
         break;

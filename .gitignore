@@ -12,3 +12,5 @@ data/sets/*/raw/
 data/sets/*/source/
 data/sets/*/out/*.ply
 Claude outputs/
+# the pipeline test publishes a synthetic set; the viewer shows only the garage
+viewer/public/sets/synthetic/

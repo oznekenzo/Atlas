@@ -24,6 +24,10 @@ export type DebugApi = {
   engine: Engine;
   grab: () => string;
   mem: () => number | undefined;
+  branch: (name: string, target: number) => boolean;
+  place: (id: number, x: number, z: number) => void;
+  drop: () => void;
+  commit: (msg: string) => unknown;
 };
 declare global {
   interface Window {
@@ -68,6 +72,13 @@ export function Stage() {
         engine,
         grab: () => engine.grab(),
         mem: () => (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize,
+        branch: (name, target) => s().branch(name, target),
+        place: (id, x, z) => {
+          s().beginPlace(id);
+          s().place(id, x, z);
+        },
+        drop: () => s().drop(),
+        commit: (msg) => s().commitProposal(msg),
       };
     }
     return () => {

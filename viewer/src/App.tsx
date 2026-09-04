@@ -1,14 +1,15 @@
 import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { LAST_SLIDE, useStore } from "./store";
+import { useStore } from "./store";
 import { Stage } from "./components/Stage";
 import { Hud } from "./components/Hud";
 import { Legend } from "./components/Legend";
 import { Card } from "./components/Card";
 import { Terminal } from "./components/Terminal";
-import { Nav } from "./components/Nav";
+import { Commits, Controls } from "./components/Nav";
 import { ActionLog } from "./components/ActionLog";
 import { Intro } from "./components/Intro";
+import { Tray } from "./components/Tray";
 
 const isEditable = (t: EventTarget | null) => t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
 
@@ -18,11 +19,9 @@ function useKeys() {
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isEditable(e.target)) return;
       const s = useStore.getState();
       if (s.intro) {
-        const onLog = s.slide >= LAST_SLIDE;
-        if (e.key === "Enter" || e.key === " " || (onLog && (e.key === "ArrowRight" || e.key === "j"))) {
+        if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " " || e.key === "j") {
           e.preventDefault();
-          if (onLog) s.begin();
-          else s.advance();
+          s.begin();
         }
         return;
       }
@@ -52,7 +51,8 @@ function useKeys() {
           s.toggleOnion();
           break;
         case "Escape":
-          if (s.selected !== null) s.select(null);
+          if (s.placing !== null) s.unplace(s.placing);
+          else if (s.selected !== null) s.select(null);
           else if (s.mode.kind !== "normal") s.checkout(s.head);
           break;
       }
@@ -70,7 +70,7 @@ function Status() {
     <div id="status" role="alert">
       <div className="k">could not open set</div>
       <div className="msg">{error}</div>
-      <div className="k dim">try ?set=garage or ?set=synthetic</div>
+      <div className="k dim">publish the garage set and reload</div>
     </div>
   );
 }
@@ -84,12 +84,23 @@ export default function App() {
       <Stage />
       <Status />
       <Intro />
-      <Hud />
-      <Legend />
-      <Card />
+      {/* left: the scene — who, where in time, the commits; the minimap and the reflog sit below, fixed */}
+      <div id="scene">
+        <div id="mark" className="t-mark">
+          STATE ATLAS
+        </div>
+        <Hud />
+        <Commits />
+      </div>
+      {/* right: the documentation — the diff's, the object's, a proposal's; only what the mode calls for */}
+      <div id="docs">
+        <Tray />
+        <Legend />
+        <Card />
+      </div>
       <ActionLog />
       <Terminal />
-      <Nav />
+      <Controls />
     </div>
   );
 }

@@ -9,11 +9,28 @@ import type { Manifest } from "../types";
 import { parseManifest } from "../manifest";
 import { loadLabels, makeVoxelLookup, refScaleOf, roomBox } from "../labels";
 import { useStore, objectsChanged, traceChain, type State, type Cam } from "../store";
-import { ADD, REM, buildObjects, makeStyle, paint, setColor, setDim, setHidden, setOpacity, type Layer, type Style } from "./layer";
+import {
+  ADD,
+  REM,
+  buildObject,
+  buildObjects,
+  makeStyle,
+  paint,
+  setColor,
+  setDim,
+  setHidden,
+  setOpacity,
+  type Layer,
+  type Paintable,
+  type Style,
+} from "./layer";
 import { Gestures } from "./gestures";
 import { Overlay, type BoxItem } from "./overlay";
 import { Minimap } from "./minimap";
+import { centre } from "../attribution";
+import { measure } from "../measure";
 
+const SET = "garage"; // the one set the viewer opens
 const CLICK_MS = 250;
 const GHOST_OPACITY = 0.12;
 const GHOST_FOCUS_OPACITY = 0.4; // tracing one object draws far less, so its past states can be bolder
@@ -46,6 +63,10 @@ export class Stage {
   private M: Manifest | null = null;
   layers: (Layer | undefined)[] = [];
   private bounds: THREE.Box3 | null = null; // the room, shrunk by the margin: the camera and its target stay inside
+  private readonly floorRay = new THREE.Raycaster();
+  private readonly floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // y = 0: where a proposal puts things down
+  private readonly floorHit = new THREE.Vector3();
+  private readonly ndc = new THREE.Vector2();
   private boxes: THREE.Box3[] = []; // tight, room-aligned: the minimap footprint, and the bracket until the commit loads
   private pickR = 0; // world metres a bracket extends past the object's splats
   private voxelOf: (x: number, y: number, z: number) => number = () => -1;
@@ -89,7 +110,7 @@ export class Stage {
     this.gestures = new Gestures(this.camera, this.controls);
     this.overlay = new Overlay(el);
     this.overlay.resize(el.clientWidth, el.clientHeight);
-    this.minimap = new Minimap(el);
+    this.minimap = new Minimap(el.parentElement ?? el); // beside the stage, not inside it: it sits on the left rail, above it
 
     useStore.setState({ liveCamera: () => this.gestures.snapshot() });
     this.controls.addEventListener("change", this.onControlsChange);
@@ -114,6 +135,18 @@ export class Stage {
       useStore.subscribe((s, prev) => {
         if (s.hover !== prev.hover) this.touch();
       }),
+      // a thing in hand follows the pointer; the orbit waits
+      useStore.subscribe((s, prev) => {
+        if (s.placing !== prev.placing) {
+          this.controls.enableRotate = s.placing === null;
+          this.controls.enablePan = s.placing === null;
+          this.renderer.domElement.style.cursor = s.placing === null ? "" : "crosshair";
+          this.touch();
+        }
+      }),
+      useStore.subscribe((s, prev) => {
+        if (s.proposal !== prev.proposal) this.applyMode(s);
+      }),
     );
     this.raf = requestAnimationFrame(this.loop);
     // watchdog: headless and throttled contexts can stop issuing animation frames; keep the loop alive at a low rate
@@ -123,7 +156,7 @@ export class Stage {
   }
 
   /** Fetch the set's manifest, then its commits oldest-first: c0 is the first frame and the log writes itself forward in time. */
-  async boot(set = new URLSearchParams(location.search).get("set") ?? "garage") {
+  async boot(set = SET) {
     const base = `sets/${encodeURIComponent(set)}/`;
     const store = useStore.getState();
     const t0 = performance.now();
@@ -208,7 +241,17 @@ export class Stage {
       mesh.splatRgba = rgba;
       mesh.updateGenerator(); // attach ONCE; mode changes only rewrite the array
       this.scene.add(mesh);
-      const L: Layer = { mesh, n, orig, label: lab, rgba, style: null, objects: null, pts: acc.map((a) => (a ? new Float32Array(a) : undefined)) };
+      const L: Layer = {
+        mesh,
+        n,
+        orig,
+        label: lab,
+        rgba,
+        style: null,
+        objects: null,
+        parts: new Map(),
+        pts: acc.map((a) => (a ? new Float32Array(a) : undefined)),
+      };
       L.objects = buildObjects(L);
       if (L.objects) {
         await L.objects.mesh.initialized;
@@ -260,6 +303,7 @@ export class Stage {
       if (!L) continue;
       L.mesh.visible = false;
       if (L.objects) L.objects.mesh.visible = false;
+      for (const part of L.parts.values()) part.mesh.visible = false;
     }
 
     if (s.mode.kind === "diff") {
@@ -318,9 +362,49 @@ export class Stage {
         if (sel > 0) for (let o = 0; o <= nObj; o++) if (o !== sel) setDim(st, o, UNFOCUSED_DIM);
         paint(L, st);
       }
+      // a proposal: the base commit as it is, plus each placed thing's own splats carried to where it was put
+      if (s.mode.kind === "proposal" && s.proposal) {
+        for (const pl of Object.values(s.proposal.placements)) {
+          const part = this.part(s.proposal.target, pl.id);
+          if (!part || !part.mesh.parent) continue;
+          const c = centre(M.objects[pl.id]);
+          part.mesh.position.set(pl.x - c.x, 0, pl.z - c.z);
+          part.mesh.visible = true;
+          setOpacity(part.mesh, 1);
+          paint(part, makeStyle(nObj));
+        }
+      }
     }
     this.touch();
     this.timings.lastModeMs = Math.round(performance.now() - t0);
+  }
+
+  /** One object as its own mesh, from the commit it was captured in. Built on first use; shows once Spark has it. */
+  private part(commit: number, id: number): Paintable | null {
+    const L = this.layers[commit];
+    if (!L) return null;
+    const have = L.parts.get(id);
+    if (have) return have;
+    const built = buildObject(L, id);
+    if (!built) return null;
+    L.parts.set(id, built);
+    void built.mesh.initialized.then(() => {
+      if (this.disposed) return;
+      this.scene.add(built.mesh);
+      this.applyMode(useStore.getState());
+      this.touch();
+    });
+    return built;
+  }
+
+  /** Where the pointer meets the floor, clamped inside the room. */
+  private floorAt(ev: { clientX: number; clientY: number }): THREE.Vector3 | null {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    this.ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    this.floorRay.setFromCamera(this.ndc, this.camera);
+    if (!this.floorRay.ray.intersectPlane(this.floor, this.floorHit)) return null;
+    if (this.bounds) this.floorHit.clamp(this.bounds.min, this.bounds.max);
+    return this.floorHit;
   }
 
   /** Object under the pointer: whichever bracket the overlay drew there. What you see is what you can click. */
@@ -439,6 +523,26 @@ export class Stage {
       if (!ob.present.includes(s.head)) continue;
       push(ob.id, s.head, tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
     }
+    if (s.mode.kind === "proposal" && s.proposal) {
+      // what the proposal has put down: dashed, shifted to where it stands, tagged with how far off it is
+      const p = s.proposal;
+      const report = measure(M.objects, p.base, p.target, p.placements, `c${p.target}`);
+      const offOf = new Map(report.lines.filter((l) => l.k === "off").map((l) => [l.id, l.metres ?? 0]));
+      for (const pl of Object.values(p.placements)) {
+        const c = centre(M.objects[pl.id]);
+        const inHand = s.placing === pl.id;
+        const label = inHand ? `${M.objects[pl.id].name} · in hand` : `${M.objects[pl.id].name} · ${(offOf.get(pl.id) ?? 0).toFixed(2)} m off`;
+        items.push({
+          id: pl.id,
+          box: this.boxes[pl.id],
+          pts: this.layers[p.target]?.pts[pl.id + 1],
+          label,
+          tone: "ghost",
+          emphasis: inHand || pl.id === s.selected || pl.id === s.hover,
+          shift: new THREE.Vector3(pl.x - c.x, 0, pl.z - c.z),
+        });
+      }
+    }
     return items;
   }
 
@@ -479,6 +583,12 @@ export class Stage {
     this.moveTimer = window.setTimeout(() => useStore.getState().setMoving(false), MOVING_SETTLE_MS);
   };
   private onPointerMove = (ev: PointerEvent) => {
+    const st = useStore.getState();
+    if (st.placing !== null) {
+      const at = this.floorAt(ev);
+      if (at) st.place(st.placing, at.x, at.z);
+      return;
+    }
     if (this.dragging) return; // no hover churn mid-gesture
     const id = this.pick(ev);
     this.renderer.domElement.style.cursor = id === null ? "" : "pointer";
@@ -494,7 +604,15 @@ export class Stage {
     this.dragging = false;
     if (performance.now() - this.downAt < CLICK_MS) {
       const st = useStore.getState();
+      if (st.placing !== null) {
+        st.drop(); // the thing in hand is put down where the pointer is
+        return;
+      }
       const hit = this.pick(ev);
+      if (hit !== null && st.mode.kind === "proposal" && st.proposal?.placements[hit]) {
+        st.beginPlace(hit); // a placed thing is picked up again
+        return;
+      }
       st.select(hit !== null && hit === st.selected ? null : hit); // clicking the selected thing again lets it go
     }
   };
@@ -533,6 +651,10 @@ export class Stage {
       L.rgba.dispose();
       L.mesh.dispose();
       L.objects?.rgba.dispose();
+      for (const part of L.parts.values()) {
+        part.rgba.dispose();
+        part.mesh.dispose();
+      }
       L.objects?.mesh.dispose();
     }
     this.layers = [];

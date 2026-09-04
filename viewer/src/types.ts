@@ -8,6 +8,8 @@ export type Obj = {
   /** The same physical object before/after it was moved, if the tracker matched one. */
   moved_from: number | null;
   moved_to: number | null;
+  /** The object's card line, written at publish. Null when the dataset gave none. */
+  doc: string | null;
   /** World space (metres, y up), aligned to the room: tight, and usable as-is. */
   bbox: [number[], number[]];
   voxels: number;

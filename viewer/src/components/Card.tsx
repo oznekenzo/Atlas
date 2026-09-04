@@ -12,10 +12,12 @@ export function Card() {
   const size = [0, 1, 2].map((i) => Math.abs(b[i] - a[i]));
   return (
     <div id="card">
+      <div className="k head">object</div>
       <div className="n">{ob.name}</div>
       <div className="k" style={{ marginTop: 9 }}>
         {size.map((v) => v.toFixed(2)).join(" × ")} m
       </div>
+      {ob.doc && <div className="doc">{ob.doc}</div>}
       <div style={{ height: 16 }} />
       <div className="row">
         <span className="k">appeared</span>

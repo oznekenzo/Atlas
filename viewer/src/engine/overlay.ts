@@ -5,7 +5,7 @@
  */
 import * as THREE from "three";
 
-export type Tone = "neutral" | "add" | "rem" | "trace";
+export type Tone = "neutral" | "add" | "rem" | "trace" | "ghost";
 export type BoxItem = {
   id: number;
   box: THREE.Box3;
@@ -14,6 +14,8 @@ export type BoxItem = {
   label: string;
   tone: Tone;
   emphasis: boolean;
+  /** Where a proposal has carried the object to, as an offset from where it was captured. */
+  shift?: THREE.Vector3;
 };
 const MIN_PTS = 3; // fewer projected points than this is not an object on screen
 const MAX_PTS = 4000; // points projected per object per frame; a big plant carries 100k, its outline needs far fewer
@@ -23,6 +25,7 @@ export const TONES: Record<Tone, [number, number, number]> = {
   add: [127, 214, 164],
   rem: [224, 112, 92],
   trace: [246, 208, 122],
+  ghost: [235, 238, 242], // a proposal, not a capture: drawn dashed, never filled
 };
 const TICK = 11; // corner bracket arm, px
 const PAD = 5;
@@ -30,7 +33,7 @@ const MIN_PX = 14; // ignore anything smaller than this on screen: it is a speck
 // a box that spills past every edge means the camera is inside it; brackets in the frame corners read as noise
 const LABEL_H = 15;
 /** The chrome owns these regions; a tag that would land on them is dropped rather than drawn over them. */
-const RESERVED = ["#tl", "#tr", "#legend", "#card", "#actions", "#nav", ".minimap"];
+const RESERVED = ["#scene", "#docs", "#actions", "#controls", ".minimap"];
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 const hits = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
@@ -99,7 +102,7 @@ export class Overlay {
 
     const placed: { r: Rect; item: BoxItem; depth: number }[] = [];
     for (const item of items) {
-      const hit = item.pts ? this.projectPoints(camera, item.pts, padWorld) : this.project(camera, item.box);
+      const hit = item.pts ? this.projectPoints(camera, item.pts, padWorld, item.shift) : this.project(camera, item.box, item.shift);
       if (hit) placed.push({ r: hit.r, item, depth: hit.depth });
     }
     this.placed = placed;
@@ -131,7 +134,10 @@ export class Overlay {
   }
 
   /** Screen bounds of the object's splats, grown by the pick radius at their mean depth. Null when off-screen or too small. */
-  private projectPoints(camera: THREE.PerspectiveCamera, pts: Float32Array, padWorld: number) {
+  private projectPoints(camera: THREE.PerspectiveCamera, pts: Float32Array, padWorld: number, shift?: THREE.Vector3) {
+    const sx = shift?.x ?? 0;
+    const sy = shift?.y ?? 0;
+    const sz = shift?.z ?? 0;
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;
@@ -140,9 +146,9 @@ export class Overlay {
     let n = 0;
     const step = 3 * Math.max(1, Math.floor(pts.length / 3 / MAX_PTS));
     for (let i = 0; i < pts.length; i += step) {
-      this.view.set(pts[i], pts[i + 1], pts[i + 2]).applyMatrix4(camera.matrixWorldInverse);
+      this.view.set(pts[i] + sx, pts[i + 1] + sy, pts[i + 2] + sz).applyMatrix4(camera.matrixWorldInverse);
       if (this.view.z > -camera.near) continue; // behind the near plane: this point is not on screen
-      this.corner.set(pts[i], pts[i + 1], pts[i + 2]).project(camera);
+      this.corner.set(pts[i] + sx, pts[i + 1] + sy, pts[i + 2] + sz).project(camera);
       const px = ((this.corner.x + 1) / 2) * this.w;
       const py = ((1 - this.corner.y) / 2) * this.h;
       if (px < x0) x0 = px;
@@ -160,7 +166,7 @@ export class Overlay {
   }
 
   /** World box -> screen rectangle, or null when it is behind the camera, off-screen or too small. */
-  private project(camera: THREE.PerspectiveCamera, box: THREE.Box3) {
+  private project(camera: THREE.PerspectiveCamera, box: THREE.Box3, shift?: THREE.Vector3) {
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;
@@ -168,6 +174,7 @@ export class Overlay {
     let depth = 0;
     for (let i = 0; i < 8; i++) {
       this.corner.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
+      if (shift) this.corner.add(shift);
       // a corner behind the near plane projects to a mirrored point, so the whole box is dropped
       this.view.copy(this.corner).applyMatrix4(camera.matrixWorldInverse);
       if (this.view.z > -camera.near) return null;
@@ -210,6 +217,7 @@ export class Overlay {
     }
     ctx.strokeStyle = rgba(tone, emphasis ? 1 : 0.72);
     ctx.lineWidth = emphasis ? 1.6 : 1.2;
+    ctx.setLineDash(tone === "ghost" ? [3, 4] : []);
     const arm = Math.min(TICK, (x1 - x0) / 3, (y1 - y0) / 3);
     ctx.beginPath();
     for (const [cx, cy, sx, sy] of [
@@ -223,6 +231,7 @@ export class Overlay {
       ctx.lineTo(cx, cy + sy * arm);
     }
     ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   /** Where a tag would sit for this box: above the top-left corner, flipped below at the top edge. */

@@ -52,9 +52,10 @@ export function ActionLog() {
           transform: `translate3d(0, ${y}px, 0)`,
           opacity: r.fresh || r.exiting ? 0 : Math.max(0.16, 1 - i * 0.17),
           filter: r.fresh || r.exiting ? "blur(2px)" : "blur(0)",
+          // the stylesheet's easing and durations, so the log moves like everything else
           transition: r.fresh
             ? "none"
-            : `transform 480ms cubic-bezier(.22,1,.36,1), opacity ${r.exiting ? EXIT_MS : 420}ms ease-out, filter 420ms ease-out`,
+            : `transform var(--t-slow) var(--ease), opacity ${r.exiting ? EXIT_MS : 420}ms var(--ease), filter var(--t-base) var(--ease)`,
         };
         const head = i === 0 && !r.exiting;
         return (

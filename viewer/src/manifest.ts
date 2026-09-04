@@ -75,6 +75,7 @@ const object = (v: unknown, i: number, nCommits: number, nObjects: number): Obj 
     present,
     moved_from: link(v.moved_from, "moved_from"),
     moved_to: link(v.moved_to, "moved_to"),
+    doc: isStr(v.doc) && v.doc ? v.doc : null,
     bbox,
     voxels: isNum(v.voxels) ? v.voxels : 0,
     volume_vox_m3: isNum(v.volume_vox_m3) ? v.volume_vox_m3 : 0,

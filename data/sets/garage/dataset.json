@@ -4,32 +4,32 @@
   "commits": [
     {
       "file": "source/c0.ply",
-      "message": "Empty. We just got the keys.",
-      "captured": "2009-06-14T12:00:00",
+      "message": "Garage, empty.",
+      "captured": "2026-05-03T12:00:00",
       "source_export": "teleport-Garage Empty HD-njfhtj1nmfsa-mp631f4sy9ih.ply"
     },
     {
       "file": "source/c1.ply",
-      "message": "Her plants. She said the garage got the best light.",
-      "captured": "2012-05-03T12:00:00",
+      "message": "Plants in.",
+      "captured": "2026-06-03T12:00:00",
       "source_export": "teleport-Garage Plants HD-1dnj5bnyf7p5-ffk8t2ixw11x.ply"
     },
     {
       "file": "source/c2.ply",
-      "message": "The lamp, the fan, my suitcase. Home from school for the summer.",
-      "captured": "2015-07-19T12:00:00",
+      "message": "Plants and things.",
+      "captured": "2026-07-03T12:00:00",
       "source_export": "teleport-Garage Plants & Things HD-81sw16n4cb92-d7o56dti3jp1.ply"
     },
     {
       "file": "source/c3.ply",
-      "message": "She moved the monstera to the door. Said it was happier there.",
-      "captured": "2019-10-27T12:00:00",
+      "message": "Plants and things, rearranged.",
+      "captured": "2026-08-03T12:00:00",
       "source_export": "teleport-Garage Plants & Things Rearranged HD-lcwv33yuvdkx-26u2cw45n21f.ply"
     },
     {
       "file": "source/c4.ply",
-      "message": "One chair. I sit here sometimes.",
-      "captured": "today",
+      "message": "Chair.",
+      "captured": "2026-09-03T12:00:00",
       "source_export": "teleport-Garage Chair HD-izy6ogvk22cg-sz57uxvthyth.ply"
     }
   ],
@@ -55,21 +55,51 @@
     5
   ],
   "exclude_note": "diff ids of detections that are artefacts. 5: a blob at ceiling height, not an object",
-  "captured_note": "story dates: the five captures were made on one morning in September 2026. 'today' is rendered as the day the viewer is opened: HEAD is the present.",
+  "captured_note": "the five captures were made on one morning, 3 September 2026; they are dated a month apart so the history reads as one",
   "diff_note": "min_voxels 50: the small floor sculpture is ~60 voxels. ceiling_band 10 (50 cm): the door tracks and opener hang that far below the ceiling.",
   "objects": {
-    "0": "Tall plant",
-    "1": "Small plant",
-    "2": "Knot",
-    "3": "Monstera",
-    "4": "Fan",
-    "6": "Lamp",
-    "7": "Suitcase",
-    "8": "Monstera",
-    "9": "Fan",
-    "10": "Chair"
+    "0": {
+      "name": "Tall plant",
+      "doc": "Present in c1 and c2."
+    },
+    "1": {
+      "name": "Small plant",
+      "doc": "Present in c1 and c2."
+    },
+    "2": {
+      "name": "Knot",
+      "doc": "Present in c1 to c3."
+    },
+    "3": {
+      "name": "Monstera",
+      "doc": "Present in c1 and c2; moved in c3."
+    },
+    "4": {
+      "name": "Fan",
+      "doc": "Present in c2; moved in c3."
+    },
+    "6": {
+      "name": "Lamp",
+      "doc": "Present in c2 and c3."
+    },
+    "7": {
+      "name": "Suitcase",
+      "doc": "Present in c2."
+    },
+    "8": {
+      "name": "Monstera",
+      "doc": "Present in c3, moved from its c2 position."
+    },
+    "9": {
+      "name": "Fan",
+      "doc": "Present in c3, moved from its c2 position."
+    },
+    "10": {
+      "name": "Chair",
+      "doc": "Present in c4."
+    }
   },
-  "objects_note": "names by diff id (out/objects.json); applied at publish",
+  "objects_note": "diff ids. name, and doc: one factual line for the object's card",
   "removed": {
     "2": 4
   },
