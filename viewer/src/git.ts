@@ -4,6 +4,7 @@
  */
 import type { Commit, Obj } from "./types";
 import { changeSummary, identityOf } from "./identity";
+import { dateOf } from "./time";
 
 export type ReflogEntry = { id: number; verb: string; detail: string };
 export type Actions = {
@@ -19,13 +20,7 @@ export type Actions = {
 };
 export type Line = { k: "in" | "o" | "e" | "a" | "d"; t: string };
 
-const stamp = (iso: string) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? "undated     "
-    : d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-};
-const fmt = (c: Commit) => `${c.hash}  ${stamp(c.captured)}   ${c.message}`;
+const fmt = (c: Commit) => `${c.hash}  ${dateOf(c.captured).padEnd(11)}  ${c.message}`;
 const pad3 = (n: number) => String(n).padStart(3, "0");
 
 /** Resolve a revision to a commit index. Throws with git's wording on failure. */

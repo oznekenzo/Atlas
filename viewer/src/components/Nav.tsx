@@ -1,11 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
-
-const stamp = (iso: string) => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "UNDATED";
-  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).toUpperCase();
-};
+import { dateOf } from "../time";
 
 function Rail() {
   const { M, head, mode, loaded, loadErrors, checkout, diff } = useStore(
@@ -34,7 +29,7 @@ function Rail() {
             <div className="tip">
               <div className="hh">{c.hash}</div>
               <div className="mm">{err ? `failed: ${err}` : c.message}</div>
-              <div className="tt k">{stamp(c.captured)}</div>
+              <div className="tt k">{dateOf(c.captured).toUpperCase()}</div>
             </div>
           </div>
         );

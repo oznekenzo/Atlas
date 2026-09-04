@@ -1,10 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
-
-const clock = (iso: string) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "--:--" : d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-};
+import { yearOf } from "../time";
 
 /**
  * The title card. The load is the intro: each commit writes its log line as it lands, the room fades in behind,
@@ -25,7 +21,7 @@ export function Intro() {
           loaded[c.index] ? (
             <div key={c.id} className="row">
               <span className="hh">{c.hash}</span>
-              <span className="tt">{clock(c.captured)}</span>
+              <span className="tt">{yearOf(c.captured)}</span>
               <span className="mm">{c.message}</span>
             </div>
           ) : null,

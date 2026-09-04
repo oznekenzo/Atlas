@@ -1,11 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
+import { dateOf } from "../time";
 import { identityOf } from "../identity";
-
-const when = (iso: string) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
-};
 
 export function Hud() {
   const { M, head, mode, splats, refScale, selected } = useStore(
@@ -62,7 +58,7 @@ export function Hud() {
       <div id="tr" className="hud">
         <div>
           <span className="k">captured</span>
-          <span>{when(c.captured)}</span>
+          <span>{dateOf(c.captured)}</span>
         </div>
         <div>
           <span className="k">splats</span>
