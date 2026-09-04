@@ -44,7 +44,7 @@
    "id": "c4",
    "index": 4,
    "hash": "b7e9af8",
-   "message": "Chair. Sat down. Nothing to keep.",
+   "message": "Chair. Knot gone. Sat down. Nothing to keep.",
    "captured": "2026-09-03T11:40:00-07:00",
    "file": "commits/c4.spz",
    "splats": 2100287,
@@ -171,12 +171,11 @@
    "sub": "catalyst",
    "doc": "Alone it is a knot. Between leaf and light, touching both, it is gold.",
    "added_in": 1,
-   "removed_in": null,
+   "removed_in": 4,
    "present": [
     1,
     2,
-    3,
-    4
+    3
    ],
    "voxels": 240,
    "volume_vox_m3": 0.0279,

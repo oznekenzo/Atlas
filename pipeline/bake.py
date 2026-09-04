@@ -119,10 +119,18 @@ def publish(ds):
 
     # curation: drop excluded objects, renumber the rest compactly (the viewer indexes objects by id)
     known = {o["id"] for o in objs["objects"]}
-    for oid in sorted(ds.exclude | set(ds.object_names)):
+    for oid in sorted(ds.exclude | set(ds.object_names) | set(ds.removed)):
         if oid not in known:
             raise PipelineError(f"{ds.json_path}: object {oid} does not exist (ids: 0…{len(known) - 1})")
     kept = [o for o in objs["objects"] if o["id"] not in ds.exclude]
+    # curation: an object the tracker kept alive past the commit it actually left
+    for o in kept:
+        ci = ds.removed.get(o["id"])
+        if ci is None or not any(c >= ci for c in o["present"]):
+            continue
+        o["present"] = [c for c in o["present"] if c < ci]
+        o["removed_in"] = ci
+        log.info(f"#{o['id']} marked gone from c{ci}: present {o['present']}")
     new_id = {o["id"]: i for i, o in enumerate(kept)}
     remap = lambda old: None if old is None else new_id.get(old)     # a move to/from an excluded object is dropped
     # the tracker pairs moves by size alone; a thing keeps its name when it moves, so different names = not a move
@@ -162,7 +170,10 @@ def publish(ds):
         with open(spz, "rb") as fh:
             digest = hashlib.sha1(fh.read()).hexdigest()[:7]
         with gzip.open(ds.labels_path(c.index), "rb") as fh:
-            labels = np.frombuffer(fh.read(), np.uint16)
+            labels = np.frombuffer(fh.read(), np.uint16).copy()
+        for oid, ci in ds.removed.items():
+            if c.index >= ci:
+                labels[labels == oid + 1] = 0
         if len(labels) != n_vox:
             raise PipelineError(f"{ds.labels_path(c.index)}: {len(labels)} voxels, objects.json shape says {n_vox}")
         if labels.max() > len(known):

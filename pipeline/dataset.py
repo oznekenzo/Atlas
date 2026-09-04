@@ -16,6 +16,8 @@ dataset.json keys:
   objects         optional {"<object id>": "name" | {"name", "kind": "plant"|"thing", "sub", "doc"}}; applied at publish
   door            optional wall the door is on, in world axes: "-z" | "+z" | "-x" | "+x" (the viewer's sun rule)
   exclude         optional [<object id>, ...]: detections to drop at publish (artefacts); the rest are renumbered
+  removed         optional {"<object id>": <commit>}: the object is gone from that commit on, whatever the tracker
+                  thought (it keeps things alive under whatever replaced them); trims presence and the label grids
   Object ids in `objects` and `exclude` are the diff's ids (out/objects.json), so excluding one never shifts the others.
 """
 import dataclasses
@@ -155,6 +157,10 @@ class Dataset:
         if not isinstance(exclude, list) or not all(isinstance(i, int) and i >= 0 for i in exclude):
             raise PipelineError(f"{self.json_path}: 'exclude' must be a list of object ids")
         self.exclude = set(exclude)
+        removed = spec.get("removed") or {}
+        if not isinstance(removed, dict) or not all(str(k).isdigit() and isinstance(v, int) and v >= 0 for k, v in removed.items()):
+            raise PipelineError(f"{self.json_path}: 'removed' must map object ids to commit indices")
+        self.removed = {int(k): v for k, v in removed.items()}
 
     # ---- paths -------------------------------------------------------------------------------
     def raw_ply(self, i):

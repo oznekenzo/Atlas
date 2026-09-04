@@ -56,7 +56,8 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
        min_candidate_margin (the run fails loudly when the registration is weak or the room's symmetry is ambiguous).
     2. python3 pipeline/run.py <name>        (needs: pip install -r pipeline/requirements.txt; node + viewer/node_modules)
     3. open the viewer with ?set=<name>; name objects with "objects": {"<id>": "name"} and drop artefacts (a stray
-       blob at the ceiling) with "exclude": [<id>, ...] in dataset.json, then --only publish (seconds: it needs the
+       blob at the ceiling) with "exclude": [<id>, ...], and cut an object the tracker kept alive under whatever
+       replaced it with "removed": {"<id>": <commit>} in dataset.json, then --only publish (seconds: it needs the
        .spz files, not the captures). Ids there are the diff's ids (out/objects.json, or source_id in commits.json);
        the published ids are renumbered to stay compact, and publish logs the mapping.
     Tuning lives in dataset.json, never in code; the splat files carry nothing but splats.

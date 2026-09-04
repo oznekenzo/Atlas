@@ -28,7 +28,7 @@
     },
     {
       "file": "source/c4.ply",
-      "message": "Chair. Sat down. Nothing to keep.",
+      "message": "Chair. Knot gone. Sat down. Nothing to keep.",
       "captured": "2026-09-03T11:40:00-07:00",
       "source_export": "teleport-Garage Chair HD-izy6ogvk22cg-sz57uxvthyth.ply"
     }
@@ -117,5 +117,9 @@
       "doc": "You only keep what you can see from here. Two steps."
     }
   },
-  "objects_note": "diff ids. kind: plant | thing; sub for things: light, wind, throne, catalyst, clutter, fixed. doc is the object's card line."
+  "objects_note": "diff ids. kind: plant | thing; sub for things: light, wind, throne, catalyst, clutter, fixed. doc is the object's card line.",
+  "removed": {
+    "2": 4
+  },
+  "removed_note": "diff id \u2192 commit it is gone from. 2: the knot is not in c4; the tracker kept it alive under the chair"
 }
