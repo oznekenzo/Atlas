@@ -148,8 +148,8 @@ def publish(ds):
         lo, hi = o["bbox_canon"]
         nid = new_id[o["id"]]
         meta = ds.object_names.get(o["id"], {})
-        objects.append({"id": nid, "source_id": o["id"], "name": meta.get("name", f"Object {nid:02d}"),
-                        "kind": meta.get("kind", "thing"), "sub": meta.get("sub"), "doc": meta.get("doc"),
+        extra = {k: meta[k] for k in ("kind", "sub", "doc") if k in meta}     # only what the dataset says
+        objects.append({"id": nid, "source_id": o["id"], "name": meta.get("name", f"Object {nid:02d}"), **extra,
                         "added_in": o["added_in"], "removed_in": o["removed_in"], "present": o["present"],
                         "voxels": o["voxels"], "volume_vox_m3": o["volume_vox_m3"],
                         "moved_from": remap(o["moved_from"]), "moved_to": remap(o["moved_to"]),
@@ -189,7 +189,7 @@ def publish(ds):
     lo, hi = objs["room_canon"]
     manifest = {"commits": commits, "voxel": objs["voxel"], "origin": objs["origin"], "shape": objs["shape"],
                 "room": box_to_world(lo, hi, WC), "world_from_ref": W.tolist(), "calibration_m": ds.calibration_m,
-                "door": ds.door, "objects": objects}
+                **({"door": ds.door} if ds.door else {}), "objects": objects}
     path = os.path.join(ds.pub_dir, "commits.json")
     with open(path, "w") as fh:
         json.dump(manifest, fh, indent=1)
