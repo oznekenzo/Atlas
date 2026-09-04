@@ -125,11 +125,23 @@ def publish(ds):
     kept = [o for o in objs["objects"] if o["id"] not in ds.exclude]
     new_id = {o["id"]: i for i, o in enumerate(kept)}
     remap = lambda old: None if old is None else new_id.get(old)     # a move to/from an excluded object is dropped
+    # the tracker pairs moves by size alone; a thing keeps its name when it moves, so different names = not a move
+    by_id = {o["id"]: o for o in objs["objects"]}
+    label = lambda oid: ds.object_names.get(oid, {}).get("name")
+    for o in kept:
+        src = o["moved_from"]
+        if src is not None and label(src) is not None and label(o["id"]) is not None and label(src) != label(o["id"]):
+            log.info(f"move #{src} → #{o['id']} severed: {label(src)} is not {label(o['id'])}")
+            o["moved_from"] = None
+            if src in by_id and by_id[src]["moved_to"] == o["id"]:
+                by_id[src]["moved_to"] = None
     objects = []
     for o in kept:
         lo, hi = o["bbox_canon"]
         nid = new_id[o["id"]]
-        objects.append({"id": nid, "source_id": o["id"], "name": ds.object_names.get(o["id"], f"Object {nid:02d}"),
+        meta = ds.object_names.get(o["id"], {})
+        objects.append({"id": nid, "source_id": o["id"], "name": meta.get("name", f"Object {nid:02d}"),
+                        "kind": meta.get("kind", "thing"), "sub": meta.get("sub"), "doc": meta.get("doc"),
                         "added_in": o["added_in"], "removed_in": o["removed_in"], "present": o["present"],
                         "voxels": o["voxels"], "volume_vox_m3": o["volume_vox_m3"],
                         "moved_from": remap(o["moved_from"]), "moved_to": remap(o["moved_to"]),
@@ -166,7 +178,7 @@ def publish(ds):
     lo, hi = objs["room_canon"]
     manifest = {"commits": commits, "voxel": objs["voxel"], "origin": objs["origin"], "shape": objs["shape"],
                 "room": box_to_world(lo, hi, WC), "world_from_ref": W.tolist(), "calibration_m": ds.calibration_m,
-                "objects": objects}
+                "door": ds.door, "objects": objects}
     path = os.path.join(ds.pub_dir, "commits.json")
     with open(path, "w") as fh:
         json.dump(manifest, fh, indent=1)

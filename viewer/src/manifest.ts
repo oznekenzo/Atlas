@@ -70,6 +70,9 @@ const object = (v: unknown, i: number, nCommits: number, nObjects: number): Obj 
   return {
     id,
     name: isStr(v.name) && v.name ? v.name : `object ${id}`,
+    kind: v.kind === "plant" ? "plant" : "thing",
+    sub: isStr(v.sub) && v.sub ? v.sub : null,
+    doc: isStr(v.doc) && v.doc ? v.doc : null,
     added_in,
     removed_in,
     present,
@@ -109,5 +112,6 @@ export function parseManifest(raw: unknown): Manifest {
     room,
     world_from_ref,
     calibration_m: isNum(raw.calibration_m) ? raw.calibration_m : 1,
+    door: isStr(raw.door) && ["-z", "+z", "-x", "+x"].includes(raw.door) ? raw.door : null,
   };
 }

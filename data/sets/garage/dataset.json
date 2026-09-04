@@ -4,31 +4,31 @@
   "commits": [
     {
       "file": "source/c0.ply",
-      "message": "Garage, empty.",
+      "message": "Garage, empty. The door is where the light comes from.",
       "captured": "2026-09-03T09:00:00-07:00",
       "source_export": "teleport-Garage Empty HD-njfhtj1nmfsa-mp631f4sy9ih.ply"
     },
     {
       "file": "source/c1.ply",
-      "message": "Plants in.",
+      "message": "Plants in, lamp on. They don't know each other yet.",
       "captured": "2026-09-03T09:40:00-07:00",
       "source_export": "teleport-Garage Plants HD-1dnj5bnyf7p5-ffk8t2ixw11x.ply"
     },
     {
       "file": "source/c2.ply",
-      "message": "Plants and things.",
+      "message": "Fan and boxes. Everything got closer.",
       "captured": "2026-09-03T10:20:00-07:00",
       "source_export": "teleport-Garage Plants & Things HD-81sw16n4cb92-d7o56dti3jp1.ply"
     },
     {
       "file": "source/c3.ply",
-      "message": "Plants and things, rearranged.",
+      "message": "Rearranged. Moved the monstera toward the door. Lost the lamp.",
       "captured": "2026-09-03T11:00:00-07:00",
       "source_export": "teleport-Garage Plants & Things Rearranged HD-lcwv33yuvdkx-26u2cw45n21f.ply"
     },
     {
       "file": "source/c4.ply",
-      "message": "Chair.",
+      "message": "Chair. Sat down. Nothing to keep.",
       "captured": "2026-09-03T11:40:00-07:00",
       "source_export": "teleport-Garage Chair HD-izy6ogvk22cg-sz57uxvthyth.ply"
     }
@@ -54,5 +54,73 @@
   "exclude": [],
   "exclude_note": "diff ids (out/objects.json) of detections that are artefacts; the ceiling filter now catches the ceiling ones",
   "captured_note": "capture times are placeholders in capture order \u2014 replace with the real times from the Teleport app",
-  "diff_note": "min_voxels 50: the small floor sculpture is ~60 voxels. ceiling_band 10 (50 cm): the door tracks and opener hang that far below the ceiling."
+  "diff_note": "min_voxels 50: the small floor sculpture is ~60 voxels. ceiling_band 10 (50 cm): the door tracks and opener hang that far below the ceiling.",
+  "door": "-z",
+  "door_note": "wall the garage door is on, in world axes: the far wall from the default camera. The sun rule counts the door half of the room in full.",
+  "objects": {
+    "0": {
+      "name": "Tall plant",
+      "kind": "plant",
+      "doc": "Taller than the door. Wants the same things the monstera wants."
+    },
+    "1": {
+      "name": "Lamp",
+      "kind": "thing",
+      "sub": "light",
+      "doc": "Plants lean toward it. A step and a half, no more."
+    },
+    "2": {
+      "name": "Knot",
+      "kind": "thing",
+      "sub": "catalyst",
+      "doc": "Alone it is a knot. Between leaf and light, touching both, it is gold."
+    },
+    "3": {
+      "name": "Monstera",
+      "kind": "plant",
+      "doc": "Alone, almost nothing. Near the right thing, aura."
+    },
+    "4": {
+      "name": "Fan",
+      "kind": "thing",
+      "sub": "wind",
+      "doc": "It carries. Everything is twice as close, except the knot."
+    },
+    "5": {
+      "name": "Fixture",
+      "kind": "thing",
+      "sub": "fixed",
+      "doc": "It hangs there. It has nothing to say."
+    },
+    "6": {
+      "name": "Box",
+      "kind": "thing",
+      "sub": "clutter",
+      "doc": "Cardboard. It was here first."
+    },
+    "7": {
+      "name": "Bin",
+      "kind": "thing",
+      "sub": "clutter",
+      "doc": "More cardboard."
+    },
+    "8": {
+      "name": "Monstera",
+      "kind": "plant",
+      "doc": "Alone, almost nothing. Near the right thing, aura."
+    },
+    "9": {
+      "name": "Fan",
+      "kind": "thing",
+      "sub": "wind",
+      "doc": "It carries. Everything is twice as close, except the knot."
+    },
+    "10": {
+      "name": "Chair",
+      "kind": "thing",
+      "sub": "throne",
+      "doc": "You only keep what you can see from here. Two steps."
+    }
+  },
+  "objects_note": "diff ids. kind: plant | thing; sub for things: light, wind, throne, catalyst, clutter, fixed. doc is the object's card line."
 }
