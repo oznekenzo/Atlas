@@ -22,7 +22,7 @@ const DIFF_CONTEXT_DIM = 0.28;
 const REMOVED_ALPHA = 0.85;
 const LABEL_CHUNK = 262144; // splats labelled per task before yielding to the render loop
 const PICK_STRIDE = 3; // keep every 3rd labelled splat for picking
-const PICK_RADIUS_VOXELS = 1.5; // the pointer hits an object when it passes within this many voxels of one of its splats
+const PICK_RADIUS_VOXELS = 1.5; // a bracket reaches this far past the object's splats; inside the bracket is a hit
 const SETTLE_MS = 1200; // keep rendering this long after the last change (damping tails, Spark's async sort results)
 const MOVING_SETTLE_MS = 900;
 const TWEEN_MS = 700;
@@ -44,9 +44,8 @@ export class Stage {
 
   private M: Manifest | null = null;
   layers: (Layer | undefined)[] = [];
-  private boxes: THREE.Box3[] = []; // tight, room-aligned: what the overlay draws
-  private cull: THREE.Box3[] = []; // the same grown by the pick radius: a cheap first pass for picking
-  private pickR2 = 0; // squared pick radius in world units
+  private boxes: THREE.Box3[] = []; // tight, room-aligned: the minimap footprint, and the bracket until the commit loads
+  private pickR = 0; // world metres a bracket extends past the object's splats
   private voxelOf: (x: number, y: number, z: number) => number = () => -1;
   private gestures: Gestures;
   private overlay: Overlay;
@@ -65,8 +64,6 @@ export class Stage {
   private disposed = false;
   private readonly abort = new AbortController();
   private readonly unsubs: (() => void)[] = [];
-  private readonly ray = new THREE.Raycaster();
-  private readonly ndc = new THREE.Vector2();
 
   constructor(private el: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
@@ -137,8 +134,7 @@ export class Stage {
       this.M = M;
       this.voxelOf = makeVoxelLookup(M);
       const refScale = refScaleOf(M);
-      const pickR = M.voxel * refScale * PICK_RADIUS_VOXELS;
-      this.pickR2 = pickR ** 2;
+      this.pickR = M.voxel * refScale * PICK_RADIUS_VOXELS;
       this.boxes = M.objects.map(
         (o) =>
           new THREE.Box3(
@@ -146,8 +142,6 @@ export class Stage {
             new THREE.Vector3(...(o.bbox[1] as [number, number, number])),
           ),
       );
-      // grown by the pick radius the boxes cull candidates without ever rejecting a real hit
-      this.cull = this.boxes.map((b) => b.clone().expandByScalar(pickR));
       const room = roomBox(M);
       this.frameRoom(room);
       this.minimap.setRoom(room);
@@ -318,44 +312,10 @@ export class Stage {
     this.timings.lastModeMs = Math.round(performance.now() - t0);
   }
 
-  /**
-   * Object under the pointer, among objects present in the visible commit(s). The bounding box only culls candidates;
-   * the hit is decided against the object's own splats, so the pointer has to be on the thing, not near it.
-   * Ghost layers are not pickable.
-   */
+  /** Object under the pointer: whichever bracket the overlay drew there. What you see is what you can click. */
   pick(ev: { clientX: number; clientY: number }): number | null {
-    const M = this.M;
-    if (!M) return null;
-    const s = useStore.getState();
     const r = this.renderer.domElement.getBoundingClientRect();
-    this.ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-    this.ray.setFromCamera(this.ndc, this.camera);
-    const ray = this.ray.ray;
-    const vis = s.mode.kind === "diff" ? [s.mode.a, s.mode.b] : s.mode.kind === "onion" ? M.commits.map((c) => c.index) : [s.head];
-    let best: { id: number; d: number } | null = null;
-    const hit = new THREE.Vector3();
-    const p = new THREE.Vector3();
-    for (const ob of M.objects) {
-      if (!vis.some((v) => ob.present.includes(v))) continue;
-      if (!ray.intersectBox(this.cull[ob.id], hit)) continue;
-      let d2min = Infinity;
-      let d = 0;
-      for (const v of vis) {
-        const P = ob.present.includes(v) ? this.layers[v]?.pts[ob.id + 1] : undefined;
-        if (!P) continue;
-        for (let i = 0; i < P.length; i += 3) {
-          p.set(P[i], P[i + 1], P[i + 2]);
-          const d2 = ray.distanceSqToPoint(p);
-          if (d2 < d2min) {
-            d2min = d2;
-            d = p.distanceTo(this.camera.position);
-          }
-        }
-      }
-      if (d2min > this.pickR2) continue;
-      if (!best || d < best.d) best = { id: ob.id, d };
-    }
-    return best?.id ?? null;
+    return this.overlay.hitTest(ev.clientX - r.left, ev.clientY - r.top);
   }
 
   /** Frame an object from the room's centre side and log it. */
@@ -422,7 +382,7 @@ export class Stage {
   /** The 2D layers above the splats: the detection overlay and the minimap, from one pass over the mode. */
   private drawChrome() {
     const items = this.boxItems(useStore.getState());
-    this.overlay.draw(this.camera, items);
+    this.overlay.draw(this.camera, items, this.pickR);
     this.minimap.draw(this.camera, this.controls.target, items);
   }
 
@@ -439,12 +399,16 @@ export class Stage {
       return `${name} · ${vol(o)}`;
     };
     const items: BoxItem[] = [];
-    const push = (o: number, label: string, tone: BoxItem["tone"], emphasis: boolean) => items.push({ box: this.boxes[o], label, tone, emphasis });
+    // the bracket hugs the object's splats in the commit it is drawn from; the box stands in until that commit loads
+    const push = (o: number, commit: number, label: string, tone: BoxItem["tone"], emphasis: boolean) =>
+      items.push({ id: o, box: this.boxes[o], pts: this.layers[commit]?.pts[o + 1], label, tone, emphasis });
+    const shown = (o: number) => (M.objects[o].present.includes(s.head) ? s.head : M.objects[o].present[0]);
 
     if (s.mode.kind === "diff") {
-      const { added, removed } = objectsChanged(M, s.mode.a, s.mode.b);
-      for (const o of added) push(o, `+ ${tag(o)}`, "add", o === s.selected || o === s.hover);
-      for (const o of removed) push(o, `− ${tag(o)}`, "rem", o === s.selected || o === s.hover);
+      const { a, b } = s.mode;
+      const { added, removed } = objectsChanged(M, a, b);
+      for (const o of added) push(o, b, `+ ${tag(o)}`, "add", o === s.selected || o === s.hover);
+      for (const o of removed) push(o, a, `− ${tag(o)}`, "rem", o === s.selected || o === s.hover);
       return items;
     }
     if (s.mode.kind === "onion") {
@@ -452,16 +416,16 @@ export class Stage {
       if (chain) {
         for (const o of chain) {
           const at = M.objects[o].present.map((c) => `c${c}`).join(" ");
-          push(o, `${at} · ${vol(o)}`, "trace", o === s.selected);
+          push(o, shown(o), `${at} · ${vol(o)}`, "trace", o === s.selected);
         }
         return items;
       }
-      for (const ob of M.objects) push(ob.id, tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
+      for (const ob of M.objects) push(ob.id, shown(ob.id), tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
       return items;
     }
     for (const ob of M.objects) {
       if (!ob.present.includes(s.head)) continue;
-      push(ob.id, tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
+      push(ob.id, s.head, tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
     }
     return items;
   }

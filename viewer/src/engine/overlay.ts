@@ -6,7 +6,17 @@
 import * as THREE from "three";
 
 export type Tone = "neutral" | "add" | "rem" | "trace";
-export type BoxItem = { box: THREE.Box3; label: string; tone: Tone; emphasis: boolean };
+export type BoxItem = {
+  id: number;
+  box: THREE.Box3;
+  /** The object's own splat centres (world xyz, flat), when the drawing commit is loaded. The bracket hugs these. */
+  pts?: Float32Array;
+  label: string;
+  tone: Tone;
+  emphasis: boolean;
+};
+const MIN_PTS = 3; // fewer projected points than this is not an object on screen
+const MAX_PTS = 4000; // points projected per object per frame; a big plant carries 100k, its outline needs far fewer
 
 export const TONES: Record<Tone, [number, number, number]> = {
   neutral: [235, 238, 242],
@@ -34,6 +44,8 @@ export class Overlay {
   private dpr = 1;
   private readonly corner = new THREE.Vector3();
   private readonly view = new THREE.Vector3();
+  /** What the last draw put on screen: the brackets are the hit boxes, so picking reads this. */
+  private placed: { r: Rect; item: BoxItem; depth: number }[] = [];
 
   constructor(parent: HTMLElement) {
     this.canvas.className = "overlay";
@@ -53,6 +65,17 @@ export class Overlay {
 
   clear() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.placed = [];
+  }
+
+  /** The object whose bracket contains this canvas point, the nearest one when brackets overlap. */
+  hitTest(x: number, y: number): number | null {
+    let best: { id: number; depth: number } | null = null;
+    for (const { r, item, depth } of this.placed) {
+      if (x < r.x0 || x > r.x1 || y < r.y0 || y > r.y1) continue;
+      if (!best || depth < best.depth) best = { id: item.id, depth };
+    }
+    return best?.id ?? null;
   }
 
   /**
@@ -60,7 +83,11 @@ export class Overlay {
    * order — what you are pointing at first, then the largest — and one that would collide with another
    * tag or with the chrome is dropped: a readable subset beats a wall of overlapping type.
    */
-  draw(camera: THREE.PerspectiveCamera, items: BoxItem[]) {
+  /**
+   * @param padWorld the pick radius in world metres: the bracket grows by it at the object's depth, so its
+   *   edge is where the pointer starts to hit.
+   */
+  draw(camera: THREE.PerspectiveCamera, items: BoxItem[], padWorld = 0) {
     this.clear();
     if (items.length === 0) return;
     const ctx = this.ctx;
@@ -70,11 +97,12 @@ export class Overlay {
     ctx.textBaseline = "middle";
     if ("letterSpacing" in ctx) (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = "0.1em";
 
-    const placed: { r: Rect; item: BoxItem }[] = [];
+    const placed: { r: Rect; item: BoxItem; depth: number }[] = [];
     for (const item of items) {
-      const r = this.project(camera, item.box);
-      if (r) placed.push({ r, item });
+      const hit = item.pts ? this.projectPoints(camera, item.pts, padWorld) : this.project(camera, item.box);
+      if (hit) placed.push({ r: hit.r, item, depth: hit.depth });
     }
+    this.placed = placed;
     for (const { r, item } of placed) this.brackets(r, item);
 
     const taken: Rect[] = this.reserved();
@@ -102,17 +130,48 @@ export class Overlay {
     return out;
   }
 
+  /** Screen bounds of the object's splats, grown by the pick radius at their mean depth. Null when off-screen or too small. */
+  private projectPoints(camera: THREE.PerspectiveCamera, pts: Float32Array, padWorld: number) {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    let depth = 0;
+    let n = 0;
+    const step = 3 * Math.max(1, Math.floor(pts.length / 3 / MAX_PTS));
+    for (let i = 0; i < pts.length; i += step) {
+      this.view.set(pts[i], pts[i + 1], pts[i + 2]).applyMatrix4(camera.matrixWorldInverse);
+      if (this.view.z > -camera.near) continue; // behind the near plane: this point is not on screen
+      this.corner.set(pts[i], pts[i + 1], pts[i + 2]).project(camera);
+      const px = ((this.corner.x + 1) / 2) * this.w;
+      const py = ((1 - this.corner.y) / 2) * this.h;
+      if (px < x0) x0 = px;
+      if (py < y0) y0 = py;
+      if (px > x1) x1 = px;
+      if (py > y1) y1 = py;
+      depth -= this.view.z;
+      n++;
+    }
+    if (n < MIN_PTS) return null;
+    const mean = depth / n;
+    const pad = (padWorld * (this.h / 2)) / (Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * mean);
+    const r = this.bounds(x0 - pad, y0 - pad, x1 + pad, y1 + pad);
+    return r && { r, depth: mean };
+  }
+
   /** World box -> screen rectangle, or null when it is behind the camera, off-screen or too small. */
   private project(camera: THREE.PerspectiveCamera, box: THREE.Box3) {
     let x0 = Infinity;
     let y0 = Infinity;
     let x1 = -Infinity;
     let y1 = -Infinity;
+    let depth = 0;
     for (let i = 0; i < 8; i++) {
       this.corner.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
       // a corner behind the near plane projects to a mirrored point, so the whole box is dropped
       this.view.copy(this.corner).applyMatrix4(camera.matrixWorldInverse);
       if (this.view.z > -camera.near) return null;
+      depth -= this.view.z / 8;
       this.corner.project(camera);
       const px = ((this.corner.x + 1) / 2) * this.w;
       const py = ((1 - this.corner.y) / 2) * this.h;
@@ -121,6 +180,12 @@ export class Overlay {
       if (px > x1) x1 = px;
       if (py > y1) y1 = py;
     }
+    const r = this.bounds(x0, y0, x1, y1);
+    return r && { r, depth };
+  }
+
+  /** A rectangle that is worth drawing: on screen, not a speck, and not the camera standing inside it. */
+  private bounds(x0: number, y0: number, x1: number, y1: number): Rect | null {
     if (x1 < 0 || y1 < 0 || x0 > this.w || y0 > this.h) return null;
     if (x1 - x0 < MIN_PX || y1 - y0 < MIN_PX) return null;
     if (x0 < 0 && y0 < 0 && x1 > this.w && y1 > this.h) return null;
