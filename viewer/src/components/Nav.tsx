@@ -61,7 +61,7 @@ function Hints() {
 export function Nav() {
   return (
     <nav id="nav">
-      <div className="wordmark">STATE ATLAS</div>
+      <div className="wordmark">ALCHEMIST</div>
       <Rail />
       <Hints />
     </nav>

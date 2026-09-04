@@ -6,7 +6,7 @@ export const makeActions = (): Actions => {
   const s = () => useStore.getState();
   const manifest = () => {
     const m = s().manifest;
-    if (!m) throw new Error("fatal: not a state atlas repository (no set loaded)");
+    if (!m) throw new Error("fatal: not an alchemist repository (no set loaded)");
     return m;
   };
   return {
