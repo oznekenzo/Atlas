@@ -51,8 +51,27 @@
     "prune_opacity": 0.05,
     "sh": 0
   },
-  "exclude": [],
-  "exclude_note": "diff ids (out/objects.json) of detections that are artefacts; the ceiling filter now catches the ceiling ones",
+  "exclude": [
+    5
+  ],
+  "exclude_note": "diff ids of detections that are artefacts. 5: a blob at ceiling height, not an object",
   "captured_note": "capture times are placeholders in capture order \u2014 replace with the real times from the Teleport app",
-  "diff_note": "min_voxels 50: the small floor sculpture is ~60 voxels. ceiling_band 10 (50 cm): the door tracks and opener hang that far below the ceiling."
+  "diff_note": "min_voxels 50: the small floor sculpture is ~60 voxels. ceiling_band 10 (50 cm): the door tracks and opener hang that far below the ceiling.",
+  "objects": {
+    "0": "Tall plant",
+    "1": "Small plant",
+    "2": "Knot",
+    "3": "Monstera",
+    "4": "Fan",
+    "6": "Lamp",
+    "7": "Suitcase",
+    "8": "Monstera",
+    "9": "Fan",
+    "10": "Chair"
+  },
+  "objects_note": "names by diff id (out/objects.json); applied at publish",
+  "removed": {
+    "2": 4
+  },
+  "removed_note": "diff id \u2192 commit it is gone from. 2: the knot is not in c4; the tracker kept it alive under the chair"
 }

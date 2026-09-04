@@ -13,8 +13,11 @@ dataset.json keys:
   registration    optional RegisterParams overrides
   diff            optional DiffParams overrides
   bake            optional BakeParams overrides
-  objects         optional {"<object id>": "name"}; applied at publish so re-baking never loses names
+  objects         optional {"<object id>": "name" | {"name", "kind": "plant"|"thing", "sub", "doc"}}; applied at publish
+  door            optional wall the door is on, in world axes: "-z" | "+z" | "-x" | "+x" (the viewer's sun rule)
   exclude         optional [<object id>, ...]: detections to drop at publish (artefacts); the rest are renumbered
+  removed         optional {"<object id>": <commit>}: the object is gone from that commit on, whatever the tracker
+                  thought (it keeps things alive under whatever replaced them); trims presence and the label grids
   Object ids in `objects` and `exclude` are the diff's ids (out/objects.json), so excluding one never shifts the others.
 """
 import dataclasses
@@ -136,15 +139,28 @@ class Dataset:
             raise PipelineError(f"{self.json_path}: registration.up must be 'auto', 'flip' or 'keep'")
         self.diff = _params(DiffParams, spec.get("diff"), "diff")
         self.bake = _params(BakeParams, spec.get("bake"), "bake")
-        self.object_names = {}
+        self.object_names = {}       # id -> {"name", "kind", "sub", "doc"} (only name is guaranteed)
         for key, value in (spec.get("objects") or {}).items():
             if not str(key).isdigit():
                 raise PipelineError(f"{self.json_path}: 'objects' keys must be object ids, got {key!r}")
-            self.object_names[int(key)] = str(value)
+            if isinstance(value, str):
+                value = {"name": value}
+            if not isinstance(value, dict) or "name" not in value:
+                raise PipelineError(f"{self.json_path}: objects[{key}] must be a name or an object with a name")
+            if value.get("kind") not in (None, "plant", "thing"):
+                raise PipelineError(f"{self.json_path}: objects[{key}].kind must be 'plant' or 'thing'")
+            self.object_names[int(key)] = {k: str(v) for k, v in value.items() if k in ("name", "kind", "sub", "doc")}
+        self.door = spec.get("door")
+        if self.door is not None and self.door not in ("-z", "+z", "-x", "+x"):
+            raise PipelineError(f"{self.json_path}: 'door' must be one of -z, +z, -x, +x")
         exclude = spec.get("exclude") or []
         if not isinstance(exclude, list) or not all(isinstance(i, int) and i >= 0 for i in exclude):
             raise PipelineError(f"{self.json_path}: 'exclude' must be a list of object ids")
         self.exclude = set(exclude)
+        removed = spec.get("removed") or {}
+        if not isinstance(removed, dict) or not all(str(k).isdigit() and isinstance(v, int) and v >= 0 for k, v in removed.items()):
+            raise PipelineError(f"{self.json_path}: 'removed' must map object ids to commit indices")
+        self.removed = {int(k): v for k, v in removed.items()}
 
     # ---- paths -------------------------------------------------------------------------------
     def raw_ply(self, i):

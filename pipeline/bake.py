@@ -119,17 +119,37 @@ def publish(ds):
 
     # curation: drop excluded objects, renumber the rest compactly (the viewer indexes objects by id)
     known = {o["id"] for o in objs["objects"]}
-    for oid in sorted(ds.exclude | set(ds.object_names)):
+    for oid in sorted(ds.exclude | set(ds.object_names) | set(ds.removed)):
         if oid not in known:
             raise PipelineError(f"{ds.json_path}: object {oid} does not exist (ids: 0…{len(known) - 1})")
     kept = [o for o in objs["objects"] if o["id"] not in ds.exclude]
+    # curation: an object the tracker kept alive past the commit it actually left
+    for o in kept:
+        ci = ds.removed.get(o["id"])
+        if ci is None or not any(c >= ci for c in o["present"]):
+            continue
+        o["present"] = [c for c in o["present"] if c < ci]
+        o["removed_in"] = ci
+        log.info(f"#{o['id']} marked gone from c{ci}: present {o['present']}")
     new_id = {o["id"]: i for i, o in enumerate(kept)}
     remap = lambda old: None if old is None else new_id.get(old)     # a move to/from an excluded object is dropped
+    # the tracker pairs moves by size alone; a thing keeps its name when it moves, so different names = not a move
+    by_id = {o["id"]: o for o in objs["objects"]}
+    label = lambda oid: ds.object_names.get(oid, {}).get("name")
+    for o in kept:
+        src = o["moved_from"]
+        if src is not None and label(src) is not None and label(o["id"]) is not None and label(src) != label(o["id"]):
+            log.info(f"move #{src} → #{o['id']} severed: {label(src)} is not {label(o['id'])}")
+            o["moved_from"] = None
+            if src in by_id and by_id[src]["moved_to"] == o["id"]:
+                by_id[src]["moved_to"] = None
     objects = []
     for o in kept:
         lo, hi = o["bbox_canon"]
         nid = new_id[o["id"]]
-        objects.append({"id": nid, "source_id": o["id"], "name": ds.object_names.get(o["id"], f"Object {nid:02d}"),
+        meta = ds.object_names.get(o["id"], {})
+        extra = {k: meta[k] for k in ("kind", "sub", "doc") if k in meta}     # only what the dataset says
+        objects.append({"id": nid, "source_id": o["id"], "name": meta.get("name", f"Object {nid:02d}"), **extra,
                         "added_in": o["added_in"], "removed_in": o["removed_in"], "present": o["present"],
                         "voxels": o["voxels"], "volume_vox_m3": o["volume_vox_m3"],
                         "moved_from": remap(o["moved_from"]), "moved_to": remap(o["moved_to"]),
@@ -150,7 +170,10 @@ def publish(ds):
         with open(spz, "rb") as fh:
             digest = hashlib.sha1(fh.read()).hexdigest()[:7]
         with gzip.open(ds.labels_path(c.index), "rb") as fh:
-            labels = np.frombuffer(fh.read(), np.uint16)
+            labels = np.frombuffer(fh.read(), np.uint16).copy()
+        for oid, ci in ds.removed.items():
+            if c.index >= ci:
+                labels[labels == oid + 1] = 0
         if len(labels) != n_vox:
             raise PipelineError(f"{ds.labels_path(c.index)}: {len(labels)} voxels, objects.json shape says {n_vox}")
         if labels.max() > len(known):
@@ -166,7 +189,7 @@ def publish(ds):
     lo, hi = objs["room_canon"]
     manifest = {"commits": commits, "voxel": objs["voxel"], "origin": objs["origin"], "shape": objs["shape"],
                 "room": box_to_world(lo, hi, WC), "world_from_ref": W.tolist(), "calibration_m": ds.calibration_m,
-                "objects": objects}
+                **({"door": ds.door} if ds.door else {}), "objects": objects}
     path = os.path.join(ds.pub_dir, "commits.json")
     with open(path, "w") as fh:
         json.dump(manifest, fh, indent=1)

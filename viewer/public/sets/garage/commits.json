@@ -105,7 +105,7 @@
   {
    "id": 0,
    "source_id": 0,
-   "name": "Object 00",
+   "name": "Tall plant",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -132,7 +132,7 @@
   {
    "id": 1,
    "source_id": 1,
-   "name": "Object 01",
+   "name": "Small plant",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -159,14 +159,13 @@
   {
    "id": 2,
    "source_id": 2,
-   "name": "Object 02",
+   "name": "Knot",
    "added_in": 1,
-   "removed_in": null,
+   "removed_in": 4,
    "present": [
     1,
     2,
-    3,
-    4
+    3
    ],
    "voxels": 240,
    "volume_vox_m3": 0.0279,
@@ -188,7 +187,7 @@
   {
    "id": 3,
    "source_id": 3,
-   "name": "Object 03",
+   "name": "Monstera",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -198,7 +197,7 @@
    "voxels": 4421,
    "volume_vox_m3": 0.5138,
    "moved_from": null,
-   "moved_to": 8,
+   "moved_to": 7,
    "bbox": [
     [
      -0.9864,
@@ -215,7 +214,7 @@
   {
    "id": 4,
    "source_id": 4,
-   "name": "Object 04",
+   "name": "Fan",
    "added_in": 2,
    "removed_in": 3,
    "present": [
@@ -224,7 +223,7 @@
    "voxels": 805,
    "volume_vox_m3": 0.0936,
    "moved_from": null,
-   "moved_to": 9,
+   "moved_to": 8,
    "bbox": [
     [
      0.3947,
@@ -240,36 +239,8 @@
   },
   {
    "id": 5,
-   "source_id": 5,
-   "name": "Object 05",
-   "added_in": 2,
-   "removed_in": null,
-   "present": [
-    2,
-    3,
-    4
-   ],
-   "voxels": 675,
-   "volume_vox_m3": 0.0784,
-   "moved_from": null,
-   "moved_to": null,
-   "bbox": [
-    [
-     0.7686,
-     2.7505,
-     1.2041
-    ],
-    [
-     1.2072,
-     3.1891,
-     1.9508
-    ]
-   ]
-  },
-  {
-   "id": 6,
    "source_id": 6,
-   "name": "Object 06",
+   "name": "Lamp",
    "added_in": 2,
    "removed_in": 4,
    "present": [
@@ -294,9 +265,9 @@
    ]
   },
   {
-   "id": 7,
+   "id": 6,
    "source_id": 7,
-   "name": "Object 07",
+   "name": "Suitcase",
    "added_in": 2,
    "removed_in": 3,
    "present": [
@@ -320,9 +291,9 @@
    ]
   },
   {
-   "id": 8,
+   "id": 7,
    "source_id": 8,
-   "name": "Object 08",
+   "name": "Monstera",
    "added_in": 3,
    "removed_in": 4,
    "present": [
@@ -331,7 +302,7 @@
    "voxels": 4376,
    "volume_vox_m3": 0.5086,
    "moved_from": 3,
-   "moved_to": 10,
+   "moved_to": null,
    "bbox": [
     [
      0.1799,
@@ -346,9 +317,9 @@
    ]
   },
   {
-   "id": 9,
+   "id": 8,
    "source_id": 9,
-   "name": "Object 09",
+   "name": "Fan",
    "added_in": 3,
    "removed_in": 4,
    "present": [
@@ -372,9 +343,9 @@
    ]
   },
   {
-   "id": 10,
+   "id": 9,
    "source_id": 10,
-   "name": "Object 10",
+   "name": "Chair",
    "added_in": 4,
    "removed_in": null,
    "present": [
@@ -382,7 +353,7 @@
    ],
    "voxels": 3357,
    "volume_vox_m3": 0.3901,
-   "moved_from": 8,
+   "moved_from": null,
    "moved_to": null,
    "bbox": [
     [
