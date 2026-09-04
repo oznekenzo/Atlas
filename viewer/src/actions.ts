@@ -1,5 +1,6 @@
 import { isNavigational, useStore } from "./store";
 import type { Actions } from "./git";
+import { changeSummary } from "./identity";
 
 /** The git terminal's view of the app: thin adapters over the store. */
 export const makeActions = (): Actions => {
@@ -20,10 +21,14 @@ export const makeActions = (): Actions => {
     select: (id) => s().select(id),
     status: () => {
       const { head } = s();
-      return manifest().objects.flatMap((o) => [
-        ...(o.added_in === head && head > 0 ? [`+ ${o.name}`] : []),
-        ...(o.removed_in === head ? [`- ${o.name}`] : []),
-      ]);
+      if (head === 0) return [];
+      const objects = manifest().objects;
+      const { added, removed, moved } = changeSummary(objects, head - 1, head);
+      return [
+        ...added.map((id) => `+ ${objects[id].name}`),
+        ...removed.map((id) => `- ${objects[id].name}`),
+        ...moved.map((m) => `~ ${objects[m.to].name} moved`),
+      ];
     },
   };
 };

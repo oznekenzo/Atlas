@@ -3,6 +3,7 @@
  * Pure — takes an Actions adapter, returns lines. No store import, so it is trivially testable.
  */
 import type { Commit, Obj } from "./types";
+import { changeSummary, identityOf } from "./identity";
 
 export type ReflogEntry = { id: number; verb: string; detail: string };
 export type Actions = {
@@ -49,9 +50,22 @@ export function resolveRef(ref: string, A: Actions): number {
   throw new Error(`fatal: ambiguous argument '${ref}': unknown revision`);
 }
 
+/** Name → the thing's first id, so blame and bisect answer for its whole history, not for one of its moves. */
 const findObject = (A: Actions, words: string[]) => {
   const q = words.join(" ").toLowerCase();
-  return q ? A.objects().find((o) => o.name.toLowerCase().includes(q)) : undefined;
+  const objects = A.objects();
+  const hit = q ? objects.find((o) => o.name.toLowerCase().includes(q)) : undefined;
+  return hit ? objects[identityOf(objects, hit.id).root] : undefined;
+};
+
+/** + added, − removed, ~ moved between two commits, as terminal lines. */
+const changeLines = (objects: Obj[], a: number, b: number): Line[] => {
+  const { added, removed, moved } = changeSummary(objects, a, b);
+  return [
+    ...added.map((id): Line => ({ k: "a", t: `+ ${objects[id].name}` })),
+    ...removed.map((id): Line => ({ k: "e", t: `- ${objects[id].name}` })),
+    ...moved.map((m): Line => ({ k: "o", t: `~ ${objects[m.to].name} moved` })),
+  ];
 };
 
 export function run(cmdline: string, A: Actions): Line[] {
@@ -121,15 +135,9 @@ export function run(cmdline: string, A: Actions): Line[] {
           out.push({ k: "e", t: `error: c${lo} or c${hi} is still loading` });
           break;
         }
-        let any = false;
-        for (const o of A.objects()) {
-          const inA = o.present.includes(lo);
-          const inB = o.present.includes(hi);
-          if (inB && !inA) out.push({ k: "a", t: `+ ${o.name}` });
-          if (inA && !inB) out.push({ k: "e", t: `- ${o.name}` });
-          any ||= inA !== inB;
-        }
-        if (!any) out.push({ k: "d", t: "(no object changes)" });
+        const lines = changeLines(A.objects(), lo, hi);
+        out.push(...lines);
+        if (lines.length === 0) out.push({ k: "d", t: "(no object changes)" });
         break;
       }
       case "show": {
@@ -139,36 +147,36 @@ export function run(cmdline: string, A: Actions): Line[] {
           break;
         }
         out.push({ k: "o", t: fmt(cs[i]) }, { k: "d", t: "" });
-        for (const o of A.objects()) {
-          if (o.added_in === i && i > 0) out.push({ k: "a", t: `+ ${o.name}` });
-          if (o.removed_in === i) out.push({ k: "e", t: `- ${o.name}` });
-        }
+        if (i > 0) out.push(...changeLines(A.objects(), i - 1, i));
         break;
       }
       case "status": {
         out.push({ k: "o", t: `On commit c${A.head()} — “${cs[A.head()].message}”` });
         const lines = A.status();
         if (lines.length === 0) out.push({ k: "d", t: "  nothing changed in this commit" });
-        for (const l of lines) out.push({ k: l.startsWith("+") ? "a" : "e", t: `  ${l}` });
+        for (const l of lines) out.push({ k: l.startsWith("+") ? "a" : l.startsWith("-") ? "e" : "o", t: `  ${l}` });
         break;
       }
       case "blame": {
         const o = findObject(A, rest);
         if (!o) throw new Error(`fatal: no such object '${rest.join(" ")}'`);
+        const who = identityOf(A.objects(), o.id);
         A.select(o.id);
-        checkout(o.added_in);
-        out.push({ k: "o", t: `${o.name}: appeared in ${cs[o.added_in].hash} (c${o.added_in}) — ${cs[o.added_in].message}` });
-        if (o.removed_in !== null) out.push({ k: "o", t: `           removed in ${cs[o.removed_in].hash} (c${o.removed_in})` });
+        checkout(who.first);
+        out.push({ k: "o", t: `${o.name}: appeared in ${cs[who.first].hash} (c${who.first}) — ${cs[who.first].message}` });
+        for (const m of who.moves) out.push({ k: "o", t: `           moved in ${cs[m.commit].hash} (c${m.commit}) — ${cs[m.commit].message}` });
+        if (who.last !== null) out.push({ k: "o", t: `           removed in ${cs[who.last].hash} (c${who.last})` });
         break;
       }
       case "bisect": {
         const o = findObject(A, rest);
         if (!o) throw new Error("usage: git bisect <object>");
+        const first = identityOf(A.objects(), o.id).first;
         let lo = 0;
         let hi = cs.length - 1;
         while (lo < hi) {
           const mid = (lo + hi) >> 1;
-          const has = mid >= o.added_in;
+          const has = mid >= first;
           out.push({ k: "d", t: `  bisect: c${mid} ${has ? "has" : "lacks"} ${o.name}` });
           if (has) hi = mid;
           else lo = mid + 1;

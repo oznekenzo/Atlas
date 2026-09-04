@@ -368,7 +368,7 @@ export class Stage {
     this.camera.position.set(c.x + dir.x * dist, h, c.z + dir.z * dist);
     this.controls.target.copy(c);
     this.controls.update();
-    this.gestures.record("frame", `obj ${String(id).padStart(2, "0")}`);
+    this.gestures.record("frame", this.M?.objects[id]?.name ?? `obj ${id}`);
   }
 
   setCam(x: number, y: number, z: number) {
@@ -436,8 +436,7 @@ export class Stage {
     const vol = (o: number) => `${M.objects[o].volume_vox_m3.toFixed(2)} m³`;
     const tag = (o: number) => {
       const name = M.objects[o].name;
-      const id = String(o).padStart(2, "0");
-      return `${/^object \d+$/i.test(name) ? `obj ${id}` : `${id} ${name}`} · ${vol(o)}`;
+      return `${name} · ${vol(o)}`;
     };
     const items: BoxItem[] = [];
     const push = (o: number, label: string, tone: BoxItem["tone"], emphasis: boolean) => items.push({ box: this.boxes[o], label, tone, emphasis });

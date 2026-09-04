@@ -1,5 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
+import { identityOf } from "../identity";
 
 const when = (iso: string) => {
   const d = new Date(iso);
@@ -21,7 +22,7 @@ export function Hud() {
   const c = M.commits[head];
   const diff = mode.kind === "diff" ? mode : null;
   // onion with an object selected is a trace of that one object through time
-  const traced = mode.kind === "onion" && selected !== null ? M.objects[selected] : null;
+  const traced = mode.kind === "onion" && selected !== null ? { name: M.objects[selected].name, ...identityOf(M.objects, selected) } : null;
   return (
     <>
       <div id="tl" className="hud">
@@ -52,7 +53,7 @@ export function Hud() {
           {diff
             ? `c${diff.a} → c${diff.b}`
             : traced
-              ? `${traced.present.length} ${traced.present.length === 1 ? "state" : "states"} · c${traced.added_in} → ${traced.removed_in === null ? "HEAD" : `c${traced.removed_in - 1}`}`
+              ? `${traced.present.length} ${traced.present.length === 1 ? "state" : "states"} · c${traced.first} → ${traced.last === null ? "HEAD" : `c${traced.last - 1}`}`
               : mode.kind === "onion"
                 ? `${M.commits.length} states, one room`
                 : `“${c.message}”`}

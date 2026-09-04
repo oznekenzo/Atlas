@@ -5,6 +5,7 @@
  */
 import { create } from "zustand";
 import type { Manifest } from "./types";
+import { chainOf } from "./identity";
 
 export type Mode = { kind: "normal" } | { kind: "diff"; a: number; b: number } | { kind: "onion" };
 export const NORMAL: Mode = { kind: "normal" };
@@ -20,7 +21,6 @@ export const isNavigational = (a: Action) => a.verb !== "$" && a.verb !== "termi
 
 let actionSeq = 0;
 const T0 = performance.now();
-const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export type State = {
   status: Status;
@@ -63,26 +63,8 @@ export type State = {
   setMoving: (m: boolean) => void;
 };
 
-/**
- * One physical object across the commits: the tracker splits a thing that moved into separate ids
- * linked by moved_from / moved_to, so following the links is what makes a trace a trail.
- */
-export const traceChain = (m: Manifest, id: number): number[] => {
-  const chain = [id];
-  for (let o = m.objects[id]; o?.moved_from != null;) {
-    const prev = m.objects[o.moved_from];
-    if (!prev || chain.includes(prev.id)) break;
-    chain.unshift(prev.id);
-    o = prev;
-  }
-  for (let o = m.objects[id]; o?.moved_to != null;) {
-    const next = m.objects[o.moved_to];
-    if (!next || chain.includes(next.id)) break;
-    chain.push(next.id);
-    o = next;
-  }
-  return chain;
-};
+/** One physical object across the commits (see identity.ts). */
+export const traceChain = (m: Manifest, id: number): number[] => chainOf(m.objects, id);
 
 /** Objects that differ between two commits. Shared by the engine, the terminal, the legend and the log. */
 export const objectsChanged = (m: Manifest, a: number, b: number) => {
@@ -207,7 +189,7 @@ export const useStore = create<State>((set, get) => ({
     if (id === st.selected) return;
     const o = id === null ? null : st.manifest?.objects[id];
     if (id !== null && !o) return;
-    if (o) st.log("select", `obj ${pad2(o.id)}  ${o.name}`, { selected: id });
+    if (o) st.log("select", o.name, { selected: id });
     else st.log("deselect", "", { selected: null });
     set({ selected: id });
   },
