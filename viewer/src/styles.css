@@ -285,6 +285,18 @@ canvas {
 #intro .thesis {
   margin-top: 18px;
 }
+#intro .card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: intro-in 0.7s ease both;
+}
+#intro .line {
+  font-family: "PP Rader", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  color: var(--bright);
+}
 #intro .log {
   margin-top: 64px;
   width: 400px;

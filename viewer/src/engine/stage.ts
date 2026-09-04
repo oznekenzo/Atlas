@@ -26,6 +26,7 @@ const PICK_RADIUS_VOXELS = 1.5; // a bracket reaches this far past the object's 
 const SETTLE_MS = 1200; // keep rendering this long after the last change (damping tails, Spark's async sort results)
 const MOVING_SETTLE_MS = 900;
 const TWEEN_MS = 700;
+const WALL_MARGIN_M = 0.15; // the camera stays this far inside the walls, floor and ceiling
 const WATCHDOG_MS = 250;
 
 type Tween = { from: THREE.Vector3; to: THREE.Vector3; tFrom: THREE.Vector3; tTo: THREE.Vector3; t0: number; ms: number };
@@ -44,6 +45,7 @@ export class Stage {
 
   private M: Manifest | null = null;
   layers: (Layer | undefined)[] = [];
+  private bounds: THREE.Box3 | null = null; // the room, shrunk by the margin: the camera and its target stay inside
   private boxes: THREE.Box3[] = []; // tight, room-aligned: the minimap footprint, and the bracket until the commit loads
   private pickR = 0; // world metres a bracket extends past the object's splats
   private voxelOf: (x: number, y: number, z: number) => number = () => -1;
@@ -143,6 +145,7 @@ export class Stage {
           ),
       );
       const room = roomBox(M);
+      this.bounds = room.clone().expandByScalar(-WALL_MARGIN_M);
       this.frameRoom(room);
       this.minimap.setRoom(room);
       store.setManifest(M, refScale);
@@ -219,6 +222,14 @@ export class Stage {
       mesh.dispose();
       throw e;
     }
+  }
+
+  /** Keep the camera and what it orbits inside the room. Orbit re-derives its spherical state from the position, so a clamp holds. */
+  private clampToRoom() {
+    const b = this.bounds;
+    if (!b) return;
+    this.camera.position.clamp(b.min, b.max);
+    this.controls.target.clamp(b.min, b.max);
   }
 
   /** Start inside the room, near a corner at standing height, looking at its centre; bound the orbit to the room. */
@@ -375,6 +386,7 @@ export class Stage {
   renderOnce() {
     this.stepTween();
     this.controls.update();
+    this.clampToRoom();
     this.renderer.render(this.scene, this.camera);
     this.drawChrome();
   }
@@ -437,6 +449,7 @@ export class Stage {
     if (this.paused) return;
     const tweening = this.stepTween();
     const moved = this.controls.update();
+    this.clampToRoom();
     if (tweening || moved) this.touch();
     const t = performance.now();
     if (t - this.fpsT > 1000) {
@@ -479,7 +492,11 @@ export class Stage {
   };
   private onPointerUp = (ev: PointerEvent) => {
     this.dragging = false;
-    if (performance.now() - this.downAt < CLICK_MS) useStore.getState().select(this.pick(ev));
+    if (performance.now() - this.downAt < CLICK_MS) {
+      const st = useStore.getState();
+      const hit = this.pick(ev);
+      st.select(hit !== null && hit === st.selected ? null : hit); // clicking the selected thing again lets it go
+    }
   };
   private onPointerLeave = () => {
     this.dragging = false;

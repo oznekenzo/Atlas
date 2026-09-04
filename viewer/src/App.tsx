@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { useStore } from "./store";
+import { LAST_SLIDE, useStore } from "./store";
 import { Stage } from "./components/Stage";
 import { Hud } from "./components/Hud";
 import { Legend } from "./components/Legend";
@@ -18,9 +18,11 @@ function useKeys() {
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isEditable(e.target)) return;
       const s = useStore.getState();
       if (s.intro) {
-        if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " " || e.key === "j") {
+        const onLog = s.slide >= LAST_SLIDE;
+        if (e.key === "Enter" || e.key === " " || (onLog && (e.key === "ArrowRight" || e.key === "j"))) {
           e.preventDefault();
-          s.begin();
+          if (onLog) s.begin();
+          else s.advance();
         }
         return;
       }

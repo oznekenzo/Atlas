@@ -15,6 +15,7 @@ export type Cam = { pos: [number, number, number]; target: [number, number, numb
 export type Snapshot = { head: number; mode: Mode; selected: number | null; cam: Cam | null };
 export type Action = { id: number; t: number; verb: string; detail: string; snap: Snapshot };
 export type Status = "loading" | "ready" | "error";
+export const LAST_SLIDE = 2;
 
 /** Entries the reflog and HEAD@{n} count: everything except terminal bookkeeping. */
 export const isNavigational = (a: Action) => a.verb !== "$" && a.verb !== "terminal";
@@ -40,7 +41,10 @@ export type State = {
   splatCount: number[]; // per commit, once loaded
   terminalOpen: boolean;
   moving: boolean; // camera in motion → chrome fades
-  intro: boolean; // title card up; the chrome waits until the user begins
+  intro: boolean; // the deck is up; the chrome waits until the user begins
+  slide: number; // which card of the deck: 0 name, 1 for home and factory, 2 the log (the last; → begins from it)
+
+  advance: () => void;
 
   begin: () => void;
 
@@ -65,6 +69,16 @@ export type State = {
 
 /** One physical object across the commits (see identity.ts). */
 export const traceChain = (m: Manifest, id: number): number[] => chainOf(m.objects, id);
+
+/**
+ * The selection after a checkout: the same thing under whichever id it wears in the commits now shown,
+ * or nothing if it is not in any of them. A selection never outlives the object it points at.
+ */
+const carry = (m: Manifest, selected: number | null, shown: number[]): number | null => {
+  if (selected === null) return null;
+  for (const id of chainOf(m.objects, selected)) if (shown.some((c) => m.objects[id].present.includes(c))) return id;
+  return null;
+};
 
 /** Objects that differ between two commits. Shared by the engine, the terminal, the legend and the log. */
 export const objectsChanged = (m: Manifest, a: number, b: number) => {
@@ -98,6 +112,7 @@ export const useStore = create<State>((set, get) => ({
   terminalOpen: false,
   moving: false,
   intro: true,
+  slide: 0,
 
   // time runs forward: the set opens on its first commit, not on HEAD
   setManifest: (m, refScale) =>
@@ -110,10 +125,11 @@ export const useStore = create<State>((set, get) => ({
       splatCount: m.commits.map(() => 0),
     }),
   setStatus: (status) => set({ status }),
+  advance: () => set((s) => (s.intro && s.slide < LAST_SLIDE ? { slide: s.slide + 1 } : {})),
   begin: () => {
     const st = get();
     const c = st.manifest?.commits[0];
-    if (!st.intro || !c || !st.loaded[0]) return;
+    if (!st.intro || st.slide < LAST_SLIDE || !c || !st.loaded[0]) return;
     st.log("begin", `c0  ${c.hash}`);
     set({ intro: false });
   },
@@ -162,8 +178,9 @@ export const useStore = create<State>((set, get) => ({
     const c = st.manifest?.commits[i];
     if (!c || !st.loaded[i]) return false;
     const noop = st.mode.kind === "normal" && st.head === i;
-    st.log(noop ? "reset" : "checkout", `c${i}  ${c.hash}`, { head: i, mode: NORMAL });
-    set({ head: i, mode: NORMAL });
+    const selected = carry(st.manifest!, st.selected, [i]);
+    st.log(noop ? "reset" : "checkout", `c${i}  ${c.hash}`, { head: i, mode: NORMAL, selected });
+    set({ head: i, mode: NORMAL, selected });
     return true;
   },
   diff: (a, b) => {
@@ -173,8 +190,9 @@ export const useStore = create<State>((set, get) => ({
     const hi = Math.max(a, b);
     const mode: Mode = { kind: "diff", a: lo, b: hi };
     const { added, removed } = objectsChanged(st.manifest, lo, hi);
-    st.log("diff", `c${lo}…c${hi}  +${added.size} −${removed.size}`, { head: hi, mode });
-    set({ head: hi, mode });
+    const selected = carry(st.manifest, st.selected, [lo, hi]);
+    st.log("diff", `c${lo}…c${hi}  +${added.size} −${removed.size}`, { head: hi, mode, selected });
+    set({ head: hi, mode, selected });
     return true;
   },
   toggleOnion: () => {

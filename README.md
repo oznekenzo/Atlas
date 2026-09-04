@@ -1,6 +1,6 @@
 # Statefield
 
-ALCHEMIST (working names: State Atlas, Worldstate, Patina) — spatial version control for gaussian-splat captures.
+TRACE SYSTEMS (working names: Alchemist, State Atlas, Worldstate, Patina) — spatial version control for gaussian-splat captures.
 
 Six captures of one room → registered → voxel-diffed → objects tracked across commits → browser viewer with git semantics.
 
