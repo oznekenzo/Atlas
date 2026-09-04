@@ -16,6 +16,7 @@ const rgba = (t: BoxItem["tone"], a: number) => `rgba(${TONES[t][0]}, ${TONES[t]
 
 export class Minimap {
   readonly canvas = document.createElement("canvas");
+  readonly el = document.createElement("div"); // the section: its title, then the canvas
   private ctx: CanvasRenderingContext2D;
   private dpr = 1;
   private w = 0;
@@ -27,8 +28,12 @@ export class Minimap {
   private readonly dir = new THREE.Vector3();
 
   constructor(parent: HTMLElement) {
-    this.canvas.className = "minimap";
-    parent.appendChild(this.canvas);
+    this.el.className = "minimap";
+    const title = document.createElement("div");
+    title.className = "k head";
+    title.textContent = "map";
+    this.el.append(title, this.canvas);
+    parent.appendChild(this.el);
     this.ctx = this.canvas.getContext("2d")!;
   }
 
@@ -110,6 +115,19 @@ export class Minimap {
       ctx.strokeRect(Math.round(ax) + 0.5, Math.round(az) + 0.5, Math.round(w), Math.round(h));
     }
     ctx.setLineDash([]);
+    // a drifted thing tied to where the standard put it
+    for (const it of items) {
+      if (!it.link) continue;
+      const [ax, az] = this.px((it.box.min.x + it.box.max.x) / 2 + (it.shift?.x ?? 0), (it.box.min.z + it.box.max.z) / 2 + (it.shift?.z ?? 0));
+      const [bx, bz] = this.px(it.link.x, it.link.z);
+      ctx.setLineDash([2, 3]);
+      ctx.strokeStyle = rgba("ghost", 0.7);
+      ctx.beginPath();
+      ctx.moveTo(ax, az);
+      ctx.lineTo(bx, bz);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
 
     // orbit target, then the camera on top
     const [tx, tz] = this.px(target.x, target.z);
@@ -128,7 +146,7 @@ export class Minimap {
   }
 
   dispose() {
-    this.canvas.remove();
+    this.el.remove();
     document.documentElement.style.removeProperty("--map-h");
   }
 }

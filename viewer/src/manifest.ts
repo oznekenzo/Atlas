@@ -110,5 +110,6 @@ export function parseManifest(raw: unknown): Manifest {
     room,
     world_from_ref,
     calibration_m: isNum(raw.calibration_m) ? raw.calibration_m : 1,
+    standard: isNum(raw.standard) && Number.isInteger(raw.standard) && raw.standard >= 0 && raw.standard < commits.length ? raw.standard : null,
   };
 }

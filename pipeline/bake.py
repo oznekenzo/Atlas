@@ -189,7 +189,8 @@ def publish(ds):
     lo, hi = objs["room_canon"]
     manifest = {"commits": commits, "voxel": objs["voxel"], "origin": objs["origin"], "shape": objs["shape"],
                 "room": box_to_world(lo, hi, WC), "world_from_ref": W.tolist(), "calibration_m": ds.calibration_m,
-                **({"door": ds.door} if ds.door else {}), "objects": objects}
+                **({"door": ds.door} if ds.door else {}), **({"standard": ds.standard} if ds.standard is not None else {}),
+                "objects": objects}
     path = os.path.join(ds.pub_dir, "commits.json")
     with open(path, "w") as fh:
         json.dump(manifest, fh, indent=1)

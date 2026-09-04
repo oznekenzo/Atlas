@@ -64,14 +64,9 @@
   --t-slow: 700ms; /* the camera tween's length, too */
   --t-room: 1800ms;
 
-  /* the room behind the title card */
-  --stage-card: 0.22;
-
-  /* z ladder: overlay 2 · rails 3 · minimap and reflog 4 (they sit on the left rail) · controls 5 · intro 6 */
+  /* z ladder: overlay 2 · rails 3 · controls 5 · intro 6 */
   --z-overlay: 2;
   --z-rail: 3;
-  --z-minimap: 4;
-  --z-actions: 4;
   --z-nav: 5;
   --z-intro: 6;
 }
@@ -159,9 +154,6 @@ body {
 .lit #stage {
   opacity: 1;
 }
-.intro.lit #stage {
-  opacity: var(--stage-card);
-}
 /* detection overlay: 2D boxes drawn above the splats, never in the way of the pointer */
 #stage .overlay {
   position: absolute;
@@ -171,22 +163,31 @@ body {
 }
 /* minimap: top-down plan; sits on the left rail above the reflog, mounted beside the stage so it paints above the rail */
 .minimap {
-  position: fixed;
-  left: calc(var(--sp-4) + var(--rail-pad));
   border-top: 1px solid var(--ink-15); /* a section of the rail, like the others */
-  padding-top: var(--sp-3);
-  bottom: calc(var(--sp-4) + var(--rail-pad) + 126px + var(--sp-3));
+  padding-top: var(--sp-4);
   pointer-events: none;
-  z-index: var(--z-minimap);
-  transition: opacity var(--t-slow) var(--ease);
 }
-.intro .minimap {
-  opacity: 0;
+.minimap canvas {
+  display: block;
 }
+
 canvas {
   display: block;
 }
 /* ---- the rails: ink, semi-transparent, blurred; the scene on the left, the documentation on the right ------------- */
+#mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  letter-spacing: 0.2em;
+  white-space: nowrap;
+  line-height: 1;
+}
+#mark span {
+  display: inline-block;
+  margin-right: -0.2em; /* letter-spacing trails the last glyph; without this the mark ends short of the edge */
+}
 #scene,
 #docs {
   position: fixed;
@@ -205,13 +206,25 @@ canvas {
 }
 #scene {
   left: var(--sp-4);
-  padding-bottom: calc(var(--rail-pad) + 126px + var(--sp-3) + 150px + var(--sp-3) + var(--sp-4)); /* room for the minimap and the reflog */
+  display: flex;
+  flex-direction: column; /* the minimap and the reflog */ /* room for the minimap and the reflog */ /* room for the minimap and the reflog */
 }
 #docs {
   right: var(--sp-4);
 }
-#docs:empty {
-  display: none;
+/* the documentation rail rises in when the mode gives it something to say */
+#docs {
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity var(--t-slow) var(--ease),
+    transform var(--t-slow) var(--ease);
+}
+#docs.on {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
 }
 .state {
   margin-top: var(--sp-4);
@@ -236,8 +249,17 @@ canvas {
   margin-top: var(--sp-4);
   padding-top: var(--sp-4);
   border-top: 1px solid var(--ink-15);
+  margin-bottom: auto; /* the map and the history sit at the rail's foot when there is room */
 }
-#commits > .k {
+#map-slot {
+  margin-top: var(--sp-4);
+}
+#commits > .k,
+.state > .k.head,
+.minimap > .k.head,
+#actions > .k.head {
+  display: block;
+  height: 14px;
   margin-bottom: var(--sp-1);
 }
 #commits .row {
@@ -247,8 +269,8 @@ canvas {
   cursor: pointer;
   color: var(--ink-50);
   border-left: 1px solid transparent;
-  padding-left: var(--sp-1);
-  margin-left: calc(-1 * var(--sp-1) - 1px);
+  padding-left: calc(var(--sp-1) - 1px);
+  margin-left: calc(-1 * var(--sp-1));
 }
 #commits .row .hh {
   color: var(--ink-30);
@@ -264,6 +286,18 @@ canvas {
 }
 #commits .row .mm {
   min-width: 0;
+  flex: 1;
+}
+#commits .row .tag {
+  flex: none;
+  align-self: center;
+  padding: 1px 6px;
+  border: 1px solid var(--ink-30);
+  border-radius: 3px;
+  font-size: 9px;
+}
+.lines .l.off {
+  color: var(--ink-70);
 }
 #commits .row:hover,
 #commits .row:hover .hh {
@@ -449,8 +483,7 @@ canvas {
 /* ---- the title card: the chrome waits behind it until the user begins ------------------------------------------ */
 .intro #scene,
 .intro #docs,
-.intro #controls,
-.intro #actions {
+.intro #controls {
   opacity: 0;
   pointer-events: none;
 }
@@ -468,6 +501,9 @@ canvas {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  background: var(--glass); /* the whole page is the glass; nothing else darkens the room behind it */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   pointer-events: none;
   z-index: var(--z-intro);
   transition:
@@ -482,6 +518,7 @@ canvas {
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding: var(--sp-5) 56px;
   animation: rise var(--t-slow) var(--ease) both;
 }
 #intro .thesis {
@@ -515,12 +552,7 @@ canvas {
   animation: blink 1.1s steps(2, start) infinite;
 }
 #intro .begin {
-  position: absolute;
-  bottom: 64px;
-  left: 0;
-  right: 0;
-  width: max-content;
-  margin: 0 auto;
+  margin-top: var(--sp-5);
   color: var(--ink-70);
   pointer-events: auto;
   cursor: pointer;
@@ -612,20 +644,20 @@ canvas {
   color: var(--ink-30);
 }
 #actions {
-  position: fixed;
-  left: calc(var(--sp-4) + var(--rail-pad));
-  bottom: calc(var(--sp-4) + var(--rail-pad));
-  width: calc(var(--col-w) - 2 * var(--rail-pad));
-  height: 126px;
+  position: relative;
+  margin-top: var(--sp-4);
+  border-top: 1px solid var(--ink-15); /* a section of the rail, under the map */
+  padding-top: var(--sp-4);
+  box-sizing: content-box;
+  height: 148px; /* the title row and the six log rows */
   pointer-events: none;
-  z-index: var(--z-actions);
   -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 70%, transparent 100%);
 }
 #actions .row {
   position: absolute;
   left: 0;
-  top: 0;
+  top: calc(var(--sp-4) + 22px); /* absolute rows ignore the padding and the title, so both go here */
   height: var(--lh-small);
   line-height: var(--lh-small);
   display: flex;
@@ -647,7 +679,7 @@ canvas {
 #actions .row:not(.head):hover .detail {
   color: var(--ink-100);
 }
-#actions .row:not(.head):hover:after {
+#actions .row:not(.head):hover::after {
   content: "↩";
   color: var(--ink-50);
   margin-left: 6px;
@@ -670,12 +702,12 @@ canvas {
 #actions .row.head .detail {
   color: var(--ink-70);
 }
-#actions .row.head:before {
+#actions .row.head::before {
   content: "";
   position: absolute;
-  left: -14px;
-  top: 8px;
-  width: 4px;
-  height: 1px;
-  background: var(--ink-70);
+  left: calc(-1 * var(--sp-1));
+  top: 0;
+  width: 1px;
+  height: var(--lh-small);
+  background: var(--ink-100);
 }

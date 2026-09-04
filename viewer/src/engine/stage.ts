@@ -29,13 +29,16 @@ import { Overlay, type BoxItem } from "./overlay";
 import { Minimap } from "./minimap";
 import { centre } from "../attribution";
 import { measure } from "../measure";
+import { drift } from "../drift";
 
 const SET = "garage"; // the one set the viewer opens
 const CLICK_MS = 250;
 const GHOST_OPACITY = 0.12;
+const STANDARD_GHOST_OPACITY = 0.35; // the standard's ghost of a drifted thing, where it belongs
 const GHOST_FOCUS_OPACITY = 0.4; // tracing one object draws far less, so its past states can be bolder
 const UNFOCUSED_DIM = 0.45;
-const DIFF_CONTEXT_DIM = 0.28;
+const DIM_DELAY_MS = 200; // the dim on selection starts after the documentation rail has begun to rise…
+const DIM_MS = 1000; // …and takes this long, slower than the rail
 const REMOVED_ALPHA = 0.85;
 const LABEL_CHUNK = 262144; // splats labelled per task before yielding to the render loop
 const PICK_STRIDE = 3; // keep every 3rd labelled splat for picking
@@ -62,6 +65,12 @@ export class Stage {
 
   private M: Manifest | null = null;
   layers: (Layer | undefined)[] = [];
+  // the dim on selection: a ramp between 1 and UNFOCUSED_DIM, repainted each frame while it runs
+  private dimFrom = 1;
+  private dimTo = 1;
+  private dimT0 = 0;
+  private dimFocus = 0; // the label kept bright while the dim fades back out after a deselect
+  private dimRunning = false; // true until a frame has painted the ramp's end value
   private bounds: THREE.Box3 | null = null; // the room, shrunk by the margin: the camera and its target stay inside
   private readonly floorRay = new THREE.Raycaster();
   private readonly floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // y = 0: where a proposal puts things down
@@ -110,7 +119,8 @@ export class Stage {
     this.gestures = new Gestures(this.camera, this.controls);
     this.overlay = new Overlay(el);
     this.overlay.resize(el.clientWidth, el.clientHeight);
-    this.minimap = new Minimap(el.parentElement ?? el); // beside the stage, not inside it: it sits on the left rail, above it
+    // the map is a section of the scene rail; the rail leaves it a slot. Without one (tests, other hosts) it sits beside the stage.
+    this.minimap = new Minimap(document.getElementById("map-slot") ?? el.parentElement ?? el);
 
     useStore.setState({ liveCamera: () => this.gestures.snapshot() });
     this.controls.addEventListener("change", this.onControlsChange);
@@ -145,7 +155,7 @@ export class Stage {
         }
       }),
       useStore.subscribe((s, prev) => {
-        if (s.proposal !== prev.proposal) this.applyMode(s);
+        if (s.proposal !== prev.proposal || s.ghosts !== prev.ghosts || s.standard !== prev.standard) this.applyMode(s);
       }),
     );
     this.raf = requestAnimationFrame(this.loop);
@@ -267,6 +277,13 @@ export class Stage {
     }
   }
 
+  /** Where the dim ramp is right now, eased. */
+  private dimNow(): number {
+    const u = Math.min(1, Math.max(0, performance.now() - this.dimT0 - DIM_DELAY_MS) / DIM_MS);
+    const e = 1 - Math.pow(1 - u, 3);
+    return this.dimFrom + (this.dimTo - this.dimFrom) * e;
+  }
+
   /** Keep the camera and what it orbits inside the room. Orbit re-derives its spherical state from the position, so a clamp holds. */
   private clampToRoom() {
     const b = this.bounds;
@@ -299,6 +316,16 @@ export class Stage {
     const nObj = M.objects.length;
     // emphasis is selection only: hovering never changes what the room looks like
     const sel = s.selected === null ? -1 : s.selected + 1;
+    const wanted = sel > 0 || s.mode.kind === "diff" ? UNFOCUSED_DIM : 1; // one dim, whichever asks for it
+    if (wanted !== this.dimTo) {
+      this.dimFrom = this.dimNow();
+      this.dimTo = wanted;
+      this.dimT0 = performance.now();
+      this.dimRunning = true;
+      if (sel > 0) this.dimFocus = sel;
+    }
+    const dim = this.dimNow();
+    const focus = sel > 0 ? sel : this.dimFocus;
     for (const L of this.layers) {
       if (!L) continue;
       L.mesh.visible = false;
@@ -316,7 +343,7 @@ export class Stage {
       const sa: Style = makeStyle(nObj);
       for (let o = 0; o <= nObj; o++) {
         if (added.has(o - 1)) setColor(sb, o, ADD, 1);
-        else setDim(sb, o, DIFF_CONTEXT_DIM);
+        else setDim(sb, o, dim); // the same ramp as a selection's dim, so entering a diff fades the same way
         if (removed.has(o - 1)) setColor(sa, o, REM, REMOVED_ALPHA);
         else setHidden(sa, o);
       }
@@ -359,8 +386,20 @@ export class Stage {
         L.mesh.visible = true;
         setOpacity(L.mesh, 1);
         const st = makeStyle(nObj);
-        if (sel > 0) for (let o = 0; o <= nObj; o++) if (o !== sel) setDim(st, o, UNFOCUSED_DIM);
+        if (dim < 1) for (let o = 0; o <= nObj; o++) if (o !== focus) setDim(st, o, dim);
         paint(L, st);
+      }
+      // the standard's ghosts: a drifted thing where the standard put it, drawn from the standard's own capture
+      if (s.ghosts && s.standard !== null && s.head !== s.standard && s.mode.kind === "normal") {
+        for (const l of drift(M.objects, s.standard, s.head).lines) {
+          if (l.k === "extra") continue;
+          const part = this.part(s.standard, l.stdId);
+          if (!part || !part.mesh.parent) continue;
+          part.mesh.position.set(0, 0, 0);
+          part.mesh.visible = true;
+          setOpacity(part.mesh, STANDARD_GHOST_OPACITY);
+          paint(part, makeStyle(nObj));
+        }
       }
       // a proposal: the base commit as it is, plus each placed thing's own splats carried to where it was put
       if (s.mode.kind === "proposal" && s.proposal) {
@@ -523,6 +562,38 @@ export class Stage {
       if (!ob.present.includes(s.head)) continue;
       push(ob.id, s.head, tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
     }
+    if (s.ghosts && s.standard !== null && s.head !== s.standard) {
+      // the drift: each drifted thing tied to its ghost at the standard's place; what is missing shown as a ghost alone
+      const byId = new Map(items.map((it) => [it.id, it]));
+      const yOf = (id: number) => (M.objects[id].bbox[0][1] + M.objects[id].bbox[1][1]) / 2;
+      for (const l of drift(M.objects, s.standard, s.head).lines) {
+        if (l.k === "extra") {
+          const it = byId.get(l.id);
+          if (it) {
+            it.tone = "rem";
+            it.label = `${M.objects[l.id].name} · not in standard`;
+          }
+          continue;
+        }
+        const name = M.objects[l.stdId].name;
+        items.push({
+          id: l.stdId,
+          box: this.boxes[l.stdId],
+          pts: this.layers[s.standard]?.pts[l.stdId + 1],
+          label: l.k === "off" ? `${name} · standard` : `${name} · standard, missing`,
+          tone: "ghost",
+          emphasis: false,
+          pickable: false,
+        });
+        if (l.k === "off") {
+          const it = byId.get(l.id);
+          if (it) {
+            it.link = new THREE.Vector3(l.from.x, yOf(l.stdId), l.from.z);
+            it.linkLabel = `${l.metres.toFixed(1)} m`;
+          }
+        }
+      }
+    }
     if (s.mode.kind === "proposal" && s.proposal) {
       // what the proposal has put down: dashed, shifted to where it stands, tagged with how far off it is
       const p = s.proposal;
@@ -552,6 +623,12 @@ export class Stage {
     this.lastTick = performance.now();
     if (this.paused) return;
     const tweening = this.stepTween();
+    if (this.dimRunning) {
+      // step the dim ramp; the frame that paints its end value, however late it comes, is the last
+      if (performance.now() - this.dimT0 >= DIM_DELAY_MS + DIM_MS) this.dimRunning = false;
+      this.applyMode(useStore.getState());
+      this.touch();
+    }
     const moved = this.controls.update();
     this.clampToRoom();
     if (tweening || moved) this.touch();

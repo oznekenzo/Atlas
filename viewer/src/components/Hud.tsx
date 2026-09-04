@@ -23,6 +23,7 @@ export function Hud() {
   const traced = mode.kind === "onion" && selected !== null ? { name: M.objects[selected].name, ...identityOf(M.objects, selected) } : null;
   return (
     <div id="tl" className="state">
+      <div className="k head">state</div>
       <div className="h">
         {diff ? (
           <>

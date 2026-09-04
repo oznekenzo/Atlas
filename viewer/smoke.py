@@ -16,7 +16,7 @@ from playwright.async_api import async_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:4173"
 ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--no-sandbox"]
-N = 5  # garage commits
+N = 4  # garage commits
 
 
 FAILURES = []
@@ -60,6 +60,29 @@ async def main():
         await pg.wait_for_function(f"window.__patina.loaded() === {N}", timeout=300000)
         print(f"all {N} commits in {time.time() - t0:.1f}s; timings {json.dumps(await ev('window.__patina.timings'))}")
         check(await ev("window.__patina.S.status") == "ready", "status ready")
+
+        # --- the standard: c2 is tagged; c3 drifts from it; G shows the standard's ghosts ----------------------
+        check(await ev("window.__patina.S.standard") == 2, "the set's standard is c2")
+        await ev("window.__patina.checkout(3)")
+        await pg.wait_for_timeout(300)
+        docs = await ev("document.getElementById('docs').innerText")
+        check("from standard" in docs and "mean" in docs, f"drift report at c3: {docs.replace(chr(10), ' | ')[:120]}")
+        # toggled on and off inside one evaluate: the ghosts add five meshes, which a software renderer pays for per frame
+        g = await ev(
+            """(async () => { const P = window.__patina; P.S.toggleGhosts(); const on = P.S.ghosts;
+                 const parts = [...P.engine.layers[2].parts.values()]; await Promise.all(parts.map((p) => p.mesh.initialized));
+                 const shown = parts.filter((p) => p.mesh.visible && p.mesh.parent).length;
+                 const items = P.engine.boxItems(P.S); const ghosts = items.filter((i) => i.tone === 'ghost' && i.pickable === false).length;
+                 const links = items.filter((i) => i.link).length; P.S.toggleGhosts();
+                 return { on, parts: parts.length, shown, ghosts, links, off: !P.S.ghosts, hidden: parts.every((p) => !p.mesh.visible) }; })()"""
+        )
+        check(g["on"] and g["parts"] >= 2 and g["shown"] == g["parts"], f"ghosts on: {g['shown']} of the standard's parts shown")
+        check(g["ghosts"] >= 2 and g["links"] >= 1, f"{g['ghosts']} ghost brackets (not hit boxes), {g['links']} tied to a drifted thing")
+        check(g["off"] and g["hidden"], "ghosts off: parts hidden")
+        out = ""
+        for c in ["git tag", "git status"]:
+            out += "\n".join(l["t"] for l in await ev(f"window.__patina.git({c!r})")) + "\n"
+        check("standard → c2" in out and "drift from standard" in out, "git tag lists the standard; git status reports drift")
         check(await ev("document.getElementById('intro').classList.contains('gone')"), "title card gone")
 
         # --- the proposal branch: things from a target put down on the base's floor, measured by a commit -------

@@ -56,8 +56,12 @@ export type State = {
   proposal: Proposal | null; // the one branch; survives leaving it, so git checkout <name> returns to it
   placing: number | null; // the thing in hand, following the pointer along the floor
   intro: boolean; // the title card is up; the chrome waits until the user begins
+  standard: number | null; // the commit tagged as the approved layout; drift is measured from it
+  ghosts: boolean; // show the standard's ghosts in a drifted scene
 
   begin: () => void;
+  setStandard: (i: number | null) => void;
+  toggleGhosts: () => void;
   branch: (name: string, target: number) => boolean;
   enterBranch: () => boolean;
   beginPlace: (id: number) => void;
@@ -133,18 +137,33 @@ export const useStore = create<State>((set, get) => ({
   proposal: null,
   placing: null,
   intro: !new URLSearchParams(location.search).has("nointro"),
+  standard: null,
+  ghosts: false,
 
   // time runs forward: the set opens on its first commit, not on HEAD
   setManifest: (m, refScale) =>
     set({
       manifest: m,
       refScale,
+      standard: m.standard,
       head: 0,
       loaded: m.commits.map(() => false),
       loadErrors: {},
       splatCount: m.commits.map(() => 0),
     }),
   setStatus: (status) => set({ status }),
+  setStandard: (i) => {
+    const st = get();
+    if (i === st.standard) return;
+    if (i === null) st.log("untag", "standard");
+    else st.log("tag", `standard  c${i}  ${st.manifest?.commits[i].hash ?? ""}`);
+    set({ standard: i });
+  },
+  toggleGhosts: () => {
+    const st = get();
+    st.log("ghosts", st.ghosts ? "off" : "on");
+    set({ ghosts: !st.ghosts });
+  },
   begin: () => {
     const st = get();
     const c = st.manifest?.commits[0];

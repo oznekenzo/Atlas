@@ -5,6 +5,7 @@
 import type { Commit, Obj } from "./types";
 import { identityOf } from "./identity";
 import { diffLines } from "./attribution";
+import type { DriftLine } from "./drift";
 import { dateOf } from "./time";
 
 export type ReflogEntry = { id: number; verb: string; detail: string };
@@ -23,6 +24,9 @@ export type Actions = {
   enterBranch: () => boolean;
   proposal: () => { name: string; base: number; target: number; commits: number } | null;
   onBranch: () => boolean;
+  standard: () => number | null;
+  setStandard: (i: number | null) => void;
+  drift: () => { lines: DriftLine[]; off: number; meanM: number | null } | null;
   commit: (
     msg: string,
   ) => { lines: { k: "off" | "missing" | "extra"; t: string }[]; placed: number; ofN: number; meanM: number | null; done: boolean } | null;
@@ -38,6 +42,11 @@ export function resolveRef(ref: string, A: Actions): number {
   const head = A.head();
   let m: RegExpMatchArray | null;
   if (ref === "HEAD") return head;
+  if (ref === "standard") {
+    const st = A.standard();
+    if (st === null) throw new Error("fatal: no standard is tagged (git tag standard <ref>)");
+    return st;
+  }
   if ((m = ref.match(/^HEAD~(\d+)$/))) {
     const i = head - parseInt(m[1], 10);
     if (i < 0) throw new Error(`fatal: ambiguous argument '${ref}': unknown revision (only ${head} commit${head === 1 ? "" : "s"} before HEAD)`);
@@ -173,6 +182,25 @@ export function run(cmdline: string, A: Actions): Line[] {
         if (i > 0) out.push(...changeLines(A.objects(), i - 1, i));
         break;
       }
+      case "tag": {
+        if (rest.length === 0) {
+          const st = A.standard();
+          if (st === null) out.push({ k: "d", t: "(no tags)" });
+          else out.push({ k: "o", t: `standard → c${st} ${cs[st].hash}  ${cs[st].message}` });
+          break;
+        }
+        if (rest[0] === "-d") {
+          if (rest[1] !== "standard" || A.standard() === null) throw new Error(`error: tag '${rest[1] ?? ""}' not found.`);
+          A.setStandard(null);
+          out.push({ k: "o", t: "Deleted tag 'standard'" });
+          break;
+        }
+        if (rest[0] !== "standard") throw new Error("usage: git tag standard <ref> · git tag · git tag -d standard");
+        const i = resolveRef(rest[1] ?? "HEAD", A);
+        A.setStandard(i);
+        out.push({ k: "o", t: `standard → c${i} ${cs[i].hash}  ${cs[i].message}` });
+        break;
+      }
       case "branch": {
         const p = A.proposal();
         out.push({ k: "o", t: `${p && A.onBranch() ? "  " : "* "}main` });
@@ -199,6 +227,17 @@ export function run(cmdline: string, A: Actions): Line[] {
           const p = A.proposal()!;
           out.push({ k: "o", t: `On branch ${p.name} — measured against c${p.target} ${cs[p.target].hash}` });
           for (const l of A.status()) out.push({ k: l.includes("missing") ? "e" : "o", t: `  ${l}` });
+          break;
+        }
+        const d = A.drift();
+        if (d) {
+          const st = A.standard()!;
+          if (st === A.head()) out.push({ k: "o", t: `On commit c${st} — this is the standard` });
+          else {
+            out.push({ k: "o", t: `On commit c${A.head()} — drift from standard c${st} ${cs[st].hash}` });
+            for (const l of d.lines) out.push({ k: l.k === "missing" ? "e" : l.k === "extra" ? "d" : "o", t: `  ${l.t}` });
+            out.push({ k: "d", t: `  ${d.off} off standard${d.meanM !== null ? ` · mean ${d.meanM.toFixed(1)} m` : ""}` });
+          }
           break;
         }
         out.push({ k: "o", t: `On commit c${A.head()} — “${cs[A.head()].message}”` });
@@ -259,8 +298,8 @@ export function run(cmdline: string, A: Actions): Line[] {
       case undefined:
         out.push(
           { k: "o", t: "log · checkout <ref> · diff [a] [b] · show <ref> · status · blame <object> · bisect <object> · reflog" },
-          { k: "o", t: "checkout -b <branch> [<target>] · commit -m <msg> · branch · push" },
-          { k: "d", t: `refs: c0…c${cs.length - 1}, HEAD, HEAD~n, a hash prefix, or HEAD@{n} from the reflog` },
+          { k: "o", t: "checkout -b <branch> [<target>] · commit -m <msg> · branch · push · tag standard <ref>" },
+          { k: "d", t: `refs: c0…c${cs.length - 1}, HEAD, HEAD~n, standard, a hash prefix, or HEAD@{n} from the reflog` },
         );
         break;
       default:

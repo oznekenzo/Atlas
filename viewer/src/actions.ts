@@ -1,6 +1,7 @@
 import { isNavigational, useStore } from "./store";
 import type { Actions } from "./git";
 import { changeSummary } from "./identity";
+import { drift } from "./drift";
 
 /** The git terminal's view of the app: thin adapters over the store. */
 export const makeActions = (): Actions => {
@@ -26,6 +27,14 @@ export const makeActions = (): Actions => {
       return p ? { name: p.name, base: p.base, target: p.target, commits: p.commits.length } : null;
     },
     onBranch: () => s().mode.kind === "proposal" && s().proposal !== null,
+    standard: () => s().standard,
+    setStandard: (i) => s().setStandard(i),
+    drift: () => {
+      const st = s();
+      if (st.standard === null || st.mode.kind === "proposal") return null;
+      const d = drift(manifest().objects, st.standard, st.head);
+      return { lines: d.lines, off: d.off, meanM: d.meanM };
+    },
     commit: (msg) => {
       const r = s().commitProposal(msg);
       return r && { lines: r.lines.map((l) => ({ k: l.k, t: l.t })), placed: r.placed, ofN: r.ofN, meanM: r.meanM, done: r.done };

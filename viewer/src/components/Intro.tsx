@@ -29,12 +29,12 @@ export function Intro() {
           )}
           {!done && <div className="row cursor">▍</div>}
         </div>
+        {M && loaded[0] && (
+          <div className="begin k" onClick={begin}>
+            →&nbsp;&nbsp;begin
+          </div>
+        )}
       </div>
-      {M && loaded[0] && (
-        <div className="begin k" onClick={begin}>
-          →&nbsp;&nbsp;begin
-        </div>
-      )}
     </div>
   );
 }

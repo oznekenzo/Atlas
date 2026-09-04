@@ -4,33 +4,27 @@
   "commits": [
     {
       "file": "source/c0.ply",
-      "message": "Garage, empty.",
-      "captured": "2026-05-03T12:00:00",
+      "message": "Empty",
+      "captured": "2026-05-01T12:00:00",
       "source_export": "teleport-Garage Empty HD-njfhtj1nmfsa-mp631f4sy9ih.ply"
     },
     {
       "file": "source/c1.ply",
-      "message": "Plants in.",
-      "captured": "2026-06-03T12:00:00",
+      "message": "Started",
+      "captured": "2026-06-01T12:00:00",
       "source_export": "teleport-Garage Plants HD-1dnj5bnyf7p5-ffk8t2ixw11x.ply"
     },
     {
       "file": "source/c2.ply",
-      "message": "Plants and things.",
-      "captured": "2026-07-03T12:00:00",
+      "message": "Standard",
+      "captured": "2026-07-01T12:00:00",
       "source_export": "teleport-Garage Plants & Things HD-81sw16n4cb92-d7o56dti3jp1.ply"
     },
     {
       "file": "source/c3.ply",
-      "message": "Plants and things, rearranged.",
-      "captured": "2026-08-03T12:00:00",
+      "message": "Drifted",
+      "captured": "2026-08-01T12:00:00",
       "source_export": "teleport-Garage Plants & Things Rearranged HD-lcwv33yuvdkx-26u2cw45n21f.ply"
-    },
-    {
-      "file": "source/c4.ply",
-      "message": "Chair.",
-      "captured": "2026-09-03T12:00:00",
-      "source_export": "teleport-Garage Chair HD-izy6ogvk22cg-sz57uxvthyth.ply"
     }
   ],
   "diff": {
@@ -55,7 +49,7 @@
     5
   ],
   "exclude_note": "diff ids of detections that are artefacts. 5: a blob at ceiling height, not an object",
-  "captured_note": "the five captures were made on one morning, 3 September 2026; they are dated a month apart so the history reads as one",
+  "captured_note": "four captures made on one morning, 3 September 2026; dated the first of consecutive months so the history reads as one",
   "diff_note": "min_voxels 50: the small floor sculpture is ~60 voxels. ceiling_band 10 (50 cm): the door tracks and opener hang that far below the ceiling.",
   "objects": {
     "0": {
@@ -93,15 +87,9 @@
     "9": {
       "name": "Fan",
       "doc": "Present in c3, moved from its c2 position."
-    },
-    "10": {
-      "name": "Chair",
-      "doc": "Present in c4."
     }
   },
   "objects_note": "diff ids. name, and doc: one factual line for the object's card",
-  "removed": {
-    "2": 4
-  },
-  "removed_note": "diff id \u2192 commit it is gone from. 2: the knot is not in c4; the tracker kept it alive under the chair"
+  "standard": 2,
+  "standard_note": "the commit that is the approved layout; every other scene's drift is measured against it"
 }

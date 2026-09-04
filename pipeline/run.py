@@ -17,7 +17,8 @@ dataset.json:
             "label_dilate_voxels": 2, "floor_band_voxels": 2, "floor_frac": 0.8, "ceiling_band_voxels": 6 },
   "bake": { "prune_opacity": 0.05, "sh": 0 },
   "objects": { "6": "Floor lamp" },           # optional names by object id (the diff's ids), applied at publish
-  "exclude": [8, 12] }                        # optional: detections that are artefacts, dropped at publish
+  "exclude": [8, 12],                         # optional: detections that are artefacts, dropped at publish
+  "standard": 2 }                             # optional: the approved layout; the viewer measures drift from it
 All blocks but calibration_m and commits are optional; see dataset.py for the defaults.
 bake = aligned plys + .spz + publish; `--only publish` rewrites labels + commits.json alone (names, exclusions).
 """

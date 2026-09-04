@@ -45,6 +45,7 @@ export function ActionLog() {
   const order = new Map(actions.map((a, i) => [a.id, i]));
   return (
     <div id="actions" aria-live="polite">
+      <div className="k head">history</div>
       {rows.map((r) => {
         const i = r.exiting ? KEEP : (order.get(r.id) ?? KEEP);
         const y = r.fresh ? -ROW * 0.6 : i * ROW;

@@ -44,6 +44,10 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
     shift-click diffs against HEAD), the minimap, the reflog. Right column, the documentation: the diff's lines,
     the selected object's card, a proposal's tray and measurement — only what the mode calls for. Bottom centre:
     the controls. The room takes everything between.
+    A commit tagged as the standard (dataset.json "standard", or git tag standard <ref>) is the approved layout:
+    every other scene's right rail reports its drift from it — what moved and how far, what is missing, what is
+    not in the standard — and G shows the standard's ghosts in the room, each drifted thing drawn where it belongs
+    from the standard's own capture, tied to where it stands by a line with the distance.
 
 ## Run
     pip install -r pipeline/requirements.txt

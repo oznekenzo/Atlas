@@ -6,7 +6,7 @@ import { Hud } from "./components/Hud";
 import { Legend } from "./components/Legend";
 import { Card } from "./components/Card";
 import { Terminal } from "./components/Terminal";
-import { Commits, Controls } from "./components/Nav";
+import { Commits, Controls, Mark } from "./components/Nav";
 import { ActionLog } from "./components/ActionLog";
 import { Intro } from "./components/Intro";
 import { Tray } from "./components/Tray";
@@ -50,6 +50,10 @@ function useKeys() {
         case "O":
           s.toggleOnion();
           break;
+        case "g":
+        case "G":
+          if (s.standard !== null) s.toggleGhosts();
+          break;
         case "Escape":
           if (s.placing !== null) s.unplace(s.placing);
           else if (s.selected !== null) s.select(null);
@@ -77,7 +81,14 @@ function Status() {
 
 export default function App() {
   useKeys();
-  const { moving, intro, lit } = useStore(useShallow((s) => ({ moving: s.moving, intro: s.intro, lit: s.loaded.some(Boolean) })));
+  const { moving, intro, lit, docs } = useStore(
+    useShallow((s) => ({
+      moving: s.moving,
+      intro: s.intro,
+      lit: s.loaded.some(Boolean),
+      docs: s.selected !== null || s.mode.kind !== "normal" || s.standard !== null,
+    })),
+  );
   const cls = [moving ? "moving" : "", intro ? "intro" : "", lit ? "lit" : ""].join(" ").trim();
   return (
     <div className={cls}>
@@ -86,19 +97,18 @@ export default function App() {
       <Intro />
       {/* left: the scene — who, where in time, the commits; the minimap and the reflog sit below, fixed */}
       <div id="scene">
-        <div id="mark" className="t-mark">
-          STATE ATLAS
-        </div>
+        <Mark />
         <Hud />
         <Commits />
+        <div id="map-slot" />
+        <ActionLog />
       </div>
       {/* right: the documentation — the diff's, the object's, a proposal's; only what the mode calls for */}
-      <div id="docs">
+      <div id="docs" className={docs ? "on" : ""}>
         <Tray />
         <Legend />
         <Card />
       </div>
-      <ActionLog />
       <Terminal />
       <Controls />
     </div>

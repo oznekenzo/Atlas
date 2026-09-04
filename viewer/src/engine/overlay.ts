@@ -16,6 +16,11 @@ export type BoxItem = {
   emphasis: boolean;
   /** Where a proposal has carried the object to, as an offset from where it was captured. */
   shift?: THREE.Vector3;
+  /** A point this item is tied to on screen, with a label at the midpoint: a drifted thing to its standard place. */
+  link?: THREE.Vector3;
+  linkLabel?: string;
+  /** False for the standard's ghosts: seen, never clicked. */
+  pickable?: boolean;
 };
 const MIN_PTS = 3; // fewer projected points than this is not an object on screen
 const MAX_PTS = 4000; // points projected per object per frame; a big plant carries 100k, its outline needs far fewer
@@ -75,6 +80,7 @@ export class Overlay {
   hitTest(x: number, y: number): number | null {
     let best: { id: number; depth: number } | null = null;
     for (const { r, item, depth } of this.placed) {
+      if (item.pickable === false) continue;
       if (x < r.x0 || x > r.x1 || y < r.y0 || y > r.y1) continue;
       if (!best || depth < best.depth) best = { id: item.id, depth };
     }
@@ -107,6 +113,7 @@ export class Overlay {
     }
     this.placed = placed;
     for (const { r, item } of placed) this.brackets(r, item);
+    for (const { r, item } of placed) if (item.link) this.linkLine(camera, r, item);
 
     const taken: Rect[] = this.reserved();
     const order = [...placed].sort(
@@ -232,6 +239,38 @@ export class Overlay {
     }
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+
+  /** A dashed line from the bracket's centre to a world point, with a label at the midpoint. */
+  private linkLine(camera: THREE.PerspectiveCamera, r: Rect, item: BoxItem) {
+    const p = item.link!;
+    this.view.copy(p).applyMatrix4(camera.matrixWorldInverse);
+    if (this.view.z > -camera.near) return; // behind the camera: no line
+    this.corner.copy(p).project(camera);
+    const x1 = ((this.corner.x + 1) / 2) * this.w;
+    const y1 = ((1 - this.corner.y) / 2) * this.h;
+    const x0 = (r.x0 + r.x1) / 2;
+    const y0 = (r.y0 + r.y1) / 2;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.setLineDash([3, 4]);
+    ctx.strokeStyle = rgba("ghost", 0.6);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (item.linkLabel) {
+      const w = ctx.measureText(item.linkLabel.toUpperCase()).width + PAD * 2;
+      const mx = (x0 + x1) / 2 - w / 2;
+      const my = (y0 + y1) / 2 - LABEL_H / 2;
+      ctx.fillStyle = "rgba(8, 9, 11, 0.78)";
+      ctx.fillRect(mx, my, w, LABEL_H);
+      ctx.fillStyle = rgba("ghost", 0.88);
+      ctx.fillText(item.linkLabel.toUpperCase(), mx + PAD, my + LABEL_H / 2 + 0.5);
+    }
+    ctx.restore();
   }
 
   /** Where a tag would sit for this box: above the top-left corner, flipped below at the top edge. */

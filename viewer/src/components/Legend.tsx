@@ -4,10 +4,14 @@ import { useStore } from "../store";
 import { changeSummary } from "../identity";
 import { diffLines } from "../attribution";
 import { measure } from "../measure";
+import { drift } from "../drift";
 
 /** Diff summary, derived from the manifest — the engine paints, it does not report. */
 export function Legend() {
-  const { M, mode, proposal } = useStore(useShallow((s) => ({ M: s.manifest, mode: s.mode, proposal: s.proposal })));
+  const { M, mode, proposal, standard, head } = useStore(
+    useShallow((s) => ({ M: s.manifest, mode: s.mode, proposal: s.proposal, standard: s.standard, head: s.head })),
+  );
+  const d = useMemo(() => (M && standard !== null && mode.kind === "normal" ? drift(M.objects, standard, head) : null), [M, standard, mode, head]);
   // measured here, not in the selector: a fresh object per read would never compare equal and React would spin
   const report = useMemo(
     () =>
@@ -38,6 +42,38 @@ export function Legend() {
             {report.done ? " · restored" : ""}
           </span>
         </div>
+      </div>
+    );
+  }
+  if (M && standard !== null && mode.kind === "normal" && d) {
+    const t = M.commits[standard];
+    return (
+      <div id="legend">
+        <div className="k head">
+          drift from standard · c{standard} {t.hash}
+        </div>
+        {d.isStandard ? (
+          <div className="why">This is the standard.</div>
+        ) : (
+          <>
+            <div className="lines">
+              {d.lines.map((l) => (
+                <div key={l.t} className={`l ${l.k}`}>
+                  {l.t}
+                </div>
+              ))}
+              {d.lines.length === 0 && <div className="l">Nothing has drifted.</div>}
+            </div>
+            <div className="stat">
+              <span>
+                {d.off} off standard
+                {d.missing ? ` · ${d.missing} missing` : ""}
+                {d.extra ? ` · ${d.extra} not in standard` : ""}
+                {d.meanM !== null ? ` · mean ${d.meanM.toFixed(1)} m` : ""}
+              </span>
+            </div>
+          </>
+        )}
       </div>
     );
   }

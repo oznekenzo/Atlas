@@ -25,4 +25,6 @@ export type Manifest = {
   room: [number[], number[]] | null;
   world_from_ref: number[][];
   calibration_m: number;
+  /** The commit marked as the approved layout, or null when the set has none. */
+  standard: number | null;
 };
