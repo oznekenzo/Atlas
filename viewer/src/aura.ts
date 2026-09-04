@@ -116,6 +116,8 @@ export function rootOf(M: Manifest, id: number): number {
   return o ? o.id : id;
 }
 
+const MISSES_SHOWN = 4;
+
 export type Line = { k: "move" | "add" | "rem" | "on" | "off" | "miss" | "note"; delta: number; t: string };
 
 const fmtM = (m: number) => `${m.toFixed(1)} m`;
@@ -135,7 +137,11 @@ export function attribution(M: Manifest, PA: Placement[], PB: Placement[]): { au
   const byRoot = (P: Placement[]) => new Map(P.map((p) => [rootOf(M, p.id), p]));
   const ra = byRoot(PA);
   const rb = byRoot(PB);
-  const lines: Line[] = [];
+  const changes: Line[] = [];
+  const reactions: Line[] = [];
+  const notes: Line[] = [];
+  const misses: { gap: number; line: Line }[] = [];
+  const lines = changes;
   for (const [root, pb] of rb) {
     const pa = ra.get(root);
     if (!pa) lines.push({ k: "add", delta: 0, t: `${name(pb.id)} arrives` });
@@ -149,7 +155,7 @@ export function attribution(M: Manifest, PA: Placement[], PB: Placement[]): { au
   }
   for (const [root, pa] of ra) if (!rb.has(root)) lines.push({ k: "rem", delta: 0, t: `${name(pa.id)} leaves` });
   if (A.wind !== B.wind)
-    lines.push({ k: "note", delta: 0, t: B.wind ? "wind: every reach doubles, except the knot's" : "wind gone: reaches are what they were" });
+    notes.push({ k: "note", delta: 0, t: B.wind ? "wind: every reach doubles, except the knot's" : "wind gone: reaches are what they were" });
 
   const key = (r: Reaction) => `${rootOf(M, r.plant)}|${r.rule}|${r.with.map((w) => rootOf(M, w)).join(",")}`;
   const ka = new Map(A.reactions.map((r) => [key(r), r]));
@@ -161,19 +167,52 @@ export function attribution(M: Manifest, PA: Placement[], PB: Placement[]): { au
   };
   for (const [k, rb2] of kb) {
     const ra2 = ka.get(k);
-    if (!ra2) lines.push({ k: "on", delta: rb2.value, t: `${sign(rb2.value)}  ${describe(rb2)}` });
+    if (!ra2) reactions.push({ k: "on", delta: rb2.value, t: `${sign(rb2.value)}  ${describe(rb2)}` });
     else if (Math.abs(rb2.value - ra2.value) > 0.01)
-      lines.push({ k: "on", delta: rb2.value - ra2.value, t: `${sign(rb2.value - ra2.value)}  ${describe(rb2)}` });
+      reactions.push({ k: "on", delta: rb2.value - ra2.value, t: `${sign(rb2.value - ra2.value)}  ${describe(rb2)}` });
   }
-  for (const [k, ra2] of ka) if (!kb.has(k)) lines.push({ k: "off", delta: -ra2.value, t: `${sign(-ra2.value)}  ${describe(ra2)} · gone` });
-  if (B.hasThrone && !B.reactions.some((r) => r.throne === 1)) lines.push({ k: "note", delta: 0, t: "throne: nothing within reach to keep" });
+  for (const [k, ra2] of ka) if (!kb.has(k)) reactions.push({ k: "off", delta: -ra2.value, t: `${sign(-ra2.value)}  ${describe(ra2)} · gone` });
+  reactions.sort((x, y) => Math.abs(y.delta) - Math.abs(x.delta));
+  if (B.hasThrone && !B.reactions.some((r) => r.throne === 1)) notes.push({ k: "note", delta: 0, t: "throne: nothing within reach to keep" });
   for (const m of B.missed) {
     const w = m.with.map(name).join(" + ");
-    lines.push({
-      k: "miss",
-      delta: 0,
-      t: `${m.rule} on ${name(m.plant)} (${w}): out of reach by ${fmtM(m.dist - m.reach)} · ${fmtM(m.dist)}, reach ${fmtM(m.reach)}`,
+    const gap = m.dist - m.reach;
+    misses.push({
+      gap,
+      line: {
+        k: "miss",
+        delta: 0,
+        t: `${m.rule} on ${name(m.plant)} (${w}): out of reach by ${fmtM(gap)} · ${fmtM(m.dist)}, reach ${fmtM(m.reach)}`,
+      },
     });
   }
-  return { auraA: A.aura, auraB: B.aura, lines };
+  // what changed in value first, then what moved, then the notes, then the nearest misses: a legend, not a dump
+  misses.sort((x, y) => x.gap - y.gap);
+  return { auraA: A.aura, auraB: B.aura, lines: [...reactions, ...changes, ...notes, ...misses.slice(0, MISSES_SHOWN).map((m) => m.line)] };
+}
+
+/** A plant's aura in a scene, or for a thing the aura of the reactions it takes part in. */
+export function auraOf(sc: Score, id: number): number {
+  return r1(sc.reactions.filter((r) => r.plant === id || r.with.includes(id)).reduce((a, r) => a + r.value, 0));
+}
+
+/** The lines an object's card shows for one scene: its reactions, then for a plant what it nearly had. */
+export function objectLines(M: Manifest, sc: Score, id: number): Line[] {
+  const name = (i: number) => M.objects[i].name;
+  const isPlant = M.objects[id].kind === "plant";
+  const out: Line[] = [];
+  for (const r of sc.reactions) {
+    if (r.plant !== id && !r.with.includes(id)) continue;
+    const who = isPlant ? r.with.map(name).join(" + ") : name(r.plant);
+    const where = r.dist !== null ? ` · ${fmtM(r.dist)}` : "";
+    out.push({ k: "on", delta: r.value, t: `${sign(r.value)}  ${r.rule}${who ? ` · ${who}` : ""}${where}${factors(r)}` });
+  }
+  if (isPlant)
+    for (const m of sc.missed
+      .filter((m) => m.plant === id)
+      .sort((x, y) => x.dist - x.reach - (y.dist - y.reach))
+      .slice(0, 2)) {
+      out.push({ k: "miss", delta: 0, t: `${m.rule} · ${m.with.map(name).join(" + ")} · out of reach by ${fmtM(m.dist - m.reach)}` });
+    }
+  return out;
 }

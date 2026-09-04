@@ -13,6 +13,7 @@ import { ADD, REM, buildObjects, makeStyle, paint, setColor, setDim, setHidden, 
 import { Gestures } from "./gestures";
 import { Overlay, type BoxItem } from "./overlay";
 import { Minimap } from "./minimap";
+import { auraOf, placementsOf, score } from "../aura";
 
 const CLICK_MS = 250;
 const GHOST_OPACITY = 0.12;
@@ -434,10 +435,13 @@ export class Stage {
     const M = this.M;
     if (!M) return [];
     const vol = (o: number) => `${M.objects[o].volume_vox_m3.toFixed(2)} m³`;
+    const sc = s.mode.kind === "diff" ? null : score(M, placementsOf(M, s.head));
+    // the tag is the name, a thing's sublabel, and for a plant in a scene its aura: measured values only
     const tag = (o: number) => {
-      const name = M.objects[o].name;
-      const id = String(o).padStart(2, "0");
-      return `${/^object \d+$/i.test(name) ? `obj ${id}` : `${id} ${name}`} · ${vol(o)}`;
+      const ob = M.objects[o];
+      const label = /^object \d+$/i.test(ob.name) ? `obj ${String(o).padStart(2, "0")}` : ob.name;
+      if (ob.kind === "plant") return sc && ob.present.includes(s.head) ? `${label} · ${auraOf(sc, o)}` : label;
+      return ob.sub ? `${label} · ${ob.sub}` : label;
     };
     const items: BoxItem[] = [];
     const push = (o: number, label: string, tone: BoxItem["tone"], emphasis: boolean) => items.push({ box: this.boxes[o], label, tone, emphasis });

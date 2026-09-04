@@ -1,5 +1,6 @@
 import { isNavigational, useStore } from "./store";
 import type { Actions } from "./git";
+import { attribution, placementsOf, sceneAura } from "./aura";
 
 /** The git terminal's view of the app: thin adapters over the store. */
 export const makeActions = (): Actions => {
@@ -18,6 +19,11 @@ export const makeActions = (): Actions => {
     objects: () => manifest().objects,
     commits: () => manifest().commits,
     select: (id) => s().select(id),
+    aura: (i) => sceneAura(manifest(), i),
+    attribution: (a, b) => {
+      const M = manifest();
+      return attribution(M, placementsOf(M, a), placementsOf(M, b));
+    },
     status: () => {
       const { head } = s();
       return manifest().objects.flatMap((o) => [

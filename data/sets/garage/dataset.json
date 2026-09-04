@@ -22,7 +22,7 @@
     },
     {
       "file": "source/c3.ply",
-      "message": "Rearranged. Tall plant toward the door, fan beside it. The others went back inside.",
+      "message": "Rearranged. Monstera toward the door, fan beside it. The others went back inside.",
       "captured": "2026-09-03T11:00:00-07:00",
       "source_export": "teleport-Garage Plants & Things Rearranged HD-lcwv33yuvdkx-26u2cw45n21f.ply"
     },
@@ -61,7 +61,7 @@
   "door_note": "wall the garage door is on, in world axes: the far wall from the default camera. The sun rule counts the door half of the room in full.",
   "objects": {
     "0": {
-      "name": "Tallest plant",
+      "name": "Tall plant",
       "kind": "plant",
       "doc": "Taller than the door. Wants what every plant wants."
     },
@@ -77,9 +77,9 @@
       "doc": "Alone it is a knot. Between leaf and light, touching both, it is gold."
     },
     "3": {
-      "name": "Tall plant",
+      "name": "Monstera",
       "kind": "plant",
-      "doc": "Alone, almost nothing. Near the right thing, aura."
+      "doc": "The crazy-looking one. Alone, almost nothing. Near the right thing, aura."
     },
     "4": {
       "name": "Fan",
@@ -100,9 +100,9 @@
       "doc": "Packed. It was on its way somewhere."
     },
     "8": {
-      "name": "Tall plant",
+      "name": "Monstera",
       "kind": "plant",
-      "doc": "Alone, almost nothing. Near the right thing, aura."
+      "doc": "The crazy-looking one. Alone, almost nothing. Near the right thing, aura."
     },
     "9": {
       "name": "Fan",

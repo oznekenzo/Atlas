@@ -76,7 +76,7 @@ async def main():
         check(await ev(f"window.__patina.diff({N - 2}, {N - 1})"), "diff c4..c5")
         await pg.wait_for_timeout(300)
         leg = await ev("document.getElementById('legend')?.innerText || ''")
-        check("added" in leg and "m³" in leg.lower(), f"legend derived: {leg.replace(chr(10), ' | ')}")
+        check("aura" in leg.lower() and "arrives" in leg, f"legend is the attribution: {leg.replace(chr(10), ' | ')[:120]}")
         check(await ev("!!document.querySelector('#rail .bracket')"), "rail bracket in diff")
         ms_diff = await ev("window.__patina.timings.lastModeMs")
 

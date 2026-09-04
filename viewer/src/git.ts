@@ -3,6 +3,7 @@
  * Pure — takes an Actions adapter, returns lines. No store import, so it is trivially testable.
  */
 import type { Commit, Obj } from "./types";
+import type { Line as AuraLine } from "./aura";
 
 export type ReflogEntry = { id: number; verb: string; detail: string };
 export type Actions = {
@@ -15,6 +16,8 @@ export type Actions = {
   commits: () => Commit[];
   select: (id: number | null) => void;
   status: () => string[];
+  aura: (commit: number) => number;
+  attribution: (a: number, b: number) => { auraA: number; auraB: number; lines: AuraLine[] };
 };
 export type Line = { k: "in" | "o" | "e" | "a" | "d"; t: string };
 
@@ -24,7 +27,9 @@ const stamp = (iso: string) => {
     ? "undated     "
     : d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 };
-const fmt = (c: Commit) => `${c.hash}  ${stamp(c.captured)}   ${c.message}`;
+const fmt = (c: Commit, aura?: number) =>
+  `${c.hash}  ${stamp(c.captured)}  ${aura === undefined ? "" : `aura ${String(aura).padStart(3)}   `}${c.message}`;
+const TERM_KIND: Record<AuraLine["k"], Line["k"]> = { on: "a", off: "e", move: "o", add: "o", rem: "o", note: "d", miss: "d" };
 const pad3 = (n: number) => String(n).padStart(3, "0");
 
 /** Resolve a revision to a commit index. Throws with git's wording on failure. */
@@ -74,7 +79,7 @@ export function run(cmdline: string, A: Actions): Line[] {
   try {
     switch (sub) {
       case "log": {
-        for (const c of [...cs].reverse()) out.push({ k: "o", t: fmt(c) });
+        for (const c of [...cs].reverse()) out.push({ k: "o", t: fmt(c, A.aura(c.index)) });
         break;
       }
       case "reflog": {
@@ -121,15 +126,10 @@ export function run(cmdline: string, A: Actions): Line[] {
           out.push({ k: "e", t: `error: c${lo} or c${hi} is still loading` });
           break;
         }
-        let any = false;
-        for (const o of A.objects()) {
-          const inA = o.present.includes(lo);
-          const inB = o.present.includes(hi);
-          if (inB && !inA) out.push({ k: "a", t: `+ ${o.name}` });
-          if (inA && !inB) out.push({ k: "e", t: `- ${o.name}` });
-          any ||= inA !== inB;
-        }
-        if (!any) out.push({ k: "d", t: "(no object changes)" });
+        const att = A.attribution(lo, hi);
+        out.push({ k: "o", t: `aura ${att.auraA} → ${att.auraB}   “${cs[hi].message}”` });
+        for (const l of att.lines) out.push({ k: TERM_KIND[l.k], t: `  ${l.t}` });
+        if (att.lines.length === 0) out.push({ k: "d", t: "  (no changes)" });
         break;
       }
       case "show": {
@@ -138,7 +138,7 @@ export function run(cmdline: string, A: Actions): Line[] {
           out.push({ k: "e", t: `error: c${i} is still loading` });
           break;
         }
-        out.push({ k: "o", t: fmt(cs[i]) }, { k: "d", t: "" });
+        out.push({ k: "o", t: fmt(cs[i], A.aura(i)) }, { k: "d", t: "" });
         for (const o of A.objects()) {
           if (o.added_in === i && i > 0) out.push({ k: "a", t: `+ ${o.name}` });
           if (o.removed_in === i) out.push({ k: "e", t: `- ${o.name}` });

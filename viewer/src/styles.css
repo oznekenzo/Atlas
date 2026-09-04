@@ -121,21 +121,47 @@ canvas {
 #legend {
   bottom: calc(var(--nav-h) + 26px + var(--map-h, 0px) + 24px);
   right: 46px;
-  text-align: right;
+  width: 480px;
+  text-align: left;
 }
-#legend div {
+#legend .h {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 9px;
-  color: rgba(255, 255, 255, 0.78);
+  align-items: baseline;
+  gap: 14px;
+  color: var(--bright);
+  font-size: 14px;
 }
-#legend i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  display: inline-block;
+#legend .why {
+  margin-top: 7px;
+  color: rgba(255, 255, 255, 0.5);
+}
+#tr .aura span:last-child {
+  color: var(--bright);
+}
+/* attribution lines: the legend and the card share them */
+.lines {
+  margin-top: 12px;
+}
+.lines .l {
+  line-height: 18px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  color: rgba(255, 255, 255, 0.62);
+}
+.lines .l.on {
+  color: var(--add);
+}
+.lines .l.off {
+  color: var(--rem);
+}
+.lines .l.miss,
+.lines .l.note {
+  color: var(--dim);
+}
+#card .doc {
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 18px;
 }
 #card {
   position: fixed;

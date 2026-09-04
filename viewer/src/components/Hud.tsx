@@ -1,5 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
+import { sceneAura } from "../aura";
 
 const when = (iso: string) => {
   const d = new Date(iso);
@@ -59,6 +60,18 @@ export function Hud() {
         </div>
       </div>
       <div id="tr" className="hud">
+        <div className="aura">
+          <span className="k">aura</span>
+          <span>
+            {diff ? (
+              <>
+                <span className="half">{sceneAura(M, diff.a)}</span> → {sceneAura(M, diff.b)}
+              </>
+            ) : (
+              sceneAura(M, head)
+            )}
+          </span>
+        </div>
         <div>
           <span className="k">captured</span>
           <span>{when(c.captured)}</span>

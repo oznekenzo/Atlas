@@ -34,7 +34,7 @@
    "id": "c3",
    "index": 3,
    "hash": "427e1a6",
-   "message": "Rearranged. Tall plant toward the door, fan beside it. The others went back inside.",
+   "message": "Rearranged. Monstera toward the door, fan beside it. The others went back inside.",
    "captured": "2026-09-03T11:00:00-07:00",
    "file": "commits/c3.spz",
    "splats": 2224066,
@@ -106,7 +106,7 @@
   {
    "id": 0,
    "source_id": 0,
-   "name": "Tallest plant",
+   "name": "Tall plant",
    "kind": "plant",
    "sub": null,
    "doc": "Taller than the door. Wants what every plant wants.",
@@ -198,10 +198,10 @@
   {
    "id": 3,
    "source_id": 3,
-   "name": "Tall plant",
+   "name": "Monstera",
    "kind": "plant",
    "sub": null,
-   "doc": "Alone, almost nothing. Near the right thing, aura.",
+   "doc": "The crazy-looking one. Alone, almost nothing. Near the right thing, aura.",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -316,10 +316,10 @@
   {
    "id": 7,
    "source_id": 8,
-   "name": "Tall plant",
+   "name": "Monstera",
    "kind": "plant",
    "sub": null,
-   "doc": "Alone, almost nothing. Near the right thing, aura.",
+   "doc": "The crazy-looking one. Alone, almost nothing. Near the right thing, aura.",
    "added_in": 3,
    "removed_in": 4,
    "present": [

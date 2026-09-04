@@ -1,30 +1,30 @@
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { objectsChanged, useStore } from "../store";
+import { useStore } from "../store";
+import { attribution, placementsOf } from "../aura";
 
-/** Diff summary, derived from the manifest — the engine paints, it does not report. */
+/** Diff mode's legend: the attribution. What moved, what arrived or left, which reactions changed and by how much. */
 export function Legend() {
   const { M, mode } = useStore(useShallow((s) => ({ M: s.manifest, mode: s.mode })));
-  const stats = useMemo(() => {
-    if (!M || mode.kind !== "diff") return null;
-    const { added, removed } = objectsChanged(M, mode.a, mode.b);
-    // volume_vox_m3 is already metric (the pipeline scales by metres per ref unit) — do not scale it again
-    const vol = [...added, ...removed].reduce((acc, id) => acc + M.objects[id].volume_vox_m3, 0);
-    return { added: added.size, removed: removed.size, volumeM3: vol };
-  }, [M, mode]);
-  if (!stats) return null;
+  const att = useMemo(() => (M && mode.kind === "diff" ? attribution(M, placementsOf(M, mode.a), placementsOf(M, mode.b)) : null), [M, mode]);
+  if (!M || !att || mode.kind !== "diff") return null;
+  const delta = att.auraB - att.auraA;
   return (
     <div id="legend" className="hud">
-      <div>
-        <i style={{ background: "var(--add)" }} />
-        <span>{stats.added} added</span>
+      <div className="h">
+        <span className="k">aura</span>
+        <span>
+          <span className="half">{att.auraA}</span> → {att.auraB}
+        </span>
+        <span className={delta > 0 ? "add" : delta < 0 ? "rem" : "dim"}>{delta > 0 ? `+${delta}` : delta < 0 ? `−${-delta}` : "±0"}</span>
       </div>
-      <div>
-        <i style={{ background: "var(--rem)" }} />
-        <span>{stats.removed} removed</span>
-      </div>
-      <div className="k" style={{ marginTop: 16 }}>
-        {stats.volumeM3.toFixed(2)} m³ changed
+      <div className="why">“{M.commits[mode.b].message}”</div>
+      <div className="lines">
+        {att.lines.map((l, i) => (
+          <div key={i} className={`l ${l.k}`}>
+            {l.t}
+          </div>
+        ))}
       </div>
     </div>
   );

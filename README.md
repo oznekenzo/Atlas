@@ -28,6 +28,8 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
                                        priority and dropped where they would collide with each other or the chrome
                 src/components/        Intro (the title card: the load writes the log, → begins), Stage (mounts the engine), Hud,
                                        Nav (wordmark · rail · hints), Legend, Card, ActionLog, Terminal
+                src/aura.ts            the game's yield, pure over floor placements: base, light, catalyst, wind, sun, throne;
+                                       attribution() turns two scenes into the diff legend (moves, arrivals, reactions on/off, misses)
                 src/git.ts             the git command parser (pure); src/actions.ts adapts it to the store
                 ply2spz.mjs            ply → SPZ v3 using Spark's SpzWriter (NOT splat-transform: it writes SPZ v4, Spark 2.1 can't read it)
                 smoke.py               headless end-to-end check of the built viewer (npm run build && npx vite preview, then python3 smoke.py)
