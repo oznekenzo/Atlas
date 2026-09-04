@@ -10,19 +10,19 @@
     },
     {
       "file": "source/c1.ply",
-      "message": "Plants in, lamp on. They don't know each other yet.",
+      "message": "Three plants and the knot. Nothing happens yet.",
       "captured": "2026-09-03T09:40:00-07:00",
       "source_export": "teleport-Garage Plants HD-1dnj5bnyf7p5-ffk8t2ixw11x.ply"
     },
     {
       "file": "source/c2.ply",
-      "message": "Fan and boxes. Everything got closer.",
+      "message": "Lamp, fan, suitcase. Everything got closer.",
       "captured": "2026-09-03T10:20:00-07:00",
       "source_export": "teleport-Garage Plants & Things HD-81sw16n4cb92-d7o56dti3jp1.ply"
     },
     {
       "file": "source/c3.ply",
-      "message": "Rearranged. Moved the monstera toward the door. Lost the lamp.",
+      "message": "Rearranged. Tall plant toward the door, fan beside it. The others went back inside.",
       "captured": "2026-09-03T11:00:00-07:00",
       "source_export": "teleport-Garage Plants & Things Rearranged HD-lcwv33yuvdkx-26u2cw45n21f.ply"
     },
@@ -51,23 +51,24 @@
     "prune_opacity": 0.05,
     "sh": 0
   },
-  "exclude": [],
-  "exclude_note": "diff ids (out/objects.json) of detections that are artefacts; the ceiling filter now catches the ceiling ones",
+  "exclude": [
+    5
+  ],
+  "exclude_note": "diff ids of detections that are artefacts. 5: a blob at ceiling height, not an object",
   "captured_note": "capture times are placeholders in capture order \u2014 replace with the real times from the Teleport app",
   "diff_note": "min_voxels 50: the small floor sculpture is ~60 voxels. ceiling_band 10 (50 cm): the door tracks and opener hang that far below the ceiling.",
   "door": "-z",
   "door_note": "wall the garage door is on, in world axes: the far wall from the default camera. The sun rule counts the door half of the room in full.",
   "objects": {
     "0": {
-      "name": "Tall plant",
+      "name": "Tallest plant",
       "kind": "plant",
-      "doc": "Taller than the door. Wants the same things the monstera wants."
+      "doc": "Taller than the door. Wants what every plant wants."
     },
     "1": {
-      "name": "Lamp",
-      "kind": "thing",
-      "sub": "light",
-      "doc": "Plants lean toward it. A step and a half, no more."
+      "name": "Small plant",
+      "kind": "plant",
+      "doc": "Small. Wants the same things, closer."
     },
     "2": {
       "name": "Knot",
@@ -76,7 +77,7 @@
       "doc": "Alone it is a knot. Between leaf and light, touching both, it is gold."
     },
     "3": {
-      "name": "Monstera",
+      "name": "Tall plant",
       "kind": "plant",
       "doc": "Alone, almost nothing. Near the right thing, aura."
     },
@@ -86,26 +87,20 @@
       "sub": "wind",
       "doc": "It carries. Everything is twice as close, except the knot."
     },
-    "5": {
-      "name": "Fixture",
-      "kind": "thing",
-      "sub": "fixed",
-      "doc": "It hangs there. It has nothing to say."
-    },
     "6": {
-      "name": "Box",
+      "name": "Lamp",
       "kind": "thing",
-      "sub": "clutter",
-      "doc": "Cardboard. It was here first."
+      "sub": "light",
+      "doc": "Plants lean toward it. A step and a half, no more."
     },
     "7": {
-      "name": "Bin",
+      "name": "Suitcase",
       "kind": "thing",
       "sub": "clutter",
-      "doc": "More cardboard."
+      "doc": "Packed. It was on its way somewhere."
     },
     "8": {
-      "name": "Monstera",
+      "name": "Tall plant",
       "kind": "plant",
       "doc": "Alone, almost nothing. Near the right thing, aura."
     },

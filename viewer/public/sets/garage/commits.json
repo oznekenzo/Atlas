@@ -14,7 +14,7 @@
    "id": "c1",
    "index": 1,
    "hash": "61b3e34",
-   "message": "Plants in, lamp on. They don't know each other yet.",
+   "message": "Three plants and the knot. Nothing happens yet.",
    "captured": "2026-09-03T09:40:00-07:00",
    "file": "commits/c1.spz",
    "splats": 2075331,
@@ -24,7 +24,7 @@
    "id": "c2",
    "index": 2,
    "hash": "1f58985",
-   "message": "Fan and boxes. Everything got closer.",
+   "message": "Lamp, fan, suitcase. Everything got closer.",
    "captured": "2026-09-03T10:20:00-07:00",
    "file": "commits/c2.spz",
    "splats": 2145102,
@@ -34,7 +34,7 @@
    "id": "c3",
    "index": 3,
    "hash": "427e1a6",
-   "message": "Rearranged. Moved the monstera toward the door. Lost the lamp.",
+   "message": "Rearranged. Tall plant toward the door, fan beside it. The others went back inside.",
    "captured": "2026-09-03T11:00:00-07:00",
    "file": "commits/c3.spz",
    "splats": 2224066,
@@ -106,10 +106,10 @@
   {
    "id": 0,
    "source_id": 0,
-   "name": "Tall plant",
+   "name": "Tallest plant",
    "kind": "plant",
    "sub": null,
-   "doc": "Taller than the door. Wants the same things the monstera wants.",
+   "doc": "Taller than the door. Wants what every plant wants.",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -136,10 +136,10 @@
   {
    "id": 1,
    "source_id": 1,
-   "name": "Lamp",
-   "kind": "thing",
-   "sub": "light",
-   "doc": "Plants lean toward it. A step and a half, no more.",
+   "name": "Small plant",
+   "kind": "plant",
+   "sub": null,
+   "doc": "Small. Wants the same things, closer.",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -198,7 +198,7 @@
   {
    "id": 3,
    "source_id": 3,
-   "name": "Monstera",
+   "name": "Tall plant",
    "kind": "plant",
    "sub": null,
    "doc": "Alone, almost nothing. Near the right thing, aura.",
@@ -211,7 +211,7 @@
    "voxels": 4421,
    "volume_vox_m3": 0.5138,
    "moved_from": null,
-   "moved_to": 8,
+   "moved_to": 7,
    "bbox": [
     [
      -0.9864,
@@ -240,7 +240,7 @@
    "voxels": 805,
    "volume_vox_m3": 0.0936,
    "moved_from": null,
-   "moved_to": 9,
+   "moved_to": 8,
    "bbox": [
     [
      0.3947,
@@ -256,42 +256,11 @@
   },
   {
    "id": 5,
-   "source_id": 5,
-   "name": "Fixture",
-   "kind": "thing",
-   "sub": "fixed",
-   "doc": "It hangs there. It has nothing to say.",
-   "added_in": 2,
-   "removed_in": null,
-   "present": [
-    2,
-    3,
-    4
-   ],
-   "voxels": 675,
-   "volume_vox_m3": 0.0784,
-   "moved_from": null,
-   "moved_to": null,
-   "bbox": [
-    [
-     0.7686,
-     2.7505,
-     1.2041
-    ],
-    [
-     1.2072,
-     3.1891,
-     1.9508
-    ]
-   ]
-  },
-  {
-   "id": 6,
    "source_id": 6,
-   "name": "Box",
+   "name": "Lamp",
    "kind": "thing",
-   "sub": "clutter",
-   "doc": "Cardboard. It was here first.",
+   "sub": "light",
+   "doc": "Plants lean toward it. A step and a half, no more.",
    "added_in": 2,
    "removed_in": 4,
    "present": [
@@ -316,12 +285,12 @@
    ]
   },
   {
-   "id": 7,
+   "id": 6,
    "source_id": 7,
-   "name": "Bin",
+   "name": "Suitcase",
    "kind": "thing",
    "sub": "clutter",
-   "doc": "More cardboard.",
+   "doc": "Packed. It was on its way somewhere.",
    "added_in": 2,
    "removed_in": 3,
    "present": [
@@ -345,9 +314,9 @@
    ]
   },
   {
-   "id": 8,
+   "id": 7,
    "source_id": 8,
-   "name": "Monstera",
+   "name": "Tall plant",
    "kind": "plant",
    "sub": null,
    "doc": "Alone, almost nothing. Near the right thing, aura.",
@@ -374,7 +343,7 @@
    ]
   },
   {
-   "id": 9,
+   "id": 8,
    "source_id": 9,
    "name": "Fan",
    "kind": "thing",
@@ -403,7 +372,7 @@
    ]
   },
   {
-   "id": 10,
+   "id": 9,
    "source_id": 10,
    "name": "Chair",
    "kind": "thing",
