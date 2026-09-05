@@ -3,7 +3,9 @@
  * is under way, and gone after one second of stillness in the room. Stillness means the camera is not
  * moving; the pointer drifting inside the room does not count. Once gone, it stays gone until a click: hovering
  * over where the HUD was may be an inspection of the room behind it. A click on a thing brings it back to the middle
- * level, a click on the HUD brings it back in full; a menu, the confirm or the walkthrough pin it in full.
+ * level, a click on the HUD brings it back in full; a menu, the confirm or the walkthrough pin it in full. A piece
+ * of the HUD that stands into the room's cell (the standard tab on a timeline cell, the mode readout under the
+ * bar) is still the HUD: the pointer on it is not in the room.
  *
  * One attribute on the root element, `data-hud`, carries the level; the stylesheet's tokens, defined on the same
  * element, do the rest. Nothing re-renders.
@@ -59,7 +61,9 @@ export function startAttention(): () => void {
 
   const onMove = (e: PointerEvent) => {
     const r = cellOf("room", innerWidth, innerHeight)!;
-    const now = e.clientX >= r.x && e.clientX <= r.x + r.w && e.clientY >= r.y && e.clientY <= r.y + r.h;
+    const inCell = e.clientX >= r.x && e.clientX <= r.x + r.w && e.clientY >= r.y && e.clientY <= r.y + r.h;
+    const onHud = e.target instanceof Element && e.target.closest("#chrome") !== null; // a piece standing into the cell
+    const now = inCell && !onHud;
     if (now === inRoom) return;
     inRoom = now;
     if (latched) return; // hovering over a gone HUD may be an inspection of what is behind it

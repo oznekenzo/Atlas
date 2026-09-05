@@ -245,6 +245,12 @@ async def main():
         await pg.mouse.move(100, 120)
         await pg.wait_for_timeout(60)
         check(await hud() == "hud", "back on the HUD: full")
+        tab = await ev("(() => { const r = document.querySelector('#timeline .cell.lit .tab').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()")
+        await pg.mouse.move(770, 392)
+        await pg.wait_for_timeout(60)
+        await pg.mouse.move(*tab)  # the standard tab stands into the room's cell
+        await pg.wait_for_timeout(60)
+        check(await hud() == "hud", "the standard tab counts as the HUD, though it stands in the room's cell")
         await pg.mouse.move(770, 392)
         await ev("window.__patina.S.toggleMenu()")
         await pg.wait_for_timeout(60)
@@ -267,11 +273,25 @@ async def main():
         check("Tool chest" in await ev("document.getElementById('card').innerText"), "an object opens its card")
         await ev("window.__patina.select(null)")
 
+        # --- a reload: the deck is not shown again; the room opens on the floor it left ---------------------
+        await pg.reload()
+        await pg.wait_for_function("window.__patina && window.__patina.S.manifest", timeout=60000)
+        check(await S("page") == "room" and await S("arrived"), "a reload after the deck opens on the room")
+        check(await S("set") == "bellevue" and await S("curtain"), "on the floor it left, under the curtain until it is in")
+        check(await S("goals.tour") and await S("tour") == -1, "the checklist and the tour are as they were")
+        check(await S("orbit"), "and the drift runs again: this page load's arrival")
+        await pg.wait_for_function("window.__patina.S.loaded[0]", timeout=120000)
+        await pg.wait_for_function("!window.__patina.S.curtain", timeout=5000)
+        check(await S("history[0].verb") == "begin" and await S("head") == 0, "the log begins on the floor's landing state; the curtain lifts once it is in")
+
         # --- restart: back to the deck, the first floor loading behind it again --------------------------
         await ev("window.__patina.S.restartDemo()")
         check(await S("page") == "title" and await S("history.length") == 0 and await S("tour") == 0, "Restart demo returns to a clean deck")
         check(await ev("localStorage.getItem('atlas.drafts.garage')") is None and await ev("window.__patina.drafts.length") == 0, "and clears the branches")
         check(await S("set") == "garage" and await S("site") == "torrance", "and to the first floor")
+        await pg.reload()
+        await pg.wait_for_function("window.__patina", timeout=60000)
+        check(await S("page") == "title", "after a restart, a reload shows the deck again")
 
         errs = [l for l in logs if ("error" in l.lower() or "PAGEERROR" in l) and "ERR_FAILED" not in l]
         check(not errs, f"console errors: {len(errs)}")

@@ -23,7 +23,7 @@ export const SLIDES: Slide[] = [
   {
     title: "PROBLEM",
     lead: "Factories are laid out to a standard.",
-    body: "Tools, carts and materials drift from it, and nobody notices until a job is blocked or a changeover runs long. Today the check is a person walking the floor. ATLAS measures the drift from the standard every month, for everything on the floor.",
+    body: "Then tools, carts, and materials drift from it. These issues imperceptibly build up over time and mount to increased production times and even delays. Atlas measures the drift from the standard every month, for everything on the floor.",
   },
   {
     title: "FUNDAMENTALS",

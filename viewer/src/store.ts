@@ -97,6 +97,7 @@ export type State = {
 
   site: string;
   sitesOpen: boolean;
+  arrived: boolean; // the deck has been walked through in this tab: a reload opens on the room, not the deck
   menuOpen: boolean; // the ATLAS menu, top right
   confirmStd: boolean; // the dialog before a state becomes the standard
   goals: Record<string, boolean>;
@@ -184,7 +185,7 @@ export const comparePair = (head: number, standard: number | null): [number, num
   return [a, b];
 };
 
-const readGuide = (): { tour?: number; hints?: boolean; done?: Record<string, boolean> } => {
+const readGuide = (): { tour?: number; hints?: boolean; done?: Record<string, boolean>; arrived?: boolean; set?: string } => {
   try {
     return JSON.parse(sessionStorage.getItem(GUIDE_KEY) || "{}");
   } catch {
@@ -193,7 +194,7 @@ const readGuide = (): { tour?: number; hints?: boolean; done?: Record<string, bo
 };
 export const writeGuide = (s: State) => {
   try {
-    sessionStorage.setItem(GUIDE_KEY, JSON.stringify({ tour: s.tour, hints: s.hints, done: s.goals }));
+    sessionStorage.setItem(GUIDE_KEY, JSON.stringify({ tour: s.tour, hints: s.hints, done: s.goals, arrived: s.arrived, set: s.set }));
   } catch {
     /* private mode */
   }
@@ -222,21 +223,29 @@ const emptyRoom = (): Partial<State> => ({
   orbit: false,
 });
 
-/** The start state from the URL: a named preset, the bare room, or the title; ?set= opens another set. */
+/**
+ * The start state from the URL: a named preset, the bare room, or the title; ?set= opens another set. A tab that has
+ * been through the deck reloads into the room, on the floor it left, under the curtain until that floor is in.
+ */
 const initial = () => {
   const q = new URLSearchParams(location.search);
   const name = q.get("s");
   const preset = name ? PRESETS[name] : undefined;
   const skip = preset !== undefined || q.has("nointro");
   const saved = skip ? {} : readGuide();
+  const arrived = !skip && !!saved.arrived;
+  if (arrived) orbited = true; // a reload into the room is this page load's arrival: it drifts like one
   const draft: Draft | null = preset?.draft ? inflate(preset.draft, null) : null;
-  const set = q.get("set") || DEFAULT_SET;
+  const set = q.get("set") || (arrived && saved.set) || DEFAULT_SET;
   const branches = readDrafts(set);
   return {
     set,
     drafts: branches.drafts,
     draftSeq: branches.seq,
-    page: (preset?.page ?? (skip ? "room" : "title")) as Page,
+    page: (preset?.page ?? (skip || arrived ? "room" : "title")) as Page,
+    arrived,
+    curtain: arrived,
+    orbit: arrived,
     preset: preset ? name : null,
     head: preset?.head ?? LANDING,
     mode: preset?.mode ?? NORMAL,
@@ -284,13 +293,11 @@ export const useStore = create<State>((set, get) => {
     returnTo: "room",
     slide: 0,
     leaving: false,
-    curtain: false,
     hover: null,
     loaded: [],
     loadErrors: {},
     splatCount: [],
     moving: false,
-    orbit: false,
     standard: null,
     site: "",
     sitesOpen: false,
@@ -328,7 +335,7 @@ export const useStore = create<State>((set, get) => {
       // the first arrival of a page load drifts the camera around the room; later arrivals stand still
       const orbit = !orbited;
       orbited = true;
-      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, head, orbit });
+      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, head, orbit, arrived: true });
     },
     liftCurtain: () => set((s) => (s.curtain ? { curtain: false } : s)),
     restartDemo: () => {
@@ -363,6 +370,7 @@ export const useStore = create<State>((set, get) => {
         standard: s.manifest?.standard ?? s.standard,
         site: home?.id ?? s.site,
         sitesOpen: false,
+        arrived: false,
         menuOpen: false,
         confirmStd: false,
         orbit: false,
@@ -440,7 +448,7 @@ export const useStore = create<State>((set, get) => {
       if (s.page === "footnotes") return s.back();
       if (s.confirmStd) return s.cancelStandard();
       if (s.sitesOpen || s.menuOpen) return s.closeMenus();
-      if (s.openGoal) return set({ openGoal: null });
+      // an open checklist hint stays: it may be the one asking for esc, and it closes by its goal being done or clicked again
       if (s.mode.kind === "draft") return s.draft?.inHand ? s.dropInHand() : s.leaveDraft();
       if (s.selected !== null) return s.select(null);
       if (s.mode.kind === "compare") return s.exitMode();

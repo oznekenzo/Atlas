@@ -56,14 +56,14 @@ function useKeys() {
 /** The deck's exit and the room's arrival; the guide's persistence; the history preset's scripted past. */
 function useTransitions() {
   const { leaving, curtain, floor, preset, ready } = useStore(
-    useShallow((s) => ({ leaving: s.leaving, curtain: s.curtain, floor: !!s.loaded[0], preset: s.preset, ready: s.status === "ready" })),
+    useShallow((s) => ({ leaving: s.leaving, curtain: s.curtain, floor: !!s.loaded[s.head], preset: s.preset, ready: s.status === "ready" })),
   );
   useEffect(() => {
     if (!leaving) return;
     const id = window.setTimeout(() => useStore.getState().arrive(), LEAVE_MS);
     return () => clearTimeout(id);
   }, [leaving]);
-  // the curtain lifts once there is a floor under it: at once on arrival, after the load on a switch of site
+  // the curtain lifts once the state it shows is in: at once on arrival, after the load on a switch of site or a reload
   useEffect(() => {
     if (!curtain || !floor) return;
     const id = window.setTimeout(() => useStore.getState().liftCurtain(), 80);
@@ -72,7 +72,7 @@ function useTransitions() {
   useEffect(
     () =>
       useStore.subscribe((s, p) => {
-        if (s.goals !== p.goals || s.tour !== p.tour || s.hints !== p.hints) writeGuide(s);
+        if (s.goals !== p.goals || s.tour !== p.tour || s.hints !== p.hints || s.arrived !== p.arrived || s.set !== p.set) writeGuide(s);
         if (s.drafts !== p.drafts || s.draftSeq !== p.draftSeq) writeDrafts(s.set, { seq: s.draftSeq, drafts: s.drafts });
       }),
     [],
