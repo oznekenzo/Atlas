@@ -1705,7 +1705,7 @@ kbd {
   transition: opacity 1.2s;
 }
 #title.on .field {
-  opacity: 0.85; /* on the slides the field steps back a little further than the dimmer alone takes it */
+  opacity: 0.65; /* on the slides the field steps back a little further than the dimmer alone takes it */
 }
 #title .vignette {
   position: absolute;
