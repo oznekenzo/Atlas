@@ -46,7 +46,8 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
 ## Screen
     The deck first: the name over a point field, five slides (the technology, the project, the problem, the
     fundamentals, the demo), and the floor; the captures load behind it from landing, and the last slide's ENTER
-    is live once the first is in. Then the room, full bleed, under a grid of translucent bands with hairlines:
+    is live once June's is in: the floor opens on the second month, Jun 2026, with its first stations in. Then the
+    room, full bleed, under a grid of translucent bands with hairlines:
       top band       the command bar (every command available now, with its key), the mode readout hanging under it
       left column    the site picker in its cell, the demo checklist (six things to do, ticked by real state), the
                      actions log (each entry restorable), and the map in the bottom cell (click a thing to open it,

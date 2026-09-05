@@ -69,7 +69,7 @@ async def main():
         await pg.wait_for_timeout(100)
         check(await S("leaving"), "the deck leaves")
         await pg.wait_for_function("window.__patina.S.page === 'room'", timeout=10000)
-        check(await S("head") == 0, "arrives on the first state")
+        check(await S("head") == 1, "arrives on the second state, June")
         check(await S("history[0].verb") == "begin", "the log starts with begin")
         await pg.wait_for_function("!window.__patina.S.curtain", timeout=5000)
         check(not await ev("document.getElementById('chrome').hidden"), "the chrome is up")
@@ -83,7 +83,7 @@ async def main():
         # --- the rail and the month ----------------------------------------------------------------------
         check(await ev("document.querySelectorAll('#timeline .cell').length") == N, "four timeline cells")
         check((await ev("document.querySelector('#timeline .cell.std').innerText")).startswith("Jul"), "July's cell is the standard")
-        check("Bay 1 cleared" in await ev("document.querySelector('#details .doc').innerText"), "May's entry is written")
+        check("First stations in" in await ev("document.querySelector('#details .doc').innerText"), "June's entry is written")
         await pg.keyboard.press("ArrowRight")
         await pg.keyboard.press("ArrowRight")
         await pg.keyboard.press("ArrowRight")

@@ -4,6 +4,9 @@
  */
 import type { Mode } from "./store";
 
+/** The state the deck lands in: the second month, June 2026, the floor with its first stations in. */
+export const LANDING = 1;
+
 export type Slide = { title: string; lead: string; body: string };
 export const SLIDES: Slide[] = [
   {

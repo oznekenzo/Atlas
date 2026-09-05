@@ -9,7 +9,7 @@
 import { create } from "zustand";
 import type { Manifest } from "./types";
 import { carry, centre } from "./scene";
-import { GOALS, PRESETS, SLIDES, TOUR } from "./demo";
+import { GOALS, LANDING, PRESETS, SLIDES, TOUR } from "./demo";
 import { dateOf, monthOf } from "./time";
 
 export type Mode = { kind: "normal" } | { kind: "compare"; a: number; b: number; headBefore: number } | { kind: "draft" };
@@ -189,7 +189,7 @@ const initial = () => {
   return {
     page: (preset?.page ?? (skip ? "room" : "title")) as Page,
     preset: preset ? name : null,
-    head: preset?.head ?? 0,
+    head: preset?.head ?? LANDING,
     mode: preset?.mode ?? NORMAL,
     selected: preset?.selected ?? null,
     ghosts: preset?.ghosts ?? false,
@@ -253,7 +253,7 @@ export const useStore = create<State>((set, get) => {
       const s = get();
       if (s.page !== "title" || s.leaving) return;
       if (s.slide >= SLIDES.length) {
-        if (s.loaded[0]) s.leave();
+        if (s.loaded[LANDING]) s.leave();
         return;
       }
       set({ slide: s.slide + 1 });
@@ -265,15 +265,15 @@ export const useStore = create<State>((set, get) => {
     },
     leave: () => {
       const s = get();
-      if (s.page !== "title" || s.leaving || !s.loaded[0]) return;
+      if (s.page !== "title" || s.leaving || !s.loaded[LANDING]) return;
       set({ leaving: true });
     },
     arrive: () => {
       const s = get();
       if (s.page !== "title") return;
-      const c = s.manifest?.commits[0];
-      s.log("begin", c ? dateOf(c.captured) : "");
-      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0 });
+      const c = s.manifest?.commits[LANDING];
+      s.log("begin", c ? dateOf(c.captured) : "", { head: LANDING });
+      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, head: LANDING });
     },
     liftCurtain: () => set((s) => (s.curtain ? { curtain: false } : s)),
     restartDemo: () => {
@@ -294,7 +294,7 @@ export const useStore = create<State>((set, get) => {
         tour: 0,
         hints: true,
         openGoal: null,
-        head: 0,
+        head: LANDING,
         mode: NORMAL,
         ghosts: false,
         draft: null,
