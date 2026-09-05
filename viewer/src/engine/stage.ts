@@ -32,7 +32,6 @@ import { centre, diff, drift, metres, type Change } from "../scene";
 import { monthOf } from "../time";
 import { BAND_B, BAND_T, COL_L, COL_R } from "../layout";
 
-const SET = "garage"; // the one set the viewer opens
 const CLICK_MS = 250;
 const STANDARD_GHOST_OPACITY = 0.35; // the standard's ghost of a thing, where it belongs
 const IN_HAND_OPACITY = 0.7; // a draft's thing in hand, following the pointer
@@ -91,7 +90,8 @@ export class Stage {
   private dragging = false;
   private downAt = 0;
   private disposed = false;
-  private readonly abort = new AbortController();
+  private gen = 0; // which open() is current: a later one supersedes an earlier one's loads as they land
+  private loader: AbortController | null = null; // the current open()'s fetches
   private readonly unsubs: (() => void)[] = [];
 
   constructor(private el: HTMLElement) {
@@ -182,17 +182,36 @@ export class Stage {
     }, WATCHDOG_MS);
   }
 
-  /** Fetch the set's manifest, then its commits oldest-first: c0 is the first frame and the log writes itself forward in time. */
-  async boot(set = SET) {
+  /** Open the set the store shows, and every set it switches to after: a change of site empties the room and loads the next. */
+  boot() {
+    this.unsubs.push(
+      useStore.subscribe((s, prev) => {
+        if (s.set !== prev.set) void this.open(s.set);
+      }),
+    );
+    return this.open(useStore.getState().set);
+  }
+
+  /** A load from an earlier open(), or after dispose: its results are dropped. */
+  private stale(gen: number) {
+    return this.disposed || gen !== this.gen;
+  }
+
+  /** Fetch a set's manifest, then its commits oldest-first: c0 is the first frame and the log writes itself forward in time. */
+  private async open(set: string) {
+    const gen = ++this.gen;
+    this.loader?.abort();
+    const loader = (this.loader = new AbortController());
+    this.clear();
     const base = `sets/${encodeURIComponent(set)}/`;
     const store = useStore.getState();
     const t0 = performance.now();
     try {
-      const res = await fetch(base + "commits.json", { signal: this.abort.signal });
+      const res = await fetch(base + "commits.json", { signal: loader.signal });
       // SPA hosts answer missing files with index.html and a 200, so check the type, not just the status
       if (!res.ok || !(res.headers.get("content-type") ?? "").includes("json")) throw new Error(`no such set '${set}'`);
       const M = parseManifest(await res.json());
-      if (this.disposed) return;
+      if (this.stale(gen)) return;
       this.M = M;
       this.voxelOf = makeVoxelLookup(M);
       const refScale = refScaleOf(M);
@@ -206,17 +225,19 @@ export class Stage {
       );
       const room = roomBox(M);
       this.bounds = room.clone().expandByScalar(-WALL_MARGIN_M);
-      this.frameRoom(room);
+      this.frameRoom(room, M.view);
       this.minimap.setRoom(room);
       store.setManifest(M, refScale);
+      // arriving from another floor, the log starts over with it (from the deck, `arrive` writes "begin")
+      if (gen > 1 && useStore.getState().page !== "title") store.log("open", useStore.getState().sites.find((x) => x.set === set)?.name ?? set);
       let any = false;
       for (let i = 0; i < M.commits.length; i++) {
         try {
-          await this.loadCommit(base, i);
+          await this.loadCommit(base, i, gen, loader.signal);
           any = true;
           if (i === 0) this.timings.firstFrameMs = Math.round(performance.now() - t0);
         } catch (e) {
-          if (this.disposed) return;
+          if (this.stale(gen)) return;
           store.markFailed(i, errMsg(e));
         }
       }
@@ -224,19 +245,39 @@ export class Stage {
       this.timings.allLoadedMs = Math.round(performance.now() - t0);
       store.setStatus("ready");
     } catch (e) {
-      if (!this.disposed) store.fail(errMsg(e));
+      if (!this.stale(gen)) store.fail(errMsg(e));
     }
   }
 
-  private async loadCommit(base: string, i: number) {
+  /** Empty the room: every layer, part and copy gone, the manifest forgotten. */
+  private clear() {
+    this.cancelTween();
+    for (const L of this.layers) {
+      if (!L) continue;
+      for (const p of [L, L.objects, ...L.parts.values()]) {
+        if (!p) continue;
+        this.scene.remove(p.mesh);
+        p.rgba.dispose();
+        p.mesh.dispose();
+      }
+    }
+    this.layers = [];
+    this.pruneCopies(new Set());
+    this.M = null;
+    this.boxes = [];
+    this.bounds = null;
+    this.touch();
+  }
+
+  private async loadCommit(base: string, i: number, gen: number, signal: AbortSignal) {
     const M = this.M!;
     const c = M.commits[i];
     const t0 = performance.now();
     const mesh = new SplatMesh({ url: base + c.file }); // no LOD: per-splat rgba injection is disabled under LOD
     mesh.visible = false;
     try {
-      const [, label] = await Promise.all([mesh.initialized, loadLabels(base + c.labels, M.shape, this.abort.signal)]);
-      if (this.disposed) throw new Error("disposed");
+      const [, label] = await Promise.all([mesh.initialized, loadLabels(base + c.labels, M.shape, signal)]);
+      if (this.stale(gen)) throw new Error("superseded");
       const n = mesh.numSplats;
       const packed = mesh.packedSplats?.packedArray;
       if (!packed) throw new Error(`${c.file}: splats not unpacked`);
@@ -262,7 +303,7 @@ export class Stage {
           }
         }
         if (k1 < n) await yieldToLoop();
-        if (this.disposed) throw new Error("disposed");
+        if (this.stale(gen)) throw new Error("superseded");
       }
       const rgba = new RgbaArray({ array: orig.slice(), count: n });
       mesh.splatRgba = rgba;
@@ -282,6 +323,13 @@ export class Stage {
       L.objects = buildObjects(L);
       if (L.objects) {
         await L.objects.mesh.initialized;
+        if (this.stale(gen)) {
+          this.scene.remove(mesh);
+          L.objects.mesh.dispose();
+          L.rgba.dispose();
+          L.objects.rgba.dispose();
+          throw new Error("superseded");
+        }
         this.scene.add(L.objects.mesh);
         this.timings[`objects c${i}`] = L.objects.n;
       }
@@ -302,8 +350,8 @@ export class Stage {
     this.controls.target.clamp(b.min, b.max);
   }
 
-  /** Start inside the room, near a corner at standing height, looking at its centre; bound the orbit to the room. */
-  private frameRoom(box: THREE.Box3) {
+  /** Start where the set says, else inside the room near a corner at standing height, looking at its centre; bound the orbit to the room. */
+  private frameRoom(box: THREE.Box3, view: Manifest["view"]) {
     const size = box.getSize(new THREE.Vector3());
     const c = box.getCenter(new THREE.Vector3());
     const span = Math.max(size.x, size.z) || 1;
@@ -312,6 +360,10 @@ export class Stage {
     this.roomCentre.set(c.x, box.min.y + size.y * 0.3, c.z);
     this.eyeY = box.min.y + Math.min(size.y * 0.6, 1.7);
     this.camera.position.set(c.x + size.x * 0.46, this.eyeY, c.z + size.z * 0.46);
+    if (view) {
+      this.camera.position.set(view.pos[0], view.pos[1], view.pos[2]);
+      this.controls.target.set(view.target[0], view.target[1], view.target[2]);
+    }
     this.controls.minDistance = span * 0.1;
     this.controls.maxDistance = diag * 0.9;
     this.camera.far = span * 20;
@@ -771,7 +823,7 @@ export class Stage {
 
   dispose() {
     this.disposed = true;
-    this.abort.abort();
+    this.loader?.abort();
     cancelAnimationFrame(this.raf);
     clearInterval(this.watchdog);
     clearTimeout(this.moveTimer);
@@ -785,23 +837,7 @@ export class Stage {
     dom.removeEventListener("pointerup", this.onPointerUp);
     dom.removeEventListener("pointerleave", this.onPointerLeave);
     removeEventListener("resize", this.onResize);
-    for (const L of this.layers) {
-      if (!L) continue;
-      L.rgba.dispose();
-      L.mesh.dispose();
-      L.objects?.rgba.dispose();
-      for (const part of L.parts.values()) {
-        part.rgba.dispose();
-        part.mesh.dispose();
-      }
-      L.objects?.mesh.dispose();
-    }
-    this.layers = [];
-    for (const c of this.copies.values()) {
-      c.rgba.dispose();
-      c.mesh.dispose();
-    }
-    this.copies.clear();
+    this.clear();
     this.spark.dispose();
     this.overlay.dispose();
     this.minimap.dispose();

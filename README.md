@@ -17,6 +17,8 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
                 make_synthetic.py  test data: 6 commits as real 3DGS .ply, arbitrary frame+scale each → data/sets/synthetic/
                 test_synthetic.py  end-to-end check against truth.json (registration < 15 mm, objects found, contract kept)
                 slim_ply.py        drops SH bands + sub-0.05 splats from a full export (943 MB → ~120 MB); numpy only
+                single.py          one capture, no registration or diff: levelled, squared to its walls, floor at y = 0,
+                                   the SPZ written, objects boxed by hand in dataset.json labelled; publishes like bake
                 requirements.txt   pinned numpy / scipy / open3d
     viewer/     Vite + React + zustand + three.js + @sparkjsdev/spark
                 src/store.ts           app state + the action log / reflog — the only thing React and the engine share
@@ -49,7 +51,8 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
     is live once June's is in: the floor opens on the second month, Jun 2026, with its first stations in. Then the
     room, full bleed, under a grid of translucent bands with hairlines:
       top band       the command bar (every command available now, with its key), the mode readout hanging under it
-      left column    the site picker in its cell, the demo checklist (six things to do, ticked by real state), the
+      left column    the site picker in its cell (another floor opens its set in place of this one, under the
+                     curtain), the demo checklist (six things to do, ticked by real state), the
                      actions log (each entry restorable), and the map in the bottom cell (click a thing to open it,
                      bare floor to stand there)
       right column   the ATLAS menu (How it works, Notes, Restart demo), then two cells that grow to their content:
@@ -71,23 +74,30 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
     lighter while the pointer is in the room or a drag is under way, and gone after one still second in the
     room; a click on a thing brings it back, a menu or the walkthrough pins it in full.
     ?s=<preset> opens the room in a state for testing: empty, explore, selected, compare, drift, ghosts,
-    restore-hand, measured, how, footnotes, history. ?nointro skips the deck; ?debug exposes window.__patina.
+    restore-hand, measured, how, footnotes, history. ?nointro skips the deck; ?debug exposes window.__patina;
+    ?set=<name> opens another set than the garage.
 
 ## Run
     pip install -r pipeline/requirements.txt
     python3 pipeline/make_synthetic.py && python3 pipeline/run.py synthetic      # or: python3 pipeline/test_synthetic.py
                                                                                 # (pipeline test only; its published set is ignored)
     python3 pipeline/run.py garage
+    python3 pipeline/single.py bellevue                # the one-capture set: no registration, no diff
     cd viewer && npm install && npm run dev            # npm run check = typecheck + prettier + vitest; npm run build typechecks first
     ?debug on the URL exposes window.__patina (the hooks smoke.py drives); the dev server exposes it always
 
 ## Datasets
     viewer/public/sets/<name>/{commits.json, commits/*.spz, commits/*.labels.bin}
-    the viewer opens the garage set (SET in src/engine/stage.ts); the synthetic set exists only for the pipeline's own test
+    the viewer opens the garage set first (DEFAULT_SET in src/store.ts); the site picker opens whichever set a site
+    names, so every set carries the same "sites" list; the synthetic set exists only for the pipeline's own test
+    garage    four states of a one-car garage (Torrance · Bay 1 on the picker); plants stand in for carts and tools
+    bellevue  one state of a Harley-Davidson service bay (Bellevue · Bay 2): "Harley-Davidson Service Shop, Bellevue WA"
+              by Paolo Tosolini, superspl.at/scene/ec4683ec, CC BY 4.0, captured with an XGRIDS PortalCam. Brought in
+              with pipeline/single.py; its ten objects are boxes drawn by hand in data/sets/bellevue/dataset.json
     dataset.json carries the documentation, passed through publish untouched: per commit "doc", "by" and "stats"
     {stoppages, changeover, output} (doc null = no entry, shown as such); "diffs": {"a-b": {"doc", "by"}}; per object
-    "doc" and "by"; "sites": the site picker (the first is this set; the rest are labels until their sets are imported);
-    "standard": the commit that is the approved layout
+    "doc" and "by"; "sites": the site picker, [{id, name, count, set}] with set = the directory under sets/ the floor
+    opens (a site without one is a label only); "standard": the commit that is the approved layout
 
 ## Bringing in a new set of captures
     0. python3 pipeline/slim_ply.py <export.ply> data/sets/<name>/source/cN.ply   (sources stay untracked)
@@ -97,13 +107,22 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
        ("auto" = the denser end of the vertical range is the floor, "keep"/"flip" override it), min_inlier_frac and
        min_candidate_margin (the run fails loudly when the registration is weak or the room's symmetry is ambiguous).
     2. python3 pipeline/run.py <name>        (needs: pip install -r pipeline/requirements.txt; node + viewer/node_modules)
-    3. point SET in src/engine/stage.ts at it; name objects with "objects": {"<id>": "name"} and drop artefacts (a stray
+    3. add it to "sites" in every set's dataset.json (id, name, count, set) and --only publish them, or open it with
+       ?set=<name>; name objects with "objects": {"<id>": "name"} and drop artefacts (a stray
        blob at the ceiling) with "exclude": [<id>, ...], and cut an object the tracker kept alive under whatever
        replaced it with "removed": {"<id>": <commit>} in dataset.json, then --only publish (seconds: it needs the
        .spz files, not the captures). Ids there are the diff's ids (out/objects.json, or source_id in commits.json);
        the published ids are renumbered to stay compact, and publish logs the mapping.
     Tuning lives in dataset.json, never in code; the splat files carry nothing but splats.
     Only the register step needs open3d; diff, bake and publish run on numpy + scipy.
+
+## Bringing in a single capture
+    A set with one state has nothing to register against and nothing to diff, so pipeline/single.py does the frame
+    on its own and takes the objects from the dataset: python3 pipeline/single.py <name>. dataset.json carries, beyond
+    the usual keys, "frame" (up axis, yaw, centre: "auto" first, then pin what the run logs), "room", "view" (where
+    the camera opens), "voxel", and "objects": {"<id>": {name, doc, by, box: [[x, y, z], [x, y, z]]}} in world metres;
+    the splats inside a box are the object's. out/top.png is the floor from above on a 1 m grid with the boxes drawn.
+    Needs numpy only, plus node + viewer/node_modules for the SPZ. The capture is expected to be metric.
 
 ## Gotchas found the hard way
 - Generic FPFH+RANSAC registration fails on box-shaped rooms (flips 180°, reports 0.99 fitness). Use register.py's room-frame method.
@@ -134,3 +153,9 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
   completes — give it frames (SparkRenderer's onDirty callback says when) and never stop the loop while spark.sorting.
 - Software-GL Chromium (the sandbox smoke test) never completes Spark's sort, so a diff or a change of state looks stale there.
   Everything that changes the visible set has to be eyeballed on a real GPU; smoke.py asserts state, not pixels.
+- A hand-boxed object (single.py) owns every splat inside its box, floaters included. Keep the box's floor edge 5 cm up
+  so the floor stays static, and where boxes overlap give the thing on top the higher id: later ids win.
+- Switching sets while a load is in flight: the engine numbers each open(); a load from an earlier one is dropped when it
+  lands (its mesh disposed), so a fast double switch never leaves a stray layer in the room.
+- Editing engine/stage.ts with the dev server open remounts the Stage under Vite HMR, which disposes the engine mid-load and
+  logs "Worker terminate" from Spark once. A fresh load has no such error.

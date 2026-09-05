@@ -149,13 +149,15 @@
     {
       "id": "torrance",
       "name": "Torrance · Bay 1",
-      "count": 4
+      "count": 4,
+      "set": "garage"
     },
     {
-      "id": "ravensburg",
-      "name": "Ravensburg · Hall 2",
-      "count": 27
+      "id": "bellevue",
+      "name": "Bellevue · Bay 2",
+      "count": 1,
+      "set": "bellevue"
     }
   ],
-  "sites_note": "the site picker: the first is this set; the others are labels only until their sets are imported"
+  "sites_note": "the site picker, the same list in every set; set: the directory under viewer/public/sets the picker opens"
 }

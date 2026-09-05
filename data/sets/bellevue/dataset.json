@@ -1,0 +1,249 @@
+{
+  "calibration_m": 1.0,
+  "calibration_note": "the PortalCam export is metric already; nothing to calibrate",
+  "source_note": "“Harley-Davidson Service Shop, Bellevue WA (XGRIDS PortalCam)” by Paolo Tosolini, https://superspl.at/scene/ec4683ec, CC BY 4.0 (source/license.txt). One capture: a single state, brought in with pipeline/single.py, not run.py",
+  "commits": [
+    {
+      "file": "source/c0.ply",
+      "message": "Standard",
+      "captured": "2026-08-24T12:00:00",
+      "source_export": "scene.ply",
+      "stats": {
+        "stoppages": "1",
+        "changeover": "26 min",
+        "output": "9"
+      },
+      "doc": "Bay 2 captured at close of business. One bike on the lift mid-service, the bench and the pegboard as the day left them. Approved as the standard for the bay: the lift stays where it is, the chest and the cart stay off the walkway.",
+      "by": "Approved by J. Alvarez, service lead · 24 Aug 2026"
+    }
+  ],
+  "frame": {
+    "up": "-y",
+    "yaw_deg": 43.25,
+    "centre": [
+      -0.645,
+      2.097
+    ]
+  },
+  "frame_note": "raw -> world: which raw axis is up, the turn that squares the walls, and the room's midpoint. Run once on auto, then pin the logged values here so the boxes below stay put",
+  "room": [
+    [
+      -3.24,
+      0.0,
+      -2.86
+    ],
+    [
+      2.97,
+      2.6,
+      2.51
+    ]
+  ],
+  "view": {
+    "pos": [
+      -3.0,
+      2.2,
+      -2.6
+    ],
+    "target": [
+      0.2,
+      0.6,
+      0.6
+    ]
+  },
+  "view_note": "where the camera stands when the set opens: the clear corner, looking across the lift at the bench",
+  "voxel": 0.05,
+  "bake": {
+    "prune_opacity": 0.05,
+    "sh": 0
+  },
+  "objects": {
+    "0": {
+      "name": "Lift 1",
+      "doc": "Softail Deluxe on it mid-service, rear wheel off for a tyre. The lift is bolted to the slab; the bike is what comes and goes.",
+      "by": "J. Alvarez · Aug 2026",
+      "box": [
+        [
+          -1.15,
+          0.05,
+          -2.0
+        ],
+        [
+          1.15,
+          1.45,
+          0.6
+        ]
+      ]
+    },
+    "1": {
+      "name": "Workbench",
+      "doc": "Steel bench under the pegboard. Helmet, laptop and the day's tools on top; the kit for the job in progress stays here until the bike leaves.",
+      "by": "J. Alvarez · Aug 2026",
+      "box": [
+        [
+          -2.05,
+          0.06,
+          1.18
+        ],
+        [
+          0.66,
+          1.32,
+          2.1
+        ]
+      ]
+    },
+    "2": {
+      "name": "Tool chest",
+      "doc": "The green roll cab. Lives at the end of the bench with its wheels locked; when it drifts toward the lift it blocks the walk-round.",
+      "by": "J. Alvarez · Aug 2026",
+      "box": [
+        [
+          0.55,
+          0.05,
+          1.42
+        ],
+        [
+          1.52,
+          1.65,
+          2.14
+        ]
+      ]
+    },
+    "3": {
+      "name": "Stool",
+      "doc": "",
+      "by": "",
+      "box": [
+        [
+          -1.88,
+          0.05,
+          0.93
+        ],
+        [
+          -1.3,
+          0.92,
+          1.5
+        ]
+      ]
+    },
+    "4": {
+      "name": "Tyres",
+      "doc": "Two rear tyres for the Softail, leaning under the bench until the wheel comes off.",
+      "by": "D. Park · Aug 2026",
+      "box": [
+        [
+          -0.98,
+          0.05,
+          1.03
+        ],
+        [
+          -0.18,
+          0.64,
+          1.58
+        ]
+      ]
+    },
+    "5": {
+      "name": "Diagnostic cart",
+      "doc": "Rolling cart with the diagnostic laptop and the cable box. Parks at the lift's left rail during a job; the cable across the floor is the trip hazard on this bay.",
+      "by": "J. Alvarez · Aug 2026",
+      "box": [
+        [
+          -2.6,
+          0.05,
+          -1.1
+        ],
+        [
+          -1.66,
+          1.28,
+          -0.08
+        ]
+      ]
+    },
+    "6": {
+      "name": "Bin",
+      "doc": "",
+      "by": "",
+      "box": [
+        [
+          1.52,
+          0.05,
+          0.28
+        ],
+        [
+          2.43,
+          0.96,
+          1.06
+        ]
+      ]
+    },
+    "7": {
+      "name": "Chair",
+      "doc": "Customer's jacket on it. Nothing to know beyond that.",
+      "by": "D. Park · Aug 2026",
+      "box": [
+        [
+          1.16,
+          0.05,
+          -1.44
+        ],
+        [
+          2.04,
+          1.08,
+          -0.56
+        ]
+      ]
+    },
+    "8": {
+      "name": "Jack",
+      "doc": "Hydraulic jack for the second bay. Should be back at the rack, not at the bench.",
+      "by": "J. Alvarez · Aug 2026",
+      "box": [
+        [
+          -2.4,
+          0.05,
+          0.36
+        ],
+        [
+          -1.86,
+          1.04,
+          1.23
+        ]
+      ]
+    },
+    "9": {
+      "name": "Parts rack",
+      "doc": "Shelving on the east wall: takeoffs, fluids, the engine stand. Anything left on the floor in front of it is off standard.",
+      "by": "J. Alvarez · Aug 2026",
+      "box": [
+        [
+          2.22,
+          0.05,
+          -1.86
+        ],
+        [
+          2.97,
+          1.16,
+          -0.02
+        ]
+      ]
+    }
+  },
+  "objects_note": "ids 0…n-1; box: [[x, y, z], [x, y, z]] in world metres, read off out/top.png (1 m grid; x = 0 red, z = 0 green). The splats inside a box are the object's",
+  "standard": 0,
+  "standard_note": "the one state is the approved layout",
+  "sites": [
+    {
+      "id": "torrance",
+      "name": "Torrance · Bay 1",
+      "count": 4,
+      "set": "garage"
+    },
+    {
+      "id": "bellevue",
+      "name": "Bellevue · Bay 2",
+      "count": 1,
+      "set": "bellevue"
+    }
+  ],
+  "sites_note": "the site picker, the same list in every set; set: the directory under viewer/public/sets the picker opens"
+}

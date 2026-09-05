@@ -7,13 +7,14 @@
  * overlay (the standard's ghosts), and around them the demo's script: the title deck, the checklist, the tour.
  */
 import { create } from "zustand";
-import type { Manifest } from "./types";
+import type { Manifest, Site } from "./types";
 import { carry, centre } from "./scene";
 import { GOALS, LANDING, PRESETS, SLIDES, TOUR } from "./demo";
 import { dateOf, monthOf } from "./time";
 
 export type Mode = { kind: "normal" } | { kind: "compare"; a: number; b: number; headBefore: number } | { kind: "draft" };
 export const NORMAL: Mode = { kind: "normal" };
+export const DEFAULT_SET = "garage"; // the set the viewer opens first: the demo's floor
 export type Page = "title" | "room" | "how" | "footnotes";
 
 export type Cam = { pos: [number, number, number]; target: [number, number, number] };
@@ -48,6 +49,8 @@ const T0 = performance.now();
 export type State = {
   status: Status;
   error: string | null;
+  set: string; // the set the room shows: a directory under sets/. The engine opens whatever this becomes
+  sites: Site[]; // the picker: every floor, from the first manifest that carried the list
   manifest: Manifest | null;
   refScale: number; // ref units → metres
   history: Action[]; // full reflog, oldest first
@@ -171,7 +174,29 @@ export const writeGuide = (s: State) => {
   }
 };
 
-/** The start state from the URL: a named preset, the bare room, or the title. */
+/** The room with nothing in it, before a set's manifest lands: the engine fills it in as the set loads. */
+const emptyRoom = (): Partial<State> => ({
+  status: "loading",
+  error: null,
+  manifest: null,
+  head: 0,
+  mode: NORMAL,
+  selected: null,
+  hover: null,
+  ghosts: false,
+  draft: null,
+  standard: null,
+  loaded: [],
+  loadErrors: {},
+  splatCount: [],
+  history: [],
+  camera: null,
+  camRequest: null,
+  confirmStd: false,
+  curtain: true, // lifted once the set's first state is in
+});
+
+/** The start state from the URL: a named preset, the bare room, or the title; ?set= opens another set. */
 const initial = () => {
   const q = new URLSearchParams(location.search);
   const name = q.get("s");
@@ -187,6 +212,7 @@ const initial = () => {
       }
     : null;
   return {
+    set: q.get("set") || DEFAULT_SET,
     page: (preset?.page ?? (skip ? "room" : "title")) as Page,
     preset: preset ? name : null,
     head: preset?.head ?? LANDING,
@@ -225,6 +251,7 @@ export const useStore = create<State>((set, get) => {
   return {
     status: "loading",
     error: null,
+    sites: [],
     manifest: null,
     refScale: 1,
     history: [],
@@ -283,6 +310,9 @@ export const useStore = create<State>((set, get) => {
         /* private mode */
       }
       const s = get();
+      // the demo begins on the first floor: if the room shows another, its set loads again behind the deck
+      const home = s.sites[0];
+      const homeSet = home?.set ?? DEFAULT_SET;
       set({
         page: "title",
         returnTo: "room",
@@ -300,10 +330,11 @@ export const useStore = create<State>((set, get) => {
         draft: null,
         selected: null,
         standard: s.manifest?.standard ?? s.standard,
-        site: s.manifest?.sites[0]?.id ?? "",
+        site: home?.id ?? s.site,
         sitesOpen: false,
         menuOpen: false,
         confirmStd: false,
+        ...(homeSet !== s.set ? { ...emptyRoom(), set: homeSet, curtain: false } : {}),
       });
     },
 
@@ -477,7 +508,12 @@ export const useStore = create<State>((set, get) => {
     },
     pickSite: (id) => {
       const s = get();
-      set({ site: id, sitesOpen: false, ...(id !== s.site ? done("tour") : {}) });
+      const site = s.sites.find((x) => x.id === id);
+      if (!site) return;
+      const tick = id !== s.site ? done("tour") : {};
+      if (!site.set || site.set === s.set) return set({ site: id, sitesOpen: false, ...tick });
+      // another floor: the room empties under the curtain and the engine opens its set; the log starts over there
+      set({ site: id, sitesOpen: false, ...tick, ...emptyRoom(), set: site.set });
     },
     openHow: () => set((s) => (s.page === "how" ? s : { page: "how", menuOpen: false, returnTo: s.page === "footnotes" ? s.returnTo : s.page })),
     openFoot: () =>
@@ -498,7 +534,8 @@ export const useStore = create<State>((set, get) => {
         manifest: m,
         refScale,
         standard: m.standard,
-        site: s.site || m.sites[0]?.id || "",
+        sites: m.sites.length ? m.sites : s.sites,
+        site: s.site || m.sites.find((x) => x.set === s.set)?.id || m.sites[0]?.id || "",
         loaded: m.commits.map(() => false),
         loadErrors: {},
         splatCount: m.commits.map(() => 0),

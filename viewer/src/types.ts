@@ -31,7 +31,8 @@ export type Obj = {
   volume_vox_m3: number;
 };
 export type Entry = { doc: string | null; by: string | null };
-export type Site = { id: string; name: string; count: number };
+/** One floor on the picker. `set` is the directory under sets/ the picker opens for it; null while it is a label only. */
+export type Site = { id: string; name: string; count: number; set: string | null };
 export type Manifest = {
   commits: Commit[];
   objects: Obj[];
@@ -40,6 +41,8 @@ export type Manifest = {
   shape: number[];
   /** Room box in world space (walls, floor at y = 0, ceiling). Older bakes lack it; the voxel grid extent stands in. */
   room: [number[], number[]] | null;
+  /** Where the camera stands when the set opens, and what it looks at. Null: a corner of the room at standing height. */
+  view: { pos: number[]; target: number[] } | null;
   world_from_ref: number[][];
   calibration_m: number;
   /** The commit marked as the approved layout, or null when the set has none. */

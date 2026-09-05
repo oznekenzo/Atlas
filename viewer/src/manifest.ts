@@ -103,7 +103,9 @@ const sites = (v: unknown): Site[] => {
   if (!Array.isArray(v)) return [];
   return v.map((s, i) => {
     if (!isObj(s)) throw new ManifestError(`sites[${i}]`, "must be an object");
-    return { id: str(s.id, `sites[${i}].id`), name: str(s.name, `sites[${i}].name`), count: isNum(s.count) ? s.count : 0 };
+    const set = isStr(s.set) && s.set ? s.set : null;
+    if (set !== null && (set.includes("..") || set.includes("/"))) throw new ManifestError(`sites[${i}].set`, "must name a set, not a path");
+    return { id: str(s.id, `sites[${i}].id`), name: str(s.name, `sites[${i}].name`), count: isNum(s.count) ? s.count : 0, set };
   });
 };
 
@@ -126,6 +128,11 @@ export function parseManifest(raw: unknown): Manifest {
   }
   const voxel = num(raw.voxel, "voxel");
   if (voxel <= 0) throw new ManifestError("voxel", "must be positive");
+  let view: Manifest["view"] = null;
+  if (raw.view !== undefined && raw.view !== null) {
+    if (!isObj(raw.view)) throw new ManifestError("view", "must be {pos, target}");
+    view = { pos: nums(raw.view.pos, "view.pos", 3), target: nums(raw.view.target, "view.target", 3) };
+  }
   return {
     commits,
     objects,
@@ -133,6 +140,7 @@ export function parseManifest(raw: unknown): Manifest {
     origin: nums(raw.origin, "origin", 3),
     shape,
     room,
+    view,
     world_from_ref,
     calibration_m: isNum(raw.calibration_m) ? raw.calibration_m : 1,
     standard: isNum(raw.standard) && Number.isInteger(raw.standard) && raw.standard >= 0 && raw.standard < commits.length ? raw.standard : null,
