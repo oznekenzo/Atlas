@@ -152,6 +152,9 @@ export const seedDraft = (m: Manifest | null, base: number | null): Placed[] =>
           return { key: ++placedSeq, id: o.id, x: c.x, z: c.z };
         });
 
+/** The state the deck lands in, held inside the set: LANDING, or a shorter set's last state. */
+export const landingOf = (m: Manifest | null): number => (m ? Math.min(LANDING, m.commits.length - 1) : LANDING);
+
 /** The design's default pair for a diff: the standard against a later state, otherwise the state before this one. */
 export const comparePair = (head: number, standard: number | null): [number, number] => {
   const b = head === 0 ? 1 : head;
@@ -280,7 +283,7 @@ export const useStore = create<State>((set, get) => {
       const s = get();
       if (s.page !== "title" || s.leaving) return;
       if (s.slide >= SLIDES.length) {
-        if (s.loaded[LANDING]) s.leave();
+        if (s.loaded[landingOf(s.manifest)]) s.leave();
         return;
       }
       set({ slide: s.slide + 1 });
@@ -292,15 +295,16 @@ export const useStore = create<State>((set, get) => {
     },
     leave: () => {
       const s = get();
-      if (s.page !== "title" || s.leaving || !s.loaded[LANDING]) return;
+      if (s.page !== "title" || s.leaving || !s.loaded[landingOf(s.manifest)]) return;
       set({ leaving: true });
     },
     arrive: () => {
       const s = get();
       if (s.page !== "title") return;
-      const c = s.manifest?.commits[LANDING];
-      s.log("begin", c ? dateOf(c.captured) : "", { head: LANDING });
-      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, head: LANDING });
+      const head = landingOf(s.manifest);
+      const c = s.manifest?.commits[head];
+      s.log("begin", c ? dateOf(c.captured) : "", { head });
+      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, head });
     },
     liftCurtain: () => set((s) => (s.curtain ? { curtain: false } : s)),
     restartDemo: () => {
@@ -533,6 +537,7 @@ export const useStore = create<State>((set, get) => {
       set((s) => ({
         manifest: m,
         refScale,
+        head: Math.min(s.head, m.commits.length - 1), // a head asked for before the set was known stays inside it
         standard: m.standard,
         sites: m.sites.length ? m.sites : s.sites,
         site: s.site || m.sites.find((x) => x.set === s.set)?.id || m.sites[0]?.id || "",
