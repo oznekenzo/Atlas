@@ -44,6 +44,7 @@ const PICK_RADIUS_VOXELS = 1.5; // a bracket reaches this far past the object's 
 const SETTLE_MS = 1200; // keep rendering this long after the last change (damping tails, Spark's async sort results)
 const MOVING_SETTLE_MS = 900;
 const TWEEN_MS = 700;
+const ORBIT_S = 180; // the arrival's slow orbit: one turn around the room's centre takes this long
 const WALL_MARGIN_M = 0.15; // the camera stays this far inside the walls, floor and ceiling
 const WATCHDOG_MS = 250;
 
@@ -79,6 +80,7 @@ export class Stage {
   private overlay: Overlay;
   private minimap: Minimap;
   private tween: Tween | null = null;
+  private orbitT = 0; // the arrival's orbit: its last tick, 0 while it is not running
   private activeUntil = performance.now() + SETTLE_MS;
   private needsFrame = true; // a change is guaranteed at least one frame, however slow the GPU
   private frames = 0;
@@ -136,6 +138,7 @@ export class Stage {
     dom.addEventListener("pointerdown", this.onPointerDown);
     dom.addEventListener("pointerup", this.onPointerUp);
     dom.addEventListener("pointerleave", this.onPointerLeave);
+    dom.addEventListener("wheel", this.onWheel, { passive: true });
     addEventListener("resize", this.onResize);
 
     this.unsubs.push(
@@ -562,6 +565,7 @@ export class Stage {
     const box = this.boxes[id];
     if (!box) return;
     this.cancelTween();
+    useStore.getState().endOrbit();
     const c = box.getCenter(new THREE.Vector3());
     const dir = new THREE.Vector3(c.x, 0, c.z).normalize().multiplyScalar(-1);
     this.camera.position.set(c.x + dir.x * dist, h, c.z + dir.z * dist);
@@ -591,6 +595,7 @@ export class Stage {
 
   setCam(x: number, y: number, z: number) {
     this.cancelTween();
+    useStore.getState().endOrbit();
     this.camera.position.set(x, y, z);
     this.controls.update();
     this.touch();
@@ -598,6 +603,7 @@ export class Stage {
 
   tweenTo(cam: Cam, ms = TWEEN_MS) {
     this.gestures.flushDolly();
+    useStore.getState().endOrbit(); // a camera put somewhere on purpose stays there
     this.controls.enabled = false; // user input during a tween would fight it; a pointerdown cancels instead
     this.tween = {
       from: this.camera.position.clone(),
@@ -613,6 +619,26 @@ export class Stage {
     if (!this.tween) return;
     this.tween = null;
     this.controls.enabled = true;
+  }
+
+  /**
+   * The arrival's slow orbit: the camera drifts around the room's centre at eye height, held inside the walls by
+   * the clamp, until the first press or scroll on the scene. Paced by the clock, and capped so a tab that was
+   * hidden does not jump on its return.
+   */
+  private stepOrbit(tweening: boolean) {
+    const on = useStore.getState().orbit && !tweening;
+    const now = performance.now();
+    const dt = on && this.orbitT ? Math.min(0.1, (now - this.orbitT) / 1000) : 0;
+    this.orbitT = on ? now : 0;
+    if (dt === 0) return;
+    const a = (2 * Math.PI * dt) / ORBIT_S;
+    const p = this.camera.position;
+    const t = this.controls.target;
+    const dx = p.x - t.x;
+    const dz = p.z - t.z;
+    p.x = t.x + dx * Math.cos(a) - dz * Math.sin(a);
+    p.z = t.z + dx * Math.sin(a) + dz * Math.cos(a);
   }
 
   /** Advance the camera tween; returns true while one is running. */
@@ -740,6 +766,7 @@ export class Stage {
     this.lastTick = performance.now();
     if (this.paused || useStore.getState().page === "title") return;
     const tweening = this.stepTween();
+    this.stepOrbit(tweening);
     const moved = this.controls.update();
     this.clampToRoom();
     if (tweening || moved) this.touch();
@@ -766,6 +793,7 @@ export class Stage {
   private onControlsChange = () => {
     this.touch();
     const st = useStore.getState();
+    if (st.orbit) return; // the arrival's drift is not the user moving the camera: the chrome stays up
     st.setMoving(true);
     clearTimeout(this.moveTimer);
     this.moveTimer = window.setTimeout(() => useStore.getState().setMoving(false), MOVING_SETTLE_MS);
@@ -786,6 +814,7 @@ export class Stage {
     this.downAt = performance.now();
     this.dragging = true;
     this.cancelTween();
+    useStore.getState().endOrbit(); // the scene touched: the arrival's drift is over for this page load
     this.gestures.flushDolly(); // a click or drag after zooming closes the zoom entry first
   };
   private onPointerUp = (ev: PointerEvent) => {
@@ -810,6 +839,7 @@ export class Stage {
     this.dragging = false;
     useStore.getState().setHover(null);
   };
+  private onWheel = () => useStore.getState().endOrbit();
   private onResize = () => {
     const w = this.el.clientWidth;
     const h = this.el.clientHeight;
@@ -836,6 +866,7 @@ export class Stage {
     dom.removeEventListener("pointerdown", this.onPointerDown);
     dom.removeEventListener("pointerup", this.onPointerUp);
     dom.removeEventListener("pointerleave", this.onPointerLeave);
+    dom.removeEventListener("wheel", this.onWheel);
     removeEventListener("resize", this.onResize);
     this.clear();
     this.spark.dispose();
