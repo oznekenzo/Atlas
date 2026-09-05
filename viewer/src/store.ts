@@ -426,7 +426,7 @@ export const useStore = create<State>((set, get) => {
       if (s.page === "footnotes") return s.back();
       if (s.confirmStd) return s.cancelStandard();
       if (s.sitesOpen || s.menuOpen) return s.closeMenus();
-      if (s.openGoal) return set({ openGoal: null });
+      // an open checklist hint stays: it may be the one asking for esc, and it closes by its goal being done or clicked again
       if (s.mode.kind === "draft") return s.draft?.inHand ? s.dropInHand() : s.leaveDraft();
       if (s.selected !== null) return s.select(null);
       if (s.mode.kind === "compare") return s.exitMode();
