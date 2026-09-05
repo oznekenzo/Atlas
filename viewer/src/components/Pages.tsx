@@ -99,6 +99,11 @@ export function Pages() {
               <li>Implement a strict and robust design system</li>
               <li>Add documentation entry functionality</li>
               <li>Refine HUD fade in and out behavior</li>
+              <li>Split the stage engine: camera, picking and draft as their own modules</li>
+              <li>Split the store into room and demo slices</li>
+              <li>Unit-test the attention, store, layout and manifest</li>
+              <li>Colour splats from a palette in the shader, not per-splat uploads</li>
+              <li>Convert to Tailwind</li>
             </ul>
           </div>
         </div>
