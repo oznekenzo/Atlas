@@ -72,7 +72,7 @@ function useTransitions() {
   useEffect(
     () =>
       useStore.subscribe((s, p) => {
-        if (s.goals !== p.goals || s.tour !== p.tour || s.hints !== p.hints) writeGuide(s);
+        if (s.goals !== p.goals || s.tour !== p.tour || s.hints !== p.hints || s.arrived !== p.arrived || s.set !== p.set) writeGuide(s);
       }),
     [],
   );

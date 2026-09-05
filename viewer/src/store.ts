@@ -79,6 +79,7 @@ export type State = {
 
   site: string;
   sitesOpen: boolean;
+  arrived: boolean; // the deck has been walked through in this tab: a reload opens on the room, not the deck
   menuOpen: boolean; // the ATLAS menu, top right
   confirmStd: boolean; // the dialog before a state becomes the standard
   goals: Record<string, boolean>;
@@ -159,7 +160,7 @@ export const comparePair = (head: number, standard: number | null): [number, num
   return [a, b];
 };
 
-const readGuide = (): { tour?: number; hints?: boolean; done?: Record<string, boolean> } => {
+const readGuide = (): { tour?: number; hints?: boolean; done?: Record<string, boolean>; arrived?: boolean; set?: string } => {
   try {
     return JSON.parse(sessionStorage.getItem(GUIDE_KEY) || "{}");
   } catch {
@@ -168,7 +169,7 @@ const readGuide = (): { tour?: number; hints?: boolean; done?: Record<string, bo
 };
 export const writeGuide = (s: State) => {
   try {
-    sessionStorage.setItem(GUIDE_KEY, JSON.stringify({ tour: s.tour, hints: s.hints, done: s.goals }));
+    sessionStorage.setItem(GUIDE_KEY, JSON.stringify({ tour: s.tour, hints: s.hints, done: s.goals, arrived: s.arrived, set: s.set }));
   } catch {
     /* private mode */
   }
@@ -196,13 +197,17 @@ const emptyRoom = (): Partial<State> => ({
   curtain: true, // lifted once the set's first state is in
 });
 
-/** The start state from the URL: a named preset, the bare room, or the title; ?set= opens another set. */
+/**
+ * The start state from the URL: a named preset, the bare room, or the title; ?set= opens another set. A tab that has
+ * been through the deck reloads into the room, on the floor it left, under the curtain until that floor is in.
+ */
 const initial = () => {
   const q = new URLSearchParams(location.search);
   const name = q.get("s");
   const preset = name ? PRESETS[name] : undefined;
   const skip = preset !== undefined || q.has("nointro");
   const saved = skip ? {} : readGuide();
+  const arrived = !skip && !!saved.arrived;
   const draft: Draft | null = preset?.draft
     ? {
         base: preset.draft.base,
@@ -212,8 +217,10 @@ const initial = () => {
       }
     : null;
   return {
-    set: q.get("set") || DEFAULT_SET,
-    page: (preset?.page ?? (skip ? "room" : "title")) as Page,
+    set: q.get("set") || (arrived && saved.set) || DEFAULT_SET,
+    page: (preset?.page ?? (skip || arrived ? "room" : "title")) as Page,
+    arrived,
+    curtain: arrived,
     preset: preset ? name : null,
     head: preset?.head ?? 0,
     mode: preset?.mode ?? NORMAL,
@@ -261,7 +268,6 @@ export const useStore = create<State>((set, get) => {
     returnTo: "room",
     slide: 0,
     leaving: false,
-    curtain: false,
     hover: null,
     loaded: [],
     loadErrors: {},
@@ -300,7 +306,7 @@ export const useStore = create<State>((set, get) => {
       if (s.page !== "title") return;
       const c = s.manifest?.commits[0];
       s.log("begin", c ? dateOf(c.captured) : "");
-      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0 });
+      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, arrived: true });
     },
     liftCurtain: () => set((s) => (s.curtain ? { curtain: false } : s)),
     restartDemo: () => {
@@ -332,6 +338,7 @@ export const useStore = create<State>((set, get) => {
         standard: s.manifest?.standard ?? s.standard,
         site: home?.id ?? s.site,
         sitesOpen: false,
+        arrived: false,
         menuOpen: false,
         confirmStd: false,
         ...(homeSet !== s.set ? { ...emptyRoom(), set: homeSet, curtain: false } : {}),

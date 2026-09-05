@@ -238,10 +238,22 @@ async def main():
         check("Tool chest" in await ev("document.getElementById('card').innerText"), "an object opens its card")
         await ev("window.__patina.select(null)")
 
+        # --- a reload: the deck is not shown again; the room opens on the floor it left ---------------------
+        await pg.reload()
+        await pg.wait_for_function("window.__patina && window.__patina.S.manifest", timeout=60000)
+        check(await S("page") == "room" and await S("arrived"), "a reload after the deck opens on the room")
+        check(await S("set") == "bellevue" and await S("curtain"), "on the floor it left, under the curtain until it is in")
+        check(await S("goals.tour") and await S("tour") == -1, "the checklist and the tour are as they were")
+        await pg.wait_for_function("window.__patina.S.loaded[0]", timeout=120000)
+        check(await S("history[0].verb") == "begin" and not await S("curtain"), "the log begins; the curtain lifts once the floor is in")
+
         # --- restart: back to the deck, the first floor loading behind it again --------------------------
         await ev("window.__patina.S.restartDemo()")
         check(await S("page") == "title" and await S("history.length") == 0 and await S("tour") == 0, "Restart demo returns to a clean deck")
         check(await S("set") == "garage" and await S("site") == "torrance", "and to the first floor")
+        await pg.reload()
+        await pg.wait_for_function("window.__patina", timeout=60000)
+        check(await S("page") == "title", "after a restart, a reload shows the deck again")
 
         errs = [l for l in logs if ("error" in l.lower() or "PAGEERROR" in l) and "ERR_FAILED" not in l]
         check(not errs, f"console errors: {len(errs)}")

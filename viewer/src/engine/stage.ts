@@ -29,7 +29,7 @@ import { Gestures } from "./gestures";
 import { Overlay, type BoxItem, type Tone } from "./overlay";
 import { Minimap } from "./minimap";
 import { centre, diff, drift, metres, type Change } from "../scene";
-import { monthOf } from "../time";
+import { dateOf, monthOf } from "../time";
 import { BAND_B, BAND_T, COL_L, COL_R } from "../layout";
 
 const CLICK_MS = 250;
@@ -228,8 +228,11 @@ export class Stage {
       this.frameRoom(room, M.view);
       this.minimap.setRoom(room);
       store.setManifest(M, refScale);
-      // arriving from another floor, the log starts over with it (from the deck, `arrive` writes "begin")
-      if (gen > 1 && useStore.getState().page !== "title") store.log("open", useStore.getState().sites.find((x) => x.set === set)?.name ?? set);
+      // arriving from another floor, the log starts over with it; a reload into the room begins as the deck's exit
+      // would have (from the deck itself, `arrive` writes "begin")
+      const st = useStore.getState();
+      if (gen > 1 && st.page !== "title") store.log("open", st.sites.find((x) => x.set === set)?.name ?? set);
+      else if (gen === 1 && st.arrived) store.log("begin", dateOf(M.commits[0].captured));
       let any = false;
       for (let i = 0; i < M.commits.length; i++) {
         try {
