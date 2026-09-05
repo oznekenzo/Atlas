@@ -220,6 +220,12 @@ async def main():
         await pg.mouse.move(100, 120)
         await pg.wait_for_timeout(60)
         check(await hud() == "hud", "back on the HUD: full")
+        tab = await ev("(() => { const r = document.querySelector('#timeline .cell.lit .tab').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()")
+        await pg.mouse.move(770, 392)
+        await pg.wait_for_timeout(60)
+        await pg.mouse.move(*tab)  # the standard tab stands into the room's cell
+        await pg.wait_for_timeout(60)
+        check(await hud() == "hud", "the standard tab counts as the HUD, though it stands in the room's cell")
         await pg.mouse.move(770, 392)
         await ev("window.__patina.S.toggleMenu()")
         await pg.wait_for_timeout(60)
