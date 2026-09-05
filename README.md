@@ -62,7 +62,8 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
                      a MAKE THIS THE STANDARD tab that asks before it acts) over the state's details: date, sequence,
                      status, stoppages, changeover, output; what is in it; its entry
     Keys: ← → states · D diff · C compare to standard · N draft · M measure · ? how it works · F notes · esc back.
-    Every command is also a click. A first arrival runs a seven-stop tour of the controls (Enter steps, Skip ends it).
+    Every command is also a click. A first arrival runs a seven-stop tour of the controls (Enter steps, Skip ends it),
+    and the camera drifts slowly around the room until the first press or scroll on the scene; once per page load.
     Diff (D): the state before this one against it, or the standard against a later one; added tinted green, removed
     red from the earlier capture's own splats, a moved thing's old place faded under an arrow with the distance.
     Compare to standard (C): the standard's ghosts drawn in this state from its own capture, violet, each drifted

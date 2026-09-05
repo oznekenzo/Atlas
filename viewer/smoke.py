@@ -74,11 +74,19 @@ async def main():
         await pg.wait_for_function("!window.__patina.S.curtain", timeout=5000)
         check(not await ev("document.getElementById('chrome').hidden"), "the chrome is up")
         check(await S("tour") == 0, "the tour starts on arrival")
+        check(await S("orbit") and not await S("moving"), "the arrival's slow orbit is on, and it is not the user moving")
         check(await ev("!!document.querySelector('#chrome .ring')"), "the spotlight is on its first target")
         for _ in range(7):
             await pg.keyboard.press("Enter")
             await pg.wait_for_timeout(40)
         check(await S("tour") == -1 and await S("goals.ui"), "Enter walks the seven-stop tour; Understand the UI is ticked")
+        n0 = await S("history.length")
+        await pg.mouse.move(770, 392)  # the middle cell's centre at 1600 × 900: the scene
+        await pg.mouse.down()
+        await pg.wait_for_timeout(300)  # longer than a click, without motion: not a selection, not a gesture
+        await pg.mouse.up()
+        check(not await S("orbit") and await S("history.length") == n0, "the first press on the scene ends the orbit, and logs nothing")
+        await pg.mouse.move(100, 120)
 
         # --- the rail and the month ----------------------------------------------------------------------
         check(await ev("document.querySelectorAll('#timeline .cell').length") == N, "four timeline cells")

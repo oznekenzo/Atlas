@@ -44,6 +44,7 @@ const GUIDE_KEY = "atlas.guide";
 
 let actionSeq = 0;
 let placedSeq = 0;
+let orbited = false; // the arrival's slow orbit runs once per page load
 const T0 = performance.now();
 
 export type State = {
@@ -73,6 +74,7 @@ export type State = {
   loadErrors: Record<number, string>;
   splatCount: number[]; // per commit, once loaded
   moving: boolean; // camera in motion → chrome fades
+  orbit: boolean; // the arrival's slow orbit: the camera drifting around the room until the first press or scroll on the scene
   standard: number | null; // the state tagged as the approved layout
   ghosts: boolean; // compare to standard: the standard's ghosts drawn in this state
   draft: Draft | null;
@@ -102,6 +104,7 @@ export type State = {
   makeStandard: () => void;
   select: (id: number | null) => void;
   esc: () => void;
+  endOrbit: () => void;
   // a draft
   enterDraft: () => void;
   setDraftBase: (base: number | null) => void;
@@ -197,6 +200,7 @@ const emptyRoom = (): Partial<State> => ({
   camRequest: null,
   confirmStd: false,
   curtain: true, // lifted once the set's first state is in
+  orbit: false,
 });
 
 /** The start state from the URL: a named preset, the bare room, or the title; ?set= opens another set. */
@@ -270,6 +274,7 @@ export const useStore = create<State>((set, get) => {
     loadErrors: {},
     splatCount: [],
     moving: false,
+    orbit: false,
     standard: null,
     site: "",
     sitesOpen: false,
@@ -304,7 +309,10 @@ export const useStore = create<State>((set, get) => {
       const head = landingOf(s.manifest);
       const c = s.manifest?.commits[head];
       s.log("begin", c ? dateOf(c.captured) : "", { head });
-      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, head });
+      // the first arrival of a page load drifts the camera around the room; later arrivals stand still
+      const orbit = !orbited;
+      orbited = true;
+      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, head, orbit });
     },
     liftCurtain: () => set((s) => (s.curtain ? { curtain: false } : s)),
     restartDemo: () => {
@@ -338,6 +346,7 @@ export const useStore = create<State>((set, get) => {
         sitesOpen: false,
         menuOpen: false,
         confirmStd: false,
+        orbit: false,
         ...(homeSet !== s.set ? { ...emptyRoom(), set: homeSet, curtain: false } : {}),
       });
     },
@@ -416,6 +425,7 @@ export const useStore = create<State>((set, get) => {
       if (s.mode.kind === "compare") return s.exitMode();
       if (s.ghosts) s.toggleGhosts();
     },
+    endOrbit: () => set((s) => (s.orbit ? { orbit: false } : s)),
 
     // ---- a draft
     enterDraft: () => {
