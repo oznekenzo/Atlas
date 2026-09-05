@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
+import { canSave, draftDirty, nameOf as draftName } from "../drafts";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, type State } from "../store";
 import { GOALS, TOUR } from "../demo";
@@ -146,7 +147,7 @@ type Cmd = { id: string; label: string; key: string; on: boolean; dim?: boolean;
 
 /** Every command available right now, with its key; entries slide in and out as the state changes. */
 export function CommandBar() {
-  const { M, mode, head, standard, ghosts, selected, placed } = useStore(
+  const { M, mode, head, standard, ghosts, selected, placed, dirty, savable } = useStore(
     useShallow((s) => ({
       M: s.manifest,
       mode: s.mode,
@@ -155,6 +156,8 @@ export function CommandBar() {
       ghosts: s.ghosts,
       selected: s.selected,
       placed: s.draft?.placements.length ?? 0,
+      dirty: s.mode.kind === "draft" && s.draft ? draftDirty(s.draft, s.drafts, s.manifest) : false,
+      savable: s.mode.kind === "draft" && s.draft ? canSave(s.draft, s.drafts, s.manifest) : false,
     })),
   );
   const S = useStore.getState;
@@ -162,9 +165,10 @@ export function CommandBar() {
   const normal = mode.kind === "normal";
   const cmp = mode.kind === "compare";
   const draft = mode.kind === "draft";
+  const steps = normal || (draft && !dirty); // a clean draft is left behind by a step; unsaved work holds
   const cmds: Cmd[] = [
-    { id: "back", label: "Prev state", key: "←", on: true, dim: !normal || head === 0, run: () => S().step(-1) },
-    { id: "fwd", label: "Next state", key: "→", on: true, dim: !normal || head === last, run: () => S().step(1) },
+    { id: "back", label: "Prev state", key: "←", on: true, dim: !steps || head === 0, run: () => S().step(-1) },
+    { id: "fwd", label: "Next state", key: "→", on: true, dim: !steps || head === last, run: () => S().step(1) },
     { id: "compare", label: cmp ? "Diffing" : "Diff", key: "D", on: !draft, active: cmp, run: () => S().toggleCompare() },
     {
       id: "std",
@@ -177,6 +181,7 @@ export function CommandBar() {
     },
     { id: "restore", label: "Draft", key: "N", on: normal && selected === null, run: () => S().enterDraft() },
     { id: "measure", label: "Measure", key: "M", on: draft, dim: placed === 0, run: () => S().measure() },
+    { id: "save", label: "Save", key: "S", on: draft, dim: !savable, run: () => S().saveDraft() },
     { id: "esc", label: "Back", key: "esc", on: selected !== null || cmp || draft || ghosts, run: () => S().esc() },
   ];
   return (
@@ -202,8 +207,17 @@ export function CommandBar() {
 
 /** Hanging from the top band: which mode the room is in. Keeps its last text while fading out. */
 export function ModeHud() {
-  const { M, mode, head, standard, ghosts } = useStore(
-    useShallow((s) => ({ M: s.manifest, mode: s.mode, head: s.head, standard: s.standard, ghosts: s.ghosts })),
+  const { M, mode, head, standard, ghosts, name, base, dirty } = useStore(
+    useShallow((s) => ({
+      M: s.manifest,
+      mode: s.mode,
+      head: s.head,
+      standard: s.standard,
+      ghosts: s.ghosts,
+      name: s.mode.kind === "draft" ? draftName(s.draft?.id ?? null, s.drafts, s.draftSeq) : "",
+      base: s.draft?.base ?? null,
+      dirty: s.mode.kind === "draft" && s.draft ? draftDirty(s.draft, s.drafts, s.manifest) : false,
+    })),
   );
   const [last, setLast] = useState("");
   const mo = (i: number) => (M ? new Date(M.commits[i].captured).toLocaleDateString("en-GB", { month: "short" }).toUpperCase() : "");
@@ -211,7 +225,7 @@ export function ModeHud() {
     mode.kind === "compare"
       ? `DIFF MODE · ${mo(mode.a)} → ${mo(mode.b)}`
       : mode.kind === "draft"
-        ? "DRAFT MODE"
+        ? `DRAFT MODE · ${name.toUpperCase()} · ${base === null ? "SCRATCH" : `FROM ${mo(base)}`}${dirty ? " · UNSAVED" : ""}`
         : ghosts && standard !== null && head !== standard
           ? `COMPARE TO STANDARD MODE · ${mo(head)} → ${mo(standard)}`
           : "";

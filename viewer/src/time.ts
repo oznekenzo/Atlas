@@ -38,3 +38,6 @@ export const monthOf = (captured: string): string => {
   const d = capturedAt(captured);
   return d ? d.toLocaleDateString("en-GB", { month: "short" }) : "—";
 };
+
+/** "14:32": the one time of day shown, when a draft was saved as a branch. */
+export const timeOf = (ms: number): string => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });

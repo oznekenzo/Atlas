@@ -148,8 +148,33 @@ async def main():
         check(await S("draft.placements.length") == 0, "from scratch starts bare")
         stats = await ev("window.__patina.stats()")
         check(stats[0]["visible"] and not stats[3]["visible"], "a draft stands on the empty capture")
+
+        # --- a branch: the draft saved, left, returned to, deleted ---------------------------------------
+        cells = await ev("document.querySelectorAll('#timeline .cell').length")
+        check(cells == 5 and await ev("!!document.querySelector('#timeline .cell.branch.unsaved.lit')"), "an unsaved draft is a fifth, dashed cell")
+        await ev("window.__patina.place(0, -1.0, 1.5)")
+        check(await ev("window.__patina.dirty()") and await ev("window.__patina.go(2)") is False and await S("mode.kind") == "draft", "unsaved work holds the timeline")
+        await pg.keyboard.press("s")
+        await pg.wait_for_timeout(60)
+        check(await ev("window.__patina.drafts.length") == 1 and await S("draft.id") == 1 and await ev("window.__patina.drafts[0].name") == "Draft 1", "S saves the draft as Draft 1")
+        check(await ev("!!document.querySelector('#timeline .cell.branch.lit:not(.unsaved)')") and cells == await ev("document.querySelectorAll('#timeline .cell').length"), "the branch cell is the saved one, lit")
+        check("BRANCH" in await ev("document.getElementById('details').innerText") and "DRAFT 1" in await ev("document.getElementById('modehud').innerText"), "the details and the HUD say branch and Draft 1")
+        check(await ev("JSON.parse(localStorage.getItem('atlas.drafts.garage')).drafts.length") == 1, "the browser holds it")
+        saved_id = await ev("window.__patina.S.history.at(-1).id")
         await pg.keyboard.press("Escape")
         check(await S("mode.kind") == "normal" and await S("draft") is None, "esc leaves the draft")
+        check(await ev("document.querySelectorAll('#timeline .cell.branch').length") == 1, "the branch stays in the timeline")
+        await ev("document.querySelector('#timeline .cell.branch').click()")
+        check(await S("mode.kind") == "draft" and await S("draft.id") == 1 and await S("draft.placements.length") == 1, "the branch cell opens the draft again")
+        check(not await ev("window.__patina.dirty()") and await ev("window.__patina.go(2)") and await S("mode.kind") == "normal", "a clean draft lets the timeline through")
+        await ev("window.__patina.openDraft(1); window.__patina.deleteDraft(1)")
+        check(await ev("window.__patina.drafts.length") == 0 and await S("mode.kind") == "normal" and not await ev("!!document.querySelector('#timeline .cell.branch')"), "delete removes the branch")
+        check(await ev(f"window.__patina.S.restore({saved_id})") and await S("mode.kind") == "draft" and await S("draft.id") is None, "a deleted branch's entry reopens as an unsaved draft")
+        await pg.keyboard.press("s")
+        await pg.wait_for_timeout(60)
+        check(await ev("window.__patina.drafts[0].name") == "Draft 2", "names never repeat")
+        await pg.keyboard.press("Escape")
+        check(await S("mode.kind") == "normal", "esc leaves the saved draft")
 
         # --- an object -----------------------------------------------------------------------------------
         await ev("window.__patina.select(7)")
@@ -159,10 +184,10 @@ async def main():
         check(await S("selected") is None, "the same thing again deselects")
 
         # --- the pages, the sites, the log -------------------------------------------------------------
-        await pg.keyboard.press("f")
+        await ev("window.__patina.S.openFoot()")
         await pg.wait_for_timeout(60)
         foot = await ev("document.getElementById('footnotes').innerText")
-        check("NEXT STEPS" in foot and "Gaussian splats" in foot, "F opens Notes: the bento")
+        check("NEXT STEPS" in foot and "Gaussian splats" in foot, "the menu opens Notes: the bento")
         await pg.keyboard.press("Escape")
         check(await S("page") == "room", "esc returns to the room")
         did = await ev("window.__patina.S.history.find((a) => a.verb === 'diff').id")
@@ -245,6 +270,7 @@ async def main():
         # --- restart: back to the deck, the first floor loading behind it again --------------------------
         await ev("window.__patina.S.restartDemo()")
         check(await S("page") == "title" and await S("history.length") == 0 and await S("tour") == 0, "Restart demo returns to a clean deck")
+        check(await ev("localStorage.getItem('atlas.drafts.garage')") is None and await ev("window.__patina.drafts.length") == 0, "and clears the branches")
         check(await S("set") == "garage" and await S("site") == "torrance", "and to the first floor")
 
         errs = [l for l in logs if ("error" in l.lower() or "PAGEERROR" in l) and "ERR_FAILED" not in l]

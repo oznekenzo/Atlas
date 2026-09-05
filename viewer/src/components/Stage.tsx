@@ -3,6 +3,7 @@ import { Stage as Engine } from "../engine/stage";
 import { useStore } from "../store";
 import type { Manifest } from "../types";
 import { attentionLevel } from "../attention";
+import { draftDirty, type SavedDraft } from "../drafts";
 
 /** Test/debug surface, the shape the headless harness drives. Exposed only in dev or with ?debug. */
 export type DebugApi = {
@@ -16,6 +17,11 @@ export type DebugApi = {
   place: (id: number, x: number, z: number) => void;
   measure: () => void;
   leaveDraft: () => void;
+  saveDraft: () => void;
+  openDraft: (id: number) => boolean;
+  deleteDraft: (id: number) => void;
+  dirty: () => boolean;
+  readonly drafts: SavedDraft[];
   select: (id: number | null) => void;
   loaded: () => number;
   pause: (p: boolean) => void;
@@ -62,6 +68,16 @@ export function Stage() {
         },
         measure: () => s().measure(),
         leaveDraft: () => s().leaveDraft(),
+        saveDraft: () => s().saveDraft(),
+        openDraft: (id) => s().openDraft(id),
+        deleteDraft: (id) => s().deleteDraft(id),
+        dirty: () => {
+          const st = s();
+          return st.mode.kind === "draft" && st.draft ? draftDirty(st.draft, st.drafts, st.manifest) : false;
+        },
+        get drafts() {
+          return s().drafts;
+        },
         select: (id) => s().select(id),
         loaded: () => s().loaded.filter(Boolean).length,
         pause: (p) => {

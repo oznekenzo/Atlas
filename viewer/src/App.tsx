@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, writeGuide } from "./store";
+import { writeDrafts } from "./drafts";
 import { startAttention } from "./attention";
 import { Stage } from "./components/Stage";
 import { Title } from "./components/Title";
@@ -44,7 +45,7 @@ function useKeys() {
       else if (k === "c" || k === "C") s.toggleGhosts();
       else if (k === "n" || k === "N") s.enterDraft();
       else if (k === "m" || k === "M") s.measure();
-      else if (k === "f" || k === "F") s.openFoot();
+      else if (k === "s" || k === "S") s.saveDraft();
       else if (k === "Escape") s.esc();
     };
     addEventListener("keydown", onKey);
@@ -72,6 +73,7 @@ function useTransitions() {
     () =>
       useStore.subscribe((s, p) => {
         if (s.goals !== p.goals || s.tour !== p.tour || s.hints !== p.hints) writeGuide(s);
+        if (s.drafts !== p.drafts || s.draftSeq !== p.draftSeq) writeDrafts(s.set, { seq: s.draftSeq, drafts: s.drafts });
       }),
     [],
   );

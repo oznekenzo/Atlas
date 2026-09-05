@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { diff, drift, metres, things } from "../scene";
-import { monthOf } from "../time";
+import { canSave, draftDirty, nameOf as draftName, savedOf } from "../drafts";
+import { monthOf, timeOf } from "../time";
 import type { Manifest } from "../types";
 
 const CLOSED = 51; // the kicker alone
@@ -58,7 +59,9 @@ export function Panel() {
       : shown?.k === "std"
         ? "LAYOUT · COMPARE TO STANDARD"
         : shown?.k === "draft"
-          ? "LAYOUT · DRAFT"
+          ? draft?.id != null
+            ? "LAYOUT · DRAFT · BRANCH"
+            : "LAYOUT · DRAFT"
           : "LAYOUT · NONE ACTIVE";
   return (
     <div id="panel" className={live ? "on" : ""} style={{ flexBasis: h }}>
@@ -172,14 +175,29 @@ function StandardPanel({ M, head, standard }: { M: Manifest; head: number; stand
   );
 }
 
-/** The draft: where it starts from, the tray of every thing, what has been put down. */
+/** The draft: its branch, where it starts from, the tray of every thing, what has been put down, save and delete. */
 function DraftPanel({ M }: { M: Manifest }) {
-  const { draft, head, standard, setBase, pick } = useStore(
-    useShallow((s) => ({ draft: s.draft!, head: s.head, standard: s.standard, setBase: s.setDraftBase, pick: s.pickFromTray })),
+  const { draft, drafts, draftSeq, head, standard, setBase, pick, save, del } = useStore(
+    useShallow((s) => ({
+      draft: s.draft!,
+      drafts: s.drafts,
+      draftSeq: s.draftSeq,
+      head: s.head,
+      standard: s.standard,
+      setBase: s.setDraftBase,
+      pick: s.pickFromTray,
+      save: s.saveDraft,
+      del: s.deleteDraft,
+    })),
   );
   const [open, setOpen] = useState(false);
   const tray = useMemo(() => things(M.objects), [M]);
   const placed = draft.placements.length;
+  const name = draftName(draft.id, drafts, draftSeq);
+  const saved = savedOf(drafts, draft.id);
+  const dirty = draftDirty(draft, drafts, M);
+  const can = canSave(draft, drafts, M);
+  const status = `${placed} placed · ${saved ? (dirty ? "unsaved changes" : `saved ${timeOf(saved.savedAt)}`) : "not saved yet"}`;
   const baseMonth = monthOf(M.commits[draft.base ?? head].captured);
   const counts = new Map<number, number>();
   for (const p of draft.placements) counts.set(p.id, (counts.get(p.id) ?? 0) + 1);
@@ -191,7 +209,8 @@ function DraftPanel({ M }: { M: Manifest }) {
   return (
     <>
       <div className="top">
-        <div className="title">{placed ? `${placed} placed` : "Draft a layout"}</div>
+        <div className="title">{name}</div>
+        <div className="sub">{status}</div>
       </div>
       <div className="seg">
         <div
@@ -238,6 +257,16 @@ function DraftPanel({ M }: { M: Manifest }) {
         })}
       </div>
       <div className="hint">{hint}</div>
+      <div className="acts">
+        <div className={`act${can ? "" : " dim"}`} onClick={() => can && save()}>
+          Save <kbd>S</kbd>
+        </div>
+        {saved && (
+          <div className="act del" onClick={() => del(saved.id)}>
+            Delete
+          </div>
+        )}
+      </div>
       {draft.attempts.length > 0 && (
         <div className="attempts">
           {draft.attempts.map((a) => (

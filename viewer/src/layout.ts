@@ -21,3 +21,22 @@ export const cellOf = (t: string, W: number, H: number): { x: number; y: number;
       return null;
   }
 };
+
+const BRANCH_FR = 0.8; // a branch cell against a state cell
+/**
+ * The rail's and the details' columns, as one grid: the states share the width equally, the branches after them
+ * a little narrower, and a set with fewer than four cells keeps a quarter each (an empty track fills the rest).
+ * The details' first two cells stay under the first two states, so the hairlines meet.
+ */
+export const railColumns = (states: number, branches: number): { rail: string; details: string } => {
+  const used = states + branches * BRANCH_FR;
+  const units = Math.max(4, used);
+  const spare = units - used;
+  const rail = [
+    ...Array(states).fill("minmax(0, 1fr)"),
+    ...Array(branches).fill(`minmax(0, ${BRANCH_FR}fr)`),
+    ...(spare > 0 ? [`minmax(0, ${spare}fr)`] : []),
+  ].join(" ");
+  const details = `minmax(0, 1fr) minmax(0, 1fr) minmax(0, ${units - 2}fr)`;
+  return { rail, details };
+};
