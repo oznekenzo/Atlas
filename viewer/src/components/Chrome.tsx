@@ -4,17 +4,24 @@ import { useStore, type State } from "../store";
 import { GOALS, TOUR } from "../demo";
 import { monthOf } from "../time";
 
-/** Top left: the mark, and the site picker beside it. */
+/** Top left: the mark, and the site picker beside it. Picking another floor opens its set in place of this one. */
 export function Mark() {
-  const { M, site, open, toggle, pick } = useStore(
-    useShallow((s) => ({ M: s.manifest, site: s.site, open: s.sitesOpen, toggle: s.toggleSites, pick: s.pickSite })),
+  const { sites, site, open, loading, toggle, pick } = useStore(
+    useShallow((s) => ({
+      sites: s.sites,
+      site: s.site,
+      open: s.sitesOpen,
+      loading: !s.loaded[0], // no floor yet: a set opening under the curtain
+      toggle: s.toggleSites,
+      pick: s.pickSite,
+    })),
   );
-  const sites = M?.sites ?? [];
   const cur = sites.find((x) => x.id === site) ?? sites[0];
   const split = (name: string) => {
     const [a, b] = name.split(" · ");
     return [a, b ?? ""];
   };
+  const states = (n: number) => `${n} ${n === 1 ? "state" : "states"}`;
   return (
     <div id="mark">
       <div className="t-rader">ATLAS</div>
@@ -31,7 +38,7 @@ export function Mark() {
             <span className="cols">
               <span>{split(cur.name)[0]}</span>
               <span className="room">{split(cur.name)[1]}</span>
-              <span className="count">{cur.count} states</span>
+              <span className="count">{loading ? "loading…" : states(cur.count)}</span>
             </span>
             <span className="caret">▾</span>
           </div>
@@ -42,7 +49,7 @@ export function Mark() {
                   <span className="cols">
                     <span>{split(st.name)[0]}</span>
                     <span className="room">{split(st.name)[1]}</span>
-                    <span className="count">{st.count} states</span>
+                    <span className="count">{states(st.count)}</span>
                   </span>
                 </div>
               ))}

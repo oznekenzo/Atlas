@@ -45,7 +45,7 @@ export const GOALS: Goal[] = [
   },
   { id: "std", label: "Compare against the standard", target: "cmd-std", hint: "Press C. This overlays the approved layout on the current month." },
   { id: "draft", label: "Draft a layout proposal", target: "cmd-restore", hint: "Press N. Place objects on the floor to propose a new layout." },
-  { id: "tour", label: "Tour a remote factory", target: "site", hint: "Open the site menu and select Ravensburg." },
+  { id: "tour", label: "Tour a remote factory", target: "site", hint: "Open the site menu and select Bellevue. The room becomes that floor." },
 ];
 
 export type TourStep = { target: string; text: string };

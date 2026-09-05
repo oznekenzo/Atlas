@@ -13,4 +13,5 @@ Spatial version control for gaussian-splat captures of a room. The words below a
 - **Draft** — a layout tried on the empty floor: things placed by hand, from scratch or from a state used as a template. Measure counts what is down. Nothing is written back.
 - **Entry** — the written record kept with a state, a diff or an object: what happened, and who signed it.
 - **Reflog / actions** — every action taken, with a snapshot of the state after it; any entry restores.
+- **Site** — one floor on the picker, with the set of states behind it. Picking another floor empties the room under the curtain and opens that set; the log starts over there. `store.ts` owns the switch (`set`), the engine follows it.
 - **Scene model** — `viewer/src/scene.ts`: the pure module that decides things, diffs, drift, standing and months. The engine, the panels, the card, the month block and the map read it and never re-derive it.

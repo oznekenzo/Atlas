@@ -138,12 +138,14 @@
   {
    "id": "torrance",
    "name": "Torrance \u00b7 Bay 1",
-   "count": 4
+   "count": 4,
+   "set": "garage"
   },
   {
-   "id": "ravensburg",
-   "name": "Ravensburg \u00b7 Hall 2",
-   "count": 27
+   "id": "bellevue",
+   "name": "Bellevue \u00b7 Bay 2",
+   "count": 1,
+   "set": "bellevue"
   }
  ],
  "objects": [

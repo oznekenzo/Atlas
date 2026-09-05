@@ -1,5 +1,5 @@
 """
-Headless end-to-end check of the built viewer against the garage set.
+Headless end-to-end check of the built viewer against the garage set, and the switch to the Bellevue set.
 
     cd viewer && npm run build && npx vite preview --port 4173 &
     python3 smoke.py [http://127.0.0.1:4173]
@@ -18,7 +18,7 @@ from playwright.async_api import async_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:4173"
 ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--no-sandbox"]
-N = 4  # garage states
+N = 4  # garage states; the Bellevue set has one
 
 FAILURES = []
 
@@ -160,9 +160,6 @@ async def main():
         check("60 cm" in foot and "build" in foot, "F opens Footnotes with the pipeline's numbers and the build")
         await pg.keyboard.press("Escape")
         check(await S("page") == "room", "esc returns to the room")
-        await ev("window.__patina.S.pickSite('ravensburg')")
-        check(await S("goals.tour"), "picking the remote site ticks the tour goal")
-        check(await ev("Object.keys(window.__patina.S.goals).length") == 6, "all six goals done")
         did = await ev("window.__patina.S.history.find((a) => a.verb === 'diff').id")
         check(await ev(f"window.__patina.S.restore({did})"), "a log entry restores")
         check(await S("mode.kind") == "compare", "restore returns to the diff")
@@ -177,9 +174,25 @@ async def main():
         check(abs(mv["target"][0]) < 0.3 and abs(mv["target"][2]) < 0.3, "facing the room's centre")
         check(await ev("document.getElementById('map-slot').querySelector('canvas.map') !== null"), "the map is a canvas in the frame")
 
-        # --- restart -------------------------------------------------------------------------------------
+        # --- the other site: its set opens in place of this one --------------------------------------------
+        await ev("window.__patina.S.pickSite('bellevue')")
+        check(await S("goals.tour"), "picking the remote site ticks the tour goal")
+        check(await ev("Object.keys(window.__patina.S.goals).length") == 6, "all six goals done")
+        check(await S("set") == "bellevue" and await S("curtain") and await S("history.length") == 0, "the room empties under the curtain; the log starts over")
+        await pg.wait_for_function("window.__patina.S.status === 'ready' && window.__patina.S.set === 'bellevue'", timeout=120000)
+        check(await ev("window.__patina.M.commits.length") == 1 and await ev("document.querySelectorAll('#month .cap').length") == 1, "Bellevue: one state on the rail")
+        check("Bellevue" in await ev("document.querySelector('#mark .site').innerText"), "the picker names the floor")
+        check(await S("history[0].verb") == "open", "the log opens with the floor")
+        check(await S("standard") == 0 and "Standard" in await ev("document.getElementById('month').innerText"), "its one state is the standard")
+        check(await ev("window.__patina.stats()[0].labelled") > 0, "its objects are labelled from their boxes")
+        await ev("window.__patina.select(2)")
+        check("Tool chest" in await ev("document.getElementById('card').innerText"), "an object opens its card")
+        await ev("window.__patina.select(null)")
+
+        # --- restart: back to the deck, the first floor loading behind it again --------------------------
         await ev("window.__patina.S.restartDemo()")
         check(await S("page") == "title" and await S("history.length") == 0 and await S("tour") == 0, "Restart demo returns to a clean deck")
+        check(await S("set") == "garage" and await S("site") == "torrance", "and to the first floor")
 
         errs = [l for l in logs if ("error" in l.lower() or "PAGEERROR" in l) and "ERR_FAILED" not in l]
         check(not errs, f"console errors: {len(errs)}")

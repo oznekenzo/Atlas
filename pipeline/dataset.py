@@ -13,7 +13,8 @@ dataset.json keys:
                                "doc": "...", "by": "...", "stats": {"stoppages", "changeover", "output"}}, ...]
                   doc/by/stats are optional and pass through to the viewer untouched (doc null = no entry)
   diffs           optional {"<a>-<b>": {"doc", "by"}}: the written entry for the diff between commits a < b
-  sites           optional [{"id", "name", "count"}]: the viewer's site picker; the first is this set
+  sites           optional [{"id", "name", "count", "set"}]: the viewer's site picker, the same list in every set;
+                  set = the directory under viewer/public/sets the picker opens for that floor
   registration    optional RegisterParams overrides
   diff            optional DiffParams overrides
   bake            optional BakeParams overrides

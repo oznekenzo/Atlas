@@ -49,19 +49,20 @@ function useKeys() {
 
 /** The deck's exit and the room's arrival; the guide's persistence; the history preset's scripted past. */
 function useTransitions() {
-  const { leaving, curtain, preset, ready } = useStore(
-    useShallow((s) => ({ leaving: s.leaving, curtain: s.curtain, preset: s.preset, ready: s.status === "ready" })),
+  const { leaving, curtain, floor, preset, ready } = useStore(
+    useShallow((s) => ({ leaving: s.leaving, curtain: s.curtain, floor: !!s.loaded[0], preset: s.preset, ready: s.status === "ready" })),
   );
   useEffect(() => {
     if (!leaving) return;
     const id = window.setTimeout(() => useStore.getState().arrive(), LEAVE_MS);
     return () => clearTimeout(id);
   }, [leaving]);
+  // the curtain lifts once there is a floor under it: at once on arrival, after the load on a switch of site
   useEffect(() => {
-    if (!curtain) return;
+    if (!curtain || !floor) return;
     const id = window.setTimeout(() => useStore.getState().liftCurtain(), 80);
     return () => clearTimeout(id);
-  }, [curtain]);
+  }, [curtain, floor]);
   useEffect(
     () =>
       useStore.subscribe((s, p) => {
@@ -84,13 +85,13 @@ function useTransitions() {
 
 /** Boot failure. */
 function Status() {
-  const { status, error } = useStore(useShallow((s) => ({ status: s.status, error: s.error })));
+  const { status, error, set } = useStore(useShallow((s) => ({ status: s.status, error: s.error, set: s.set })));
   if (status !== "error") return null;
   return (
     <div id="status" role="alert">
       <div className="k">could not open the set</div>
       <div className="msg">{error}</div>
-      <div className="k dim">publish the garage set and reload</div>
+      <div className="k dim">publish the {set} set and reload</div>
     </div>
   );
 }

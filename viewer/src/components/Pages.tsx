@@ -58,7 +58,10 @@ export function Pages() {
             <div className="n">2</div>
             <div>The room is assumed rectangular. Anything within 60 cm of a wall is ignored.</div>
             <div className="n">3</div>
-            <div>The states are of the Torrance floor. Plants stand in for carts and tools.</div>
+            <div>
+              The Torrance states are a garage; plants stand in for carts and tools. The Bellevue floor is one state: a Harley-Davidson service bay
+              captured by Paolo Tosolini with an XGRIDS PortalCam, shared on superspl.at under CC BY 4.0. Its objects were boxed by hand.
+            </div>
             <div className="n">4</div>
             <div>Distances are in metres, in the state&apos;s own frame. Registration residual is about 1 cm.</div>
             <div className="n">5</div>
@@ -66,7 +69,7 @@ export function Pages() {
             <div className="n">6</div>
             <div>Next: a real floor, weekly states, and the drift list issued as a work order.</div>
           </div>
-          <div className="colophon">Torrance set · captured May–Aug 2026 · build {__GIT_HASH__} · written 4 Sep 2026</div>
+          <div className="colophon">Torrance set · captured May–Aug 2026 · Bellevue set · one state · build {__GIT_HASH__} · written 4 Sep 2026</div>
         </div>
       </div>
     );
