@@ -1770,11 +1770,6 @@ kbd {
   text-transform: uppercase;
   color: var(--ink-50);
   animation: fadeSlow 3s 6.5s both;
-  /* an oblong of dark behind the words: the field's lines converge here, so the text needs a floor to sit on.
-     A gradient on the element itself, not a blur filter: one static layer over the animating canvas. */
-  padding: 3em 9em;
-  margin: -3em -9em;
-  background: radial-gradient(ellipse closest-side, rgba(4, 4, 5, 0.94) 0%, rgba(4, 4, 5, 0.78) 55%, rgba(4, 4, 5, 0) 100%);
 }
 #title .slide {
   position: absolute;
