@@ -228,12 +228,12 @@ async def main():
         await pg.wait_for_timeout(60)
         check(await hud() == "room", "pointer in the room: the middle level")
         quiet = False
-        for _ in range(8):
+        for _ in range(12):
             await pg.wait_for_timeout(300)
             if await hud() == "quiet":
                 quiet = True
                 break
-        check(quiet, f"one still second in the room: quiet (hud={await hud()}, moving={await S('moving')})")
+        check(quiet, f"two still seconds in the room: quiet (hud={await hud()}, moving={await S('moving')})")
         await pg.mouse.move(100, 120)
         await pg.wait_for_timeout(60)
         check(await hud() == "quiet", "hovering over a gone HUD does not bring it back")

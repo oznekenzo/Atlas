@@ -91,7 +91,7 @@ body {
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
-/* the HUD's three levels: full on the HUD, lighter in the room, gone after one still second there.
+/* the HUD's three levels: full on the HUD, lighter in the room, gone after two still seconds there.
    The chrome fades as one layer through its opacity; the bands' ink is the one other number, tweened on their background */
 :root[data-hud="room"] {
   --t-hud: 320ms;

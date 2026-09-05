@@ -1,6 +1,6 @@
 /**
  * The HUD's attention: full while the pointer is on it, lighter while the pointer is in the room or a camera drag
- * is under way, and gone after one second of stillness in the room. Stillness means the camera is not
+ * is under way, and gone after two seconds of stillness in the room. Stillness means the camera is not
  * moving; the pointer drifting inside the room does not count. Once gone, it stays gone until a click: hovering
  * over where the HUD was may be an inspection of the room behind it. A click on a thing brings it back to the middle
  * level, a click on the HUD brings it back in full; a menu, the confirm or the walkthrough pin it in full. A piece
@@ -14,7 +14,7 @@ import { useStore } from "./store";
 import { cellOf } from "./layout";
 
 export type Level = "hud" | "room" | "quiet";
-const STILL_MS = 1000;
+const STILL_MS = 2000;
 
 export const attentionLevel = (): Level => (document.documentElement.dataset.hud as Level | undefined) ?? "hud";
 
