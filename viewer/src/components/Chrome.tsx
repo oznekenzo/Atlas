@@ -70,10 +70,10 @@ export function Sites() {
   );
 }
 
-/** Top right: the mark, and under it the pages and the restart. */
+/** Top right: the mark, and under it the notes and the restart. */
 export function Menu() {
-  const { open, toggle, openHow, openFoot, restart } = useStore(
-    useShallow((s) => ({ open: s.menuOpen, toggle: s.toggleMenu, openHow: s.openHow, openFoot: s.openFoot, restart: s.restartDemo })),
+  const { open, toggle, openFoot, restart } = useStore(
+    useShallow((s) => ({ open: s.menuOpen, toggle: s.toggleMenu, openFoot: s.openFoot, restart: s.restartDemo })),
   );
   return (
     <div id="menu" className={open ? "open" : ""}>
@@ -89,9 +89,6 @@ export function Menu() {
       </div>
       {open && (
         <div className="list" onClick={(e) => e.stopPropagation()}>
-          <div className="row" onClick={openHow}>
-            How it works
-          </div>
           <div className="row" onClick={openFoot}>
             Notes
           </div>

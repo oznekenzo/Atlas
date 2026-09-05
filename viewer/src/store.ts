@@ -15,7 +15,7 @@ import { dateOf, monthOf } from "./time";
 export type Mode = { kind: "normal" } | { kind: "compare"; a: number; b: number; headBefore: number } | { kind: "draft" };
 export const NORMAL: Mode = { kind: "normal" };
 export const DEFAULT_SET = "garage"; // the set the viewer opens first: the demo's floor
-export type Page = "title" | "room" | "how" | "footnotes";
+export type Page = "title" | "room" | "footnotes";
 
 export type Cam = { pos: [number, number, number]; target: [number, number, number] };
 /** A thing put down on the draft's floor. `key` tells copies of the same object apart. */
@@ -124,7 +124,6 @@ export type State = {
   cancelStandard: () => void;
   confirmStandard: () => void;
   pickSite: (id: string) => void;
-  openHow: () => void;
   openFoot: () => void;
   back: () => void;
   tourNext: () => void;
@@ -416,7 +415,7 @@ export const useStore = create<State>((set, get) => {
     },
     esc: () => {
       const s = get();
-      if (s.page === "how" || s.page === "footnotes") return s.back();
+      if (s.page === "footnotes") return s.back();
       if (s.confirmStd) return s.cancelStandard();
       if (s.sitesOpen || s.menuOpen) return s.closeMenus();
       if (s.openGoal) return set({ openGoal: null });
@@ -529,9 +528,7 @@ export const useStore = create<State>((set, get) => {
       // another floor: the room empties under the curtain and the engine opens its set; the log starts over there
       set({ site: id, sitesOpen: false, ...tick, ...emptyRoom(), set: site.set });
     },
-    openHow: () => set((s) => (s.page === "how" ? s : { page: "how", menuOpen: false, returnTo: s.page === "footnotes" ? s.returnTo : s.page })),
-    openFoot: () =>
-      set((s) => (s.page === "footnotes" ? s : { page: "footnotes", menuOpen: false, returnTo: s.page === "how" ? s.returnTo : s.page })),
+    openFoot: () => set((s) => (s.page === "footnotes" ? s : { page: "footnotes", menuOpen: false, returnTo: s.page })),
     back: () => set((s) => ({ page: s.returnTo || "room" })),
     tourNext: () => set((s) => (s.tour + 1 >= TOUR.length ? { tour: -1, goals: { ...s.goals, ui: true } } : { tour: s.tour + 1 })),
     tourSkip: () => set((s) => ({ tour: -1, goals: { ...s.goals, ui: true } })),

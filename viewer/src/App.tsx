@@ -44,7 +44,6 @@ function useKeys() {
       else if (k === "c" || k === "C") s.toggleGhosts();
       else if (k === "n" || k === "N") s.enterDraft();
       else if (k === "m" || k === "M") s.measure();
-      else if (k === "?") s.openHow();
       else if (k === "f" || k === "F") s.openFoot();
       else if (k === "Escape") s.esc();
     };
