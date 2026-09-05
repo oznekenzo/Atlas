@@ -40,7 +40,7 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
                 src/components/        Title (the deck), Chrome (the bands, the site picker, the ATLAS menu, the checklist, the
                                        command bar, the mode readout, the guide, the confirm, the curtain), LeftColumn (the
                                        actions log, the map cell), ObjectCard and Panel (the right column's two cells),
-                                       BottomBand (the timeline cells and the state's details), Pages (How it works, Notes), Stage
+                                       BottomBand (the timeline cells and the state's details), Pages (Notes), Stage
                 ply2spz.mjs            ply → SPZ v3 using Spark's SpzWriter (NOT splat-transform: it writes SPZ v4, Spark 2.1 can't read it)
                 smoke.py               headless end-to-end check of the built viewer (npm run build && npx vite preview, then python3 smoke.py)
     AUDIT.md    architecture + performance audit: findings, what was fixed, known limitations
@@ -48,22 +48,24 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
 ## Screen
     The deck first: the name over a point field, five slides (the technology, the project, the problem, the
     fundamentals, the demo), and the floor; the captures load behind it from landing, and the last slide's ENTER
-    is live once the first is in. Then the room, full bleed, under a grid of translucent bands with hairlines:
+    is live once June's is in: the floor opens on the second month, Jun 2026, with its first stations in. Then the
+    room, full bleed, under a grid of translucent bands with hairlines:
       top band       the command bar (every command available now, with its key), the mode readout hanging under it
       left column    the site picker in its cell (another floor opens its set in place of this one, under the
                      curtain), the demo checklist (six things to do, ticked by real state), the
                      actions log (each entry restorable), and the map in the bottom cell (click a thing to open it,
                      bare floor to stand there)
-      right column   the ATLAS menu (How it works, Notes, Restart demo), then two cells that grow to their content:
+      right column   the ATLAS menu (Notes, Restart demo), then two cells that grow to their content:
                      the selected object (its months, its entry) and the layout — the diff, the comparison to the
                      standard, or the draft
       bottom band    four timeline cells (month, year, STANDARD / OFF STANDARD / n of 4; the current one tinted, with
                      a MAKE THIS THE STANDARD tab that asks before it acts) over the state's details: date, sequence,
                      status, stoppages, changeover, output; what is in it; its entry
-    Keys: ← → states · D diff · C compare to standard · N draft · M measure · ? how it works · F notes · esc back.
-    Every command is also a click. A first arrival runs a seven-stop tour of the controls (Enter steps, Skip ends it).
+    Keys: ← → states · D diff · C compare to standard · N draft · M measure · F notes · esc back.
+    Every command is also a click. A first arrival runs a seven-stop tour of the controls (Enter steps, Skip ends it),
+    and the camera drifts slowly around the room until the first press or scroll on the scene; once per page load.
     A reload after the deck opens on the room, on the floor it left, with the checklist and the tour as they were
-    (session storage, per tab); Restart demo forgets that, so the next reload shows the deck.
+    (session storage, per tab) and the drift again; Restart demo forgets that, so the next reload shows the deck.
     Diff (D): the state before this one against it, or the standard against a later one; added tinted green, removed
     red from the earlier capture's own splats, a moved thing's old place faded under an arrow with the distance.
     Compare to standard (C): the standard's ghosts drawn in this state from its own capture, violet, each drifted
@@ -75,7 +77,7 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
     lighter while the pointer is in the room or a drag is under way, and gone after one still second in the
     room; a click on a thing brings it back, a menu or the walkthrough pins it in full.
     ?s=<preset> opens the room in a state for testing: empty, explore, selected, compare, drift, ghosts,
-    restore-hand, measured, how, footnotes, history. ?nointro skips the deck; ?debug exposes window.__patina;
+    restore-hand, measured, footnotes, history. ?nointro skips the deck; ?debug exposes window.__patina;
     ?set=<name> opens another set than the garage.
 
 ## Run

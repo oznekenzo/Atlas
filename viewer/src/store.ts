@@ -9,13 +9,13 @@
 import { create } from "zustand";
 import type { Manifest, Site } from "./types";
 import { carry, centre } from "./scene";
-import { GOALS, PRESETS, SLIDES, TOUR } from "./demo";
+import { GOALS, LANDING, PRESETS, SLIDES, TOUR } from "./demo";
 import { dateOf, monthOf } from "./time";
 
 export type Mode = { kind: "normal" } | { kind: "compare"; a: number; b: number; headBefore: number } | { kind: "draft" };
 export const NORMAL: Mode = { kind: "normal" };
 export const DEFAULT_SET = "garage"; // the set the viewer opens first: the demo's floor
-export type Page = "title" | "room" | "how" | "footnotes";
+export type Page = "title" | "room" | "footnotes";
 
 export type Cam = { pos: [number, number, number]; target: [number, number, number] };
 /** A thing put down on the draft's floor. `key` tells copies of the same object apart. */
@@ -44,6 +44,7 @@ const GUIDE_KEY = "atlas.guide";
 
 let actionSeq = 0;
 let placedSeq = 0;
+let orbited = false; // the arrival's slow orbit runs once per page load
 const T0 = performance.now();
 
 export type State = {
@@ -73,6 +74,7 @@ export type State = {
   loadErrors: Record<number, string>;
   splatCount: number[]; // per commit, once loaded
   moving: boolean; // camera in motion → chrome fades
+  orbit: boolean; // the arrival's slow orbit: the camera drifting around the room until the first press or scroll on the scene
   standard: number | null; // the state tagged as the approved layout
   ghosts: boolean; // compare to standard: the standard's ghosts drawn in this state
   draft: Draft | null;
@@ -103,6 +105,7 @@ export type State = {
   makeStandard: () => void;
   select: (id: number | null) => void;
   esc: () => void;
+  endOrbit: () => void;
   // a draft
   enterDraft: () => void;
   setDraftBase: (base: number | null) => void;
@@ -122,7 +125,6 @@ export type State = {
   cancelStandard: () => void;
   confirmStandard: () => void;
   pickSite: (id: string) => void;
-  openHow: () => void;
   openFoot: () => void;
   back: () => void;
   tourNext: () => void;
@@ -152,6 +154,9 @@ export const seedDraft = (m: Manifest | null, base: number | null): Placed[] =>
           const c = centre(o);
           return { key: ++placedSeq, id: o.id, x: c.x, z: c.z };
         });
+
+/** The state the deck lands in, held inside the set: LANDING, or a shorter set's last state. */
+export const landingOf = (m: Manifest | null): number => (m ? Math.min(LANDING, m.commits.length - 1) : LANDING);
 
 /** The design's default pair for a diff: the standard against a later state, otherwise the state before this one. */
 export const comparePair = (head: number, standard: number | null): [number, number] => {
@@ -195,6 +200,7 @@ const emptyRoom = (): Partial<State> => ({
   camRequest: null,
   confirmStd: false,
   curtain: true, // lifted once the set's first state is in
+  orbit: false,
 });
 
 /**
@@ -208,6 +214,7 @@ const initial = () => {
   const skip = preset !== undefined || q.has("nointro");
   const saved = skip ? {} : readGuide();
   const arrived = !skip && !!saved.arrived;
+  if (arrived) orbited = true; // a reload into the room is this page load's arrival: it drifts like one
   const draft: Draft | null = preset?.draft
     ? {
         base: preset.draft.base,
@@ -221,8 +228,9 @@ const initial = () => {
     page: (preset?.page ?? (skip || arrived ? "room" : "title")) as Page,
     arrived,
     curtain: arrived,
+    orbit: arrived,
     preset: preset ? name : null,
-    head: preset?.head ?? 0,
+    head: preset?.head ?? LANDING,
     mode: preset?.mode ?? NORMAL,
     selected: preset?.selected ?? null,
     ghosts: preset?.ghosts ?? false,
@@ -286,7 +294,7 @@ export const useStore = create<State>((set, get) => {
       const s = get();
       if (s.page !== "title" || s.leaving) return;
       if (s.slide >= SLIDES.length) {
-        if (s.loaded[0]) s.leave();
+        if (s.loaded[landingOf(s.manifest)]) s.leave();
         return;
       }
       set({ slide: s.slide + 1 });
@@ -298,15 +306,19 @@ export const useStore = create<State>((set, get) => {
     },
     leave: () => {
       const s = get();
-      if (s.page !== "title" || s.leaving || !s.loaded[0]) return;
+      if (s.page !== "title" || s.leaving || !s.loaded[landingOf(s.manifest)]) return;
       set({ leaving: true });
     },
     arrive: () => {
       const s = get();
       if (s.page !== "title") return;
-      const c = s.manifest?.commits[0];
-      s.log("begin", c ? dateOf(c.captured) : "");
-      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, arrived: true });
+      const head = landingOf(s.manifest);
+      const c = s.manifest?.commits[head];
+      s.log("begin", c ? dateOf(c.captured) : "", { head });
+      // the first arrival of a page load drifts the camera around the room; later arrivals stand still
+      const orbit = !orbited;
+      orbited = true;
+      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, head, orbit, arrived: true });
     },
     liftCurtain: () => set((s) => (s.curtain ? { curtain: false } : s)),
     restartDemo: () => {
@@ -330,7 +342,7 @@ export const useStore = create<State>((set, get) => {
         tour: 0,
         hints: true,
         openGoal: null,
-        head: 0,
+        head: LANDING,
         mode: NORMAL,
         ghosts: false,
         draft: null,
@@ -341,6 +353,7 @@ export const useStore = create<State>((set, get) => {
         arrived: false,
         menuOpen: false,
         confirmStd: false,
+        orbit: false,
         ...(homeSet !== s.set ? { ...emptyRoom(), set: homeSet, curtain: false } : {}),
       });
     },
@@ -410,7 +423,7 @@ export const useStore = create<State>((set, get) => {
     },
     esc: () => {
       const s = get();
-      if (s.page === "how" || s.page === "footnotes") return s.back();
+      if (s.page === "footnotes") return s.back();
       if (s.confirmStd) return s.cancelStandard();
       if (s.sitesOpen || s.menuOpen) return s.closeMenus();
       if (s.openGoal) return set({ openGoal: null });
@@ -419,6 +432,7 @@ export const useStore = create<State>((set, get) => {
       if (s.mode.kind === "compare") return s.exitMode();
       if (s.ghosts) s.toggleGhosts();
     },
+    endOrbit: () => set((s) => (s.orbit ? { orbit: false } : s)),
 
     // ---- a draft
     enterDraft: () => {
@@ -522,9 +536,7 @@ export const useStore = create<State>((set, get) => {
       // another floor: the room empties under the curtain and the engine opens its set; the log starts over there
       set({ site: id, sitesOpen: false, ...tick, ...emptyRoom(), set: site.set });
     },
-    openHow: () => set((s) => (s.page === "how" ? s : { page: "how", menuOpen: false, returnTo: s.page === "footnotes" ? s.returnTo : s.page })),
-    openFoot: () =>
-      set((s) => (s.page === "footnotes" ? s : { page: "footnotes", menuOpen: false, returnTo: s.page === "how" ? s.returnTo : s.page })),
+    openFoot: () => set((s) => (s.page === "footnotes" ? s : { page: "footnotes", menuOpen: false, returnTo: s.page })),
     back: () => set((s) => ({ page: s.returnTo || "room" })),
     tourNext: () => set((s) => (s.tour + 1 >= TOUR.length ? { tour: -1, goals: { ...s.goals, ui: true } } : { tour: s.tour + 1 })),
     tourSkip: () => set((s) => ({ tour: -1, goals: { ...s.goals, ui: true } })),
@@ -540,6 +552,7 @@ export const useStore = create<State>((set, get) => {
       set((s) => ({
         manifest: m,
         refScale,
+        head: Math.min(s.head, m.commits.length - 1), // a head asked for before the set was known stays inside it
         standard: m.standard,
         sites: m.sites.length ? m.sites : s.sites,
         site: s.site || m.sites.find((x) => x.set === s.set)?.id || m.sites[0]?.id || "",

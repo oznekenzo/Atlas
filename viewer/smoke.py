@@ -69,21 +69,29 @@ async def main():
         await pg.wait_for_timeout(100)
         check(await S("leaving"), "the deck leaves")
         await pg.wait_for_function("window.__patina.S.page === 'room'", timeout=10000)
-        check(await S("head") == 0, "arrives on the first state")
+        check(await S("head") == 1, "arrives on the second state, June")
         check(await S("history[0].verb") == "begin", "the log starts with begin")
         await pg.wait_for_function("!window.__patina.S.curtain", timeout=5000)
         check(not await ev("document.getElementById('chrome').hidden"), "the chrome is up")
         check(await S("tour") == 0, "the tour starts on arrival")
+        check(await S("orbit") and not await S("moving"), "the arrival's slow orbit is on, and it is not the user moving")
         check(await ev("!!document.querySelector('#chrome .ring')"), "the spotlight is on its first target")
         for _ in range(7):
             await pg.keyboard.press("Enter")
             await pg.wait_for_timeout(40)
         check(await S("tour") == -1 and await S("goals.ui"), "Enter walks the seven-stop tour; Understand the UI is ticked")
+        n0 = await S("history.length")
+        await pg.mouse.move(770, 392)  # the middle cell's centre at 1600 × 900: the scene
+        await pg.mouse.down()
+        await pg.wait_for_timeout(300)  # longer than a click, without motion: not a selection, not a gesture
+        await pg.mouse.up()
+        check(not await S("orbit") and await S("history.length") == n0, "the first press on the scene ends the orbit, and logs nothing")
+        await pg.mouse.move(100, 120)
 
         # --- the rail and the month ----------------------------------------------------------------------
         check(await ev("document.querySelectorAll('#timeline .cell').length") == N, "four timeline cells")
         check((await ev("document.querySelector('#timeline .cell.std').innerText")).startswith("Jul"), "July's cell is the standard")
-        check("Bay 1 cleared" in await ev("document.querySelector('#details .doc').innerText"), "May's entry is written")
+        check("First stations in" in await ev("document.querySelector('#details .doc').innerText"), "June's entry is written")
         await pg.keyboard.press("ArrowRight")
         await pg.keyboard.press("ArrowRight")
         await pg.keyboard.press("ArrowRight")
@@ -151,14 +159,10 @@ async def main():
         check(await S("selected") is None, "the same thing again deselects")
 
         # --- the pages, the sites, the log -------------------------------------------------------------
-        await pg.keyboard.press("?")
-        await pg.wait_for_timeout(60)
-        check(await S("page") == "how" and "Register" in await ev("document.getElementById('how').innerText"), "? opens How it works")
-        await pg.keyboard.press("Escape")
         await pg.keyboard.press("f")
         await pg.wait_for_timeout(60)
         foot = await ev("document.getElementById('footnotes').innerText")
-        check("60 cm" in foot and "build" in foot, "F opens Footnotes with the pipeline's numbers and the build")
+        check("NEXT STEPS" in foot and "Gaussian splats" in foot, "F opens Notes: the bento")
         await pg.keyboard.press("Escape")
         check(await S("page") == "room", "esc returns to the room")
         did = await ev("window.__patina.S.history.find((a) => a.verb === 'diff').id")
@@ -177,7 +181,7 @@ async def main():
 
         # --- the menu and the confirm -------------------------------------------------------------------------
         await ev("window.__patina.S.toggleMenu()")
-        check(await ev("document.querySelectorAll('#menu .list .row').length") == 3, "the ATLAS menu: How it works, Notes, Restart demo")
+        check(await ev("document.querySelectorAll('#menu .list .row').length") == 2, "the ATLAS menu: Notes, Restart demo")
         await ev("window.__patina.S.closeMenus()")
         await ev("window.__patina.go(3); window.__patina.S.askStandard()")
         check(await ev("!!document.getElementById('confirm')"), "the tab asks before a state becomes the standard")
@@ -244,8 +248,10 @@ async def main():
         check(await S("page") == "room" and await S("arrived"), "a reload after the deck opens on the room")
         check(await S("set") == "bellevue" and await S("curtain"), "on the floor it left, under the curtain until it is in")
         check(await S("goals.tour") and await S("tour") == -1, "the checklist and the tour are as they were")
+        check(await S("orbit"), "and the drift runs again: this page load's arrival")
         await pg.wait_for_function("window.__patina.S.loaded[0]", timeout=120000)
-        check(await S("history[0].verb") == "begin" and not await S("curtain"), "the log begins; the curtain lifts once the floor is in")
+        await pg.wait_for_function("!window.__patina.S.curtain", timeout=5000)
+        check(await S("history[0].verb") == "begin" and await S("head") == 0, "the log begins on the floor's landing state; the curtain lifts once it is in")
 
         # --- restart: back to the deck, the first floor loading behind it again --------------------------
         await ev("window.__patina.S.restartDemo()")

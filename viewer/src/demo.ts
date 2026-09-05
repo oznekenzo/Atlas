@@ -4,6 +4,9 @@
  */
 import type { Mode } from "./store";
 
+/** The state the deck lands in: the second month, June 2026, the floor with its first stations in. */
+export const LANDING = 1;
+
 export type Slide = { title: string; lead: string; body: string };
 export const SLIDES: Slide[] = [
   {
@@ -64,7 +67,7 @@ export const TOUR: TourStep[] = [
 
 /** A start state, by name. `?s=<name>` opens the room there; the smoke test and the screenshots use them. */
 export type Preset = {
-  page: "room" | "how" | "footnotes";
+  page: "room" | "footnotes";
   head: number;
   mode?: Mode;
   selected?: number;
@@ -94,7 +97,6 @@ export const PRESETS: Record<string, Preset> = {
       attempts: ["2 placed"],
     },
   },
-  how: { page: "how", head: 3 },
   footnotes: { page: "footnotes", head: 3 },
   history: { page: "room", head: 3, ghosts: true, history: true },
 };

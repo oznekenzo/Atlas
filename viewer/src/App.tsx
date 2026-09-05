@@ -44,7 +44,6 @@ function useKeys() {
       else if (k === "c" || k === "C") s.toggleGhosts();
       else if (k === "n" || k === "N") s.enterDraft();
       else if (k === "m" || k === "M") s.measure();
-      else if (k === "?") s.openHow();
       else if (k === "f" || k === "F") s.openFoot();
       else if (k === "Escape") s.esc();
     };
@@ -56,14 +55,14 @@ function useKeys() {
 /** The deck's exit and the room's arrival; the guide's persistence; the history preset's scripted past. */
 function useTransitions() {
   const { leaving, curtain, floor, preset, ready } = useStore(
-    useShallow((s) => ({ leaving: s.leaving, curtain: s.curtain, floor: !!s.loaded[0], preset: s.preset, ready: s.status === "ready" })),
+    useShallow((s) => ({ leaving: s.leaving, curtain: s.curtain, floor: !!s.loaded[s.head], preset: s.preset, ready: s.status === "ready" })),
   );
   useEffect(() => {
     if (!leaving) return;
     const id = window.setTimeout(() => useStore.getState().arrive(), LEAVE_MS);
     return () => clearTimeout(id);
   }, [leaving]);
-  // the curtain lifts once there is a floor under it: at once on arrival, after the load on a switch of site
+  // the curtain lifts once the state it shows is in: at once on arrival, after the load on a switch of site or a reload
   useEffect(() => {
     if (!curtain || !floor) return;
     const id = window.setTimeout(() => useStore.getState().liftCurtain(), 80);
