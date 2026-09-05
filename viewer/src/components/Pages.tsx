@@ -98,6 +98,7 @@ export function Pages() {
               <li>Scan a real factory</li>
               <li>Implement a strict and robust design system</li>
               <li>Add documentation entry functionality</li>
+              <li>Refine HUD fade in and out behavior</li>
             </ul>
           </div>
         </div>
