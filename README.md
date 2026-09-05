@@ -65,7 +65,8 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
                      while a draft is open
     Keys: ← → states · D diff · C compare to standard · N draft · M measure · S save draft · esc back.
     Every command is also a click. A first arrival runs a seven-stop tour of the controls (Enter steps, Skip ends it),
-    and the camera drifts slowly around the room until the first press or scroll on the scene; once per page load.
+    and the camera drifts slowly around the room until the first press or scroll on the scene: on every arrival from
+    the deck, and on a reload into the room.
     A reload after the deck opens on the room, on the floor it left, with the checklist and the tour as they were
     (session storage, per tab) and the drift again; Restart demo forgets that, so the next reload shows the deck.
     Diff (D): the state before this one against it, or the standard against a later one; added tinted green, removed

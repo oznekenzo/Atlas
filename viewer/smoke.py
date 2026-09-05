@@ -279,7 +279,7 @@ async def main():
         check(await S("page") == "room" and await S("arrived"), "a reload after the deck opens on the room")
         check(await S("set") == "bellevue" and await S("curtain"), "on the floor it left, under the curtain until it is in")
         check(await S("goals.tour") and await S("tour") == -1, "the checklist and the tour are as they were")
-        check(await S("orbit"), "and the drift runs again: this page load's arrival")
+        check(await S("orbit"), "and the drift runs again: every arrival from the deck")
         await pg.wait_for_function("window.__patina.S.loaded[0]", timeout=120000)
         await pg.wait_for_function("!window.__patina.S.curtain", timeout=5000)
         check(await S("history[0].verb") == "begin" and await S("head") == 0, "the log begins on the floor's landing state; the curtain lifts once it is in")

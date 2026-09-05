@@ -817,7 +817,7 @@ export class Stage {
     this.downAt = performance.now();
     this.dragging = true;
     this.cancelTween();
-    useStore.getState().endOrbit(); // the scene touched: the arrival's drift is over for this page load
+    useStore.getState().endOrbit(); // the scene touched: the arrival's drift is over until the next arrival
     this.gestures.flushDolly(); // a click or drag after zooming closes the zoom entry first
   };
   private onPointerUp = (ev: PointerEvent) => {

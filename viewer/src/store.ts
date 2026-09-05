@@ -58,7 +58,6 @@ const GUIDE_KEY = "atlas.guide";
 
 let actionSeq = 0;
 let placedSeq = 0;
-let orbited = false; // the arrival's slow orbit runs once per page load
 const T0 = performance.now();
 
 export type State = {
@@ -234,7 +233,6 @@ const initial = () => {
   const skip = preset !== undefined || q.has("nointro");
   const saved = skip ? {} : readGuide();
   const arrived = !skip && !!saved.arrived;
-  if (arrived) orbited = true; // a reload into the room is this page load's arrival: it drifts like one
   const draft: Draft | null = preset?.draft ? inflate(preset.draft, null) : null;
   const set = q.get("set") || (arrived && saved.set) || DEFAULT_SET;
   const branches = readDrafts(set);
@@ -332,10 +330,8 @@ export const useStore = create<State>((set, get) => {
       const head = landingOf(s.manifest);
       const c = s.manifest?.commits[head];
       s.log("begin", c ? dateOf(c.captured) : "", { head });
-      // the first arrival of a page load drifts the camera around the room; later arrivals stand still
-      const orbit = !orbited;
-      orbited = true;
-      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, head, orbit, arrived: true });
+      // every arrival from the deck drifts the camera around the room, until the scene is touched
+      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0, head, orbit: true, arrived: true });
     },
     liftCurtain: () => set((s) => (s.curtain ? { curtain: false } : s)),
     restartDemo: () => {
