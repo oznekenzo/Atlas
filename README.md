@@ -74,7 +74,7 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
     click a placed thing to pick it up again; Measure counts what is down. Nothing is written back.
     The grid is 268 px left, 328 px right, 48 px top, 164 px bottom; the picture is offset so the room centres in
     the middle cell. Designed for 1280 px and up. The HUD follows attention: full while the pointer is on it,
-    lighter while the pointer is in the room or a drag is under way, and gone after one still second in the
+    lighter while the pointer is in the room or a drag is under way, and gone after two still seconds in the
     room; a click on a thing brings it back, a menu or the walkthrough pins it in full.
     ?s=<preset> opens the room in a state for testing: empty, explore, selected, compare, drift, ghosts,
     restore-hand, measured, footnotes, history. ?nointro skips the deck; ?debug exposes window.__patina;
