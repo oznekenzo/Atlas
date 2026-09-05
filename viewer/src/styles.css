@@ -763,6 +763,11 @@ kbd {
 #panel.on .body {
   opacity: 1;
 }
+#panel .content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
 #card .top {
   display: flex;
   flex-direction: column;
