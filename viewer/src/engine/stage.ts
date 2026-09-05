@@ -30,6 +30,7 @@ import { Overlay, type BoxItem, type Tone } from "./overlay";
 import { Minimap } from "./minimap";
 import { centre, diff, drift, metres, type Change } from "../scene";
 import { monthOf } from "../time";
+import { BAND_B, BAND_T, COL_L, COL_R } from "../layout";
 
 const SET = "garage"; // the one set the viewer opens
 const CLICK_MS = 250;
@@ -37,8 +38,6 @@ const STANDARD_GHOST_OPACITY = 0.35; // the standard's ghost of a thing, where i
 const IN_HAND_OPACITY = 0.7; // a draft's thing in hand, following the pointer
 const OLD_PLACE_ALPHA = 0.5; // in a diff, a moved thing's old place under the arrow to its new one
 const UNFOCUSED_DIM = 0.45;
-const DIM_DELAY_MS = 200; // the dim on selection starts after the documentation rail has begun to rise…
-const DIM_MS = 1000; // …and takes this long, slower than the rail
 const REMOVED_ALPHA = 0.85;
 const LABEL_CHUNK = 262144; // splats labelled per task before yielding to the render loop
 const PICK_STRIDE = 3; // keep every 3rd labelled splat for picking
@@ -65,13 +64,6 @@ export class Stage {
 
   private M: Manifest | null = null;
   layers: (Layer | undefined)[] = [];
-  // the dim on selection: the head layer's recolor uniform ramps between 1 and UNFOCUSED_DIM; nothing is repainted.
-  // The selected thing is drawn as its own part at full colour on top, and stays while the dim fades back out.
-  private dimTarget = 1;
-  private dimValue = 1;
-  private dimFrom = 1;
-  private dimT0 = 0;
-  private focusId: number | null = null; // the thing kept bright, kept until the ramp is back at 1
   private bounds: THREE.Box3 | null = null; // the room, shrunk by the margin: the camera and its target stay inside
   private roomCentre = new THREE.Vector3(); // what a click on the map's floor turns the camera toward
   private eyeY = 1.6; // standing height for a camera put down from the map
@@ -110,6 +102,7 @@ export class Stage {
     el.appendChild(this.renderer.domElement);
 
     this.camera = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.05, 100);
+    this.centreInCell(el.clientWidth, el.clientHeight);
     this.camera.position.set(4.2, 2.1, 5.4);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.target.set(0, 1.0, 0);
@@ -345,18 +338,9 @@ export class Stage {
     if (!M) return;
     const t0 = performance.now();
     const nObj = M.objects.length;
-    // emphasis is selection only: hovering never changes what the room looks like
-    const wanted = s.selected !== null && s.mode.kind === "normal" ? UNFOCUSED_DIM : 1;
-    if (wanted !== this.dimTarget) {
-      this.dimFrom = this.dimValue;
-      this.dimTarget = wanted;
-      this.dimT0 = performance.now();
-    }
-    if (s.selected !== null && s.mode.kind === "normal") this.focusId = s.selected;
-    else if (this.dimValue >= 1) this.focusId = null; // the ramp is back: the part can go
+    // a selection changes nothing in the room: the bracket and the card carry it
     for (const L of this.layers) {
       if (!L) continue;
-      L.mesh.recolor.setScalar(1); // only the head layer carries the dim, set below
       L.mesh.visible = false;
       if (L.objects) L.objects.mesh.visible = false;
       for (const part of L.parts.values()) part.mesh.visible = false;
@@ -433,18 +417,7 @@ export class Stage {
       if (L) {
         L.mesh.visible = true;
         setOpacity(L.mesh, 1);
-        L.mesh.recolor.setScalar(this.dimValue); // the whole capture recedes as one uniform: no repaint
         paint(L, makeStyle(nObj));
-      }
-      // the thing in focus, at full colour over the dimmed capture, from its own splats
-      if (this.focusId !== null && M.objects[this.focusId].present.includes(s.head)) {
-        const part = this.part(s.head, this.focusId);
-        if (part && part.mesh.parent) {
-          part.mesh.position.set(0, 0, 0);
-          part.mesh.visible = true;
-          setOpacity(part.mesh, 1);
-          paint(part, makeStyle(nObj));
-        }
       }
       // compare to standard: a drifted or missing thing where the standard put it, from the standard's own capture
       if (s.ghosts && s.standard !== null && s.head !== s.standard) {
@@ -509,6 +482,11 @@ export class Stage {
       c.rgba.dispose();
       c.mesh.dispose();
     }
+  }
+
+  /** The chrome's columns and bands are not the same size, so the picture is shifted to centre on the middle cell. */
+  private centreInCell(w: number, h: number) {
+    this.camera.setViewOffset(w, h, (COL_R - COL_L) / 2, (BAND_B - BAND_T) / 2, w, h);
   }
 
   /** Where the pointer meets the floor, clamped inside the room. */
@@ -662,7 +640,10 @@ export class Stage {
           const n = (seen.get(p.id) ?? 0) + 1;
           seen.set(p.id, n);
           const label = (counts.get(p.id) ?? 1) > 1 ? `${name(p.id)} ${n}` : name(p.id);
-          push({ id: p.id, key: p.key, label, tone: "neutral", emphasis: s.hover === p.id, shift: shiftOf(p) }, M.objects[p.id].present[0]);
+          push(
+            { id: p.id, key: p.key, label, tone: "neutral", solid: true, emphasis: s.hover === p.id, shift: shiftOf(p) },
+            M.objects[p.id].present[0],
+          );
         }
         if (d.inHand?.at) {
           const p = d.inHand;
@@ -707,16 +688,6 @@ export class Stage {
     this.lastTick = performance.now();
     if (this.paused || useStore.getState().page === "title") return;
     const tweening = this.stepTween();
-    if (this.dimValue !== this.dimTarget) {
-      // step the dim ramp on the uniform; when it lands back at 1 the focused part is released
-      const u = Math.min(1, Math.max(0, performance.now() - this.dimT0 - DIM_DELAY_MS) / DIM_MS);
-      const e = 1 - Math.pow(1 - u, 3);
-      this.dimValue = u >= 1 ? this.dimTarget : this.dimFrom + (this.dimTarget - this.dimFrom) * e;
-      const L = this.layers[useStore.getState().head];
-      if (L) L.mesh.recolor.setScalar(this.dimValue);
-      if (u >= 1 && this.dimTarget === 1) this.applyMode(useStore.getState());
-      this.touch();
-    }
     const moved = this.controls.update();
     this.clampToRoom();
     if (tweening || moved) this.touch();
@@ -769,7 +740,7 @@ export class Stage {
     this.dragging = false;
     if (performance.now() - this.downAt >= CLICK_MS) return;
     const st = useStore.getState();
-    st.closeSites();
+    st.closeMenus();
     if (st.mode.kind === "draft") {
       if (st.draft?.inHand) {
         const at = this.floorAt(ev); // where the click landed, in case the pointer never moved on the way
@@ -791,6 +762,7 @@ export class Stage {
     const w = this.el.clientWidth;
     const h = this.el.clientHeight;
     this.camera.aspect = w / h;
+    this.centreInCell(w, h);
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.overlay.resize(w, h);

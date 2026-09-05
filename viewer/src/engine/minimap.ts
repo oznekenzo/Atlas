@@ -7,8 +7,8 @@
 import * as THREE from "three";
 import { TONES, type BoxItem } from "./overlay";
 
-export const MAP_W = 112; // css px, the design's frame
-export const MAP_H = 150;
+export const MAP_W = 100; // css px, the design's frame
+export const MAP_H = 124;
 const PAD = 3; // px inside the edge
 const MARGIN_M = 0.2; // metres of floor shown past the walls
 const CONE_M = 3.2; // metres the view cone reaches

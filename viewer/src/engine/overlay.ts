@@ -17,8 +17,10 @@ export type BoxItem = {
   label: string;
   tone: Tone;
   emphasis: boolean;
-  /** Drawn dashed: a ghost, an old place, something not really there. */
+  /** Drawn dashed on the map too: a ghost, an old place, something not really there. */
   dashed?: boolean;
+  /** Drawn solid even when not selected: a thing put down in a draft. */
+  solid?: boolean;
   /** Receded: the unchanged things in a diff. */
   faint?: boolean;
   /** Where a draft has carried the object to, as an offset from where it was captured. */
@@ -46,7 +48,19 @@ const MIN_PX = 14; // ignore anything smaller than this on screen: it is a speck
 const LABEL_H = 18;
 const ARROW = 7;
 /** The chrome owns these regions; a tag that would land on them is dropped rather than drawn over them. */
-const RESERVED = ["#mark", "#goals", "#cmdbar", "#modehud", "#pages", "#card", "#panel", "#left", "#month"];
+const RESERVED = [
+  "#sites",
+  "#goals",
+  "#actions",
+  "#map-cell",
+  "#cmdbar",
+  "#modehud",
+  "#menu",
+  "#card .inner",
+  "#panel .inner",
+  "#timeline",
+  "#details",
+];
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 const hits = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
@@ -213,7 +227,7 @@ export class Overlay {
     return { x0, y0, x1, y1 };
   }
 
-  /** The design's box: a 1 px frame, dashed for what is not really there, with 2 px corner ticks. */
+  /** The design's box: a 1 px frame, dashed unless it is the selected thing, with 2 px corner ticks. */
   private frame(r: Rect, item: BoxItem) {
     const ctx = this.ctx;
     const { tone, emphasis } = item;
@@ -224,7 +238,8 @@ export class Overlay {
     const y1 = Math.round(r.y1) + 0.5;
     ctx.lineWidth = 1;
     ctx.strokeStyle = rgba(tone, a);
-    ctx.setLineDash(item.dashed && !emphasis ? [3, 4] : []);
+    // every frame is dashed until it is the selected thing (or one put down by hand): the solid one is the one you chose
+    ctx.setLineDash(emphasis || item.solid ? [] : [3, 4]);
     ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
     ctx.setLineDash([]);
     if (item.tone === "add" || item.tone === "rem") {

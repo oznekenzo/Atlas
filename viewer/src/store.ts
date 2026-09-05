@@ -76,6 +76,8 @@ export type State = {
 
   site: string;
   sitesOpen: boolean;
+  menuOpen: boolean; // the ATLAS menu, top right
+  confirmStd: boolean; // the dialog before a state becomes the standard
   goals: Record<string, boolean>;
   tour: number; // -1 = off, else the step
   openGoal: string | null;
@@ -110,6 +112,11 @@ export type State = {
   // the chrome
   toggleSites: () => void;
   closeSites: () => void;
+  toggleMenu: () => void;
+  closeMenus: () => void;
+  askStandard: () => void;
+  cancelStandard: () => void;
+  confirmStandard: () => void;
   pickSite: (id: string) => void;
   openHow: () => void;
   openFoot: () => void;
@@ -236,6 +243,8 @@ export const useStore = create<State>((set, get) => {
     standard: null,
     site: "",
     sitesOpen: false,
+    menuOpen: false,
+    confirmStd: false,
     openGoal: null,
     ...initial(),
 
@@ -293,6 +302,8 @@ export const useStore = create<State>((set, get) => {
         standard: s.manifest?.standard ?? s.standard,
         site: s.manifest?.sites[0]?.id ?? "",
         sitesOpen: false,
+        menuOpen: false,
+        confirmStd: false,
       });
     },
 
@@ -362,7 +373,8 @@ export const useStore = create<State>((set, get) => {
     esc: () => {
       const s = get();
       if (s.page === "how" || s.page === "footnotes") return s.back();
-      if (s.sitesOpen) return set({ sitesOpen: false });
+      if (s.confirmStd) return s.cancelStandard();
+      if (s.sitesOpen || s.menuOpen) return s.closeMenus();
       if (s.openGoal) return set({ openGoal: null });
       if (s.mode.kind === "draft") return s.draft?.inHand ? s.dropInHand() : s.leaveDraft();
       if (s.selected !== null) return s.select(null);
@@ -451,14 +463,25 @@ export const useStore = create<State>((set, get) => {
     },
 
     // ---- the chrome
-    toggleSites: () => set((s) => ({ sitesOpen: !s.sitesOpen })),
+    toggleSites: () => set((s) => ({ sitesOpen: !s.sitesOpen, menuOpen: false })),
     closeSites: () => set((s) => (s.sitesOpen ? { sitesOpen: false } : s)),
+    toggleMenu: () => set((s) => ({ menuOpen: !s.menuOpen, sitesOpen: false })),
+    closeMenus: () => set((s) => (s.sitesOpen || s.menuOpen ? { sitesOpen: false, menuOpen: false } : s)),
+    askStandard: () => set((s) => (s.mode.kind === "normal" && s.head !== s.standard ? { confirmStd: true } : s)),
+    cancelStandard: () => set((s) => (s.confirmStd ? { confirmStd: false } : s)),
+    confirmStandard: () => {
+      const s = get();
+      if (!s.confirmStd) return;
+      set({ confirmStd: false });
+      s.makeStandard();
+    },
     pickSite: (id) => {
       const s = get();
       set({ site: id, sitesOpen: false, ...(id !== s.site ? done("tour") : {}) });
     },
-    openHow: () => set((s) => (s.page === "how" ? s : { page: "how", returnTo: s.page === "footnotes" ? s.returnTo : s.page })),
-    openFoot: () => set((s) => (s.page === "footnotes" ? s : { page: "footnotes", returnTo: s.page === "how" ? s.returnTo : s.page })),
+    openHow: () => set((s) => (s.page === "how" ? s : { page: "how", menuOpen: false, returnTo: s.page === "footnotes" ? s.returnTo : s.page })),
+    openFoot: () =>
+      set((s) => (s.page === "footnotes" ? s : { page: "footnotes", menuOpen: false, returnTo: s.page === "how" ? s.returnTo : s.page })),
     back: () => set((s) => ({ page: s.returnTo || "room" })),
     tourNext: () => set((s) => (s.tour + 1 >= TOUR.length ? { tour: -1, goals: { ...s.goals, ui: true } } : { tour: s.tour + 1 })),
     tourSkip: () => set((s) => ({ tour: -1, goals: { ...s.goals, ui: true } })),

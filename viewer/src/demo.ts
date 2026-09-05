@@ -52,7 +52,8 @@ export type TourStep = { target: string; text: string };
 export const TOUR: TourStep[] = [
   { target: "bar", text: "Commands and their keyboard shortcuts. Available commands update in real time." },
   { target: "rail", text: "Timeline. Four monthly captures of this floor. Click a month or use \u2190 \u2192 to switch." },
-  { target: "left", text: "Map: a top-down plan of the floor. Actions: a log of what you have clicked, in order." },
+  { target: "map", text: "Map: the floor from above. Click a thing to open it, click bare floor to stand there." },
+  { target: "actions", text: "Actions: what you have done, in order. Any entry restores that moment." },
   {
     target: "room",
     text: "Camera\nOrbit \u00b7 left-click drag\nPan \u00b7 right-click drag, or \u21e7 + left-click drag\nZoom \u00b7 scroll, or \u2318 + scroll for fine control",

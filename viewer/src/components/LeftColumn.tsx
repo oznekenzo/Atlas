@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore, type Action } from "../store";
 
 const ROW = 18;
-const KEEP = 7;
 const EXIT_MS = 640;
 const clock = (ms: number) => {
   const t = Math.floor(ms / 1000);
@@ -11,29 +10,22 @@ const clock = (ms: number) => {
 
 type Row = Action & { exiting?: boolean; fresh?: boolean };
 
-/** Bottom left: the map, and above it the actions taken, newest on top, each restorable. Hidden on narrow screens. */
-export function MapAndActions() {
-  const [show, setShow] = useState(innerWidth >= 1500);
-  useEffect(() => {
-    const on = () => setShow(innerWidth >= 1500);
-    addEventListener("resize", on);
-    return () => removeEventListener("resize", on);
-  }, []);
-  return (
-    <div id="left" data-tour="left" className={show ? "" : "off"}>
-      <div className="section">
-        <div className="k">MAP</div>
-        <div id="map-slot" className="frame" />
-      </div>
-      <Actions />
-    </div>
-  );
-}
-
-function Actions() {
+/** The left column under the checklist: the actions taken, newest on top, each restorable, as many as the cell holds. */
+export function Actions() {
   const history = useStore((s) => s.history);
   const restore = useStore((s) => s.restore);
-  const actions = useMemo(() => history.slice(-KEEP).reverse(), [history]);
+  const list = useRef<HTMLDivElement>(null);
+  const [keep, setKeep] = useState(12);
+  useEffect(() => {
+    const el = list.current;
+    if (!el) return;
+    const fit = () => setKeep(Math.max(1, Math.floor(el.getBoundingClientRect().height / ROW)));
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const actions = useMemo(() => history.slice(-keep).reverse(), [history, keep]);
   const [rows, setRows] = useState<Row[]>([]);
   const timers = useRef<number[]>([]);
 
@@ -57,11 +49,11 @@ function Actions() {
 
   const order = new Map(actions.map((a, i) => [a.id, i]));
   return (
-    <div className="section">
+    <div id="actions-cell" data-tour="actions">
       <div className="k">ACTIONS</div>
-      <div id="actions">
+      <div id="actions" ref={list}>
         {rows.map((r) => {
-          const i = r.exiting ? KEEP : (order.get(r.id) ?? KEEP);
+          const i = r.exiting ? keep : (order.get(r.id) ?? keep);
           const y = r.fresh ? -ROW : i * ROW;
           const last = i === 0 && !r.exiting;
           return (
@@ -78,6 +70,18 @@ function Actions() {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/** Bottom left: the map in its cell. The engine mounts its canvas into the frame. */
+export function MapCell() {
+  return (
+    <div id="map-cell" data-tour="map">
+      <div className="k">MAP</div>
+      <div className="centre">
+        <div id="map-slot" className="frame" />
       </div>
     </div>
   );
