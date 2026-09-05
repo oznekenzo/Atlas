@@ -25,7 +25,7 @@ export function Panel() {
           : null;
   const [shown, setShown] = useState<Live | null>(live);
   const [h, setH] = useState(CLOSED);
-  const body = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
   const liveKey = live ? JSON.stringify(live) : "";
   useEffect(() => {
     if (live) {
@@ -41,10 +41,11 @@ export function Panel() {
       setH(CLOSED);
       return;
     }
-    const el = body.current;
+    const el = content.current;
     if (!el) return;
-    // the body scrolls, so its scroll height is the content's height: the kicker, the gap, the content, the padding
-    const measure = () => setH(18 + 6 + Math.round(el.scrollHeight) + 33);
+    // the content's own height, never the scroll container's: a container's scroll height cannot go below its client
+    // height, so measuring it would ask for one more pixel every time and the observer would never rest
+    const measure = () => setH(18 + 6 + Math.round(el.getBoundingClientRect().height) + 33);
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -64,10 +65,12 @@ export function Panel() {
       <div className="inner">
         <div className="kicker">{kicker}</div>
         {M && shown && (
-          <div className="body" ref={body}>
-            {shown.k === "compare" && <ComparePanel M={M} a={shown.a} b={shown.b} />}
-            {shown.k === "std" && <StandardPanel M={M} head={shown.head} standard={shown.standard} />}
-            {shown.k === "draft" && draft && <DraftPanel M={M} />}
+          <div className="body">
+            <div className="content" ref={content}>
+              {shown.k === "compare" && <ComparePanel M={M} a={shown.a} b={shown.b} />}
+              {shown.k === "std" && <StandardPanel M={M} head={shown.head} standard={shown.standard} />}
+              {shown.k === "draft" && draft && <DraftPanel M={M} />}
+            </div>
           </div>
         )}
       </div>
