@@ -11,10 +11,13 @@
 :root {
   /* ink: white on the room, in the steps the design uses */
   --ink-100: rgba(255, 255, 255, 0.94);
+  --ink-90: rgba(255, 255, 255, 0.9);
   --ink-85: rgba(255, 255, 255, 0.85);
+  --ink-80: rgba(255, 255, 255, 0.8);
   --ink-70: rgba(255, 255, 255, 0.7);
   --ink-60: rgba(255, 255, 255, 0.6);
   --ink-50: rgba(255, 255, 255, 0.5);
+  --ink-45: rgba(255, 255, 255, 0.45);
   --ink-40: rgba(255, 255, 255, 0.4);
   --ink-30: rgba(255, 255, 255, 0.32);
   --ink-25: rgba(255, 255, 255, 0.25);
@@ -34,13 +37,25 @@
   --std-8: rgba(196, 181, 245, 0.08);
   --guide: #f2b544; /* the tour's spotlight */
 
+  /* the HUD's attention: the surface's ink and the text's opacity, three levels, set on the root by data-hud */
+  --cell-a: 0.94;
+  --ink-a: 1;
+  --t-hud: 160ms;
+
   /* type: Manrope reads, IBM Plex Mono measures, PP Rader is the mark */
   --font-ui: Manrope, system-ui, sans-serif;
   --font-data: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-display: "PP Rader", monospace;
 
-  /* space */
-  --margin: 32px;
+  /* space: the grid */
+  --col-l: 268px;
+  --col-r: 328px;
+  --band-t: 48px;
+  --band-b: 164px;
+  --rule: rgba(255, 255, 255, 0.28);
+  --cell: rgba(7, 7, 8, var(--cell-a)); /* every band, cell and tab: one surface, whose ink follows the HUD's attention */
+  --colw: calc((100vw - var(--col-l) - var(--col-r)) / 4);
+  --pad: 16px;
 
   /* motion: one easing, four durations */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -77,6 +92,19 @@ body {
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
+/* the HUD's three levels: full on the HUD, lighter in the room, gone after one still second there.
+   The chrome fades as one layer through its opacity; the bands' ink is the one other number, tweened on their background */
+:root[data-hud="room"] {
+  --t-hud: 320ms;
+  --cell-a: 0.6;
+  --ink-a: 0.85;
+}
+:root[data-hud="quiet"] {
+  --t-hud: 1200ms;
+  --cell-a: 0;
+  --ink-a: 0;
+}
+
 #app.in-hand #stage canvas {
   cursor: crosshair;
 }
@@ -169,38 +197,56 @@ kbd {
   filter: brightness(0.5);
   transition: filter var(--t-base) var(--ease);
 }
-#scrim-b {
+/* the grid: two columns and two bands, hairlines between, the room showing through */
+.band {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 300px;
-  background: linear-gradient(to top, rgba(7, 7, 8, 0.92) 30%, rgba(7, 7, 8, 0));
+  box-sizing: border-box; /* the rule is inside the band's size, so the neighbouring band never paints over it */
+  background: var(--cell);
   pointer-events: none;
-  z-index: 2;
+  z-index: 0; /* first in the chrome and lowest: every cell's text paints above its band */
+  transition:
+    background-color var(--t-hud) var(--ease),
+    opacity var(--t-room) var(--ease);
 }
-#scrim-r {
-  position: absolute;
+#band-t {
+  left: var(--col-l);
+  right: var(--col-r);
+  top: 0;
+  height: var(--band-t);
+  border-bottom: 1px solid var(--rule);
+}
+#band-b {
+  left: var(--col-l);
+  right: var(--col-r);
+  bottom: 0;
+  height: var(--band-b);
+  border-top: 1px solid var(--rule);
+}
+#col-l {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--col-l);
+  border-right: 1px solid var(--rule);
+}
+#col-r {
   right: 0;
   top: 0;
   bottom: 0;
-  width: 520px;
-  background: linear-gradient(to left, rgba(7, 7, 8, 0.82), rgba(7, 7, 8, 0));
-  opacity: 0;
-  transition: opacity var(--t-base) var(--ease);
-  pointer-events: none;
-  z-index: 2;
+  width: var(--col-r);
 }
-#scrim-r.on {
-  opacity: 1;
+.page-how .band,
+.page-footnotes .band {
+  opacity: 0;
 }
 #chrome {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: var(--z-chrome);
+  opacity: var(--ink-a); /* the HUD's attention: bands, rules and text fade as one layer; the surface's ink is --cell-a */
   transition:
-    opacity var(--t-room) var(--ease),
+    opacity var(--t-hud) var(--ease),
     transform var(--t-room) var(--ease);
 }
 #chrome > * {
@@ -217,75 +263,65 @@ kbd {
   pointer-events: none;
 }
 
-/* ---- top left: the mark and the site picker ------------------------------------------------------------------- */
-#mark {
+/* ---- top left: the site picker fills its cell ------------------------------------------------------------- */
+#sites {
   position: absolute;
-  left: var(--margin);
-  top: 28px;
-  height: 28px;
+  left: 0;
+  top: 0;
+  width: var(--col-l);
+  height: var(--band-t);
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--rule);
+}
+#sites .site {
+  height: calc(var(--band-t) - 1px);
   display: flex;
   align-items: center;
-  gap: 16px;
-}
-#mark .t-rader {
-  font-size: 13px;
-}
-#mark .sites {
-  position: relative;
-}
-#mark .site {
-  display: flex;
-  align-items: center;
+  justify-content: space-between;
   gap: 10px;
   cursor: pointer;
   font-family: var(--font-data);
   font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--ink-60);
-  height: 28px;
   box-sizing: border-box;
-  padding: 0 10px;
-  border: 1px solid var(--ink-18);
-  border-radius: 4px;
-  background: var(--panel);
+  padding: 0 var(--pad);
   transition:
-    border-color var(--t-fast),
+    background var(--t-fast),
     color var(--t-fast);
 }
-#mark .site:hover {
-  border-color: var(--ink-40);
+#sites .site:hover,
+#sites.open .site {
   color: var(--ink-85);
 }
-#mark .site.open {
-  border-radius: 4px 4px 0 0;
-  color: var(--ink-85);
+#sites.open .site {
+  background: var(--ink-6);
 }
-#mark .cols {
+#sites .cols {
   display: grid;
-  grid-template-columns: 84px 48px 84px;
+  grid-template-columns: 76px 44px 64px;
   gap: 12px;
   align-items: baseline;
   white-space: nowrap;
 }
-#mark .cols .room {
+#sites .cols .room {
   color: var(--ink-50);
 }
-#mark .cols .count {
+#sites .cols .count {
   color: var(--ink-40);
 }
-#mark .caret {
+#sites .caret,
+#menu .caret {
   font-size: 8px;
   transform: translateY(-1px);
 }
-#mark .menu {
+#sites .menu {
   position: absolute;
   left: 0;
   right: 0;
-  top: 32px;
+  top: var(--band-t);
   background: var(--menu);
-  border: 1px solid var(--ink-18);
-  border-top: 0;
-  border-radius: 0 0 4px 4px;
+  border-bottom: 1px solid var(--rule);
   box-sizing: border-box;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -294,36 +330,95 @@ kbd {
   animation: rise var(--t-fast) var(--ease) both;
   z-index: 5;
 }
-#mark .menu .row {
+#sites .menu .row,
+#menu .list .row {
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  height: 28px;
+  padding: 0 var(--pad);
+  height: 36px;
   cursor: pointer;
   color: var(--ink-60);
-  border-top: 1px solid var(--ink-10);
+  border-top: 1px solid var(--rule);
   font-family: var(--font-data);
   font-size: 11px;
   letter-spacing: 0.04em;
 }
-#mark .menu .row.cur {
+#sites .menu .row.cur {
   color: var(--ink-100);
 }
-#mark .menu .row:hover {
+#sites .menu .row:hover,
+#menu .list .row:hover {
   background: var(--ink-6);
   color: var(--ink-100);
 }
 
-/* ---- the checklist -------------------------------------------------------------------------------------------- */
-#goals {
+/* ---- top right: the mark, and the pages under it ------------------------------------------------------------ */
+#menu {
   position: absolute;
-  left: var(--margin);
-  top: 76px;
-  width: 268px;
+  right: 0;
+  top: 0;
+  width: var(--col-r);
+  height: var(--band-t);
   box-sizing: border-box;
-  padding: 12px 14px 14px;
-  border: 1px solid var(--ink-15);
-  background: var(--panel);
+  border-left: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+}
+#menu .head {
+  height: calc(var(--band-t) - 1px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--pad);
+  cursor: pointer;
+  font-family: var(--font-data);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-60);
+  transition:
+    color var(--t-fast),
+    background var(--t-fast);
+}
+#menu .head:hover,
+#menu.open .head {
+  color: var(--ink-85);
+}
+#menu.open .head {
+  background: var(--ink-6);
+}
+#menu .head .t-rader {
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: var(--ink-100);
+}
+#menu .list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--band-t);
+  background: var(--menu);
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  animation: rise var(--t-fast) var(--ease) both;
+  z-index: 5;
+}
+
+/* ---- the left column: the checklist, then the actions --------------------------------------------------------- */
+#col-l-body {
+  position: absolute;
+  left: 0;
+  top: var(--band-t);
+  bottom: var(--band-b);
+  width: var(--col-l);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+#goals {
+  flex: none;
+  box-sizing: border-box;
+  padding: var(--pad);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -394,26 +489,111 @@ kbd {
   text-decoration: line-through;
   text-decoration-color: var(--ink-30);
 }
-#goals .restart {
+#actions-cell {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 10px;
-  border-top: 1px solid var(--ink-10);
-  letter-spacing: 0.1em;
-  color: var(--ink-30);
-  cursor: pointer;
-  transition: color 0.2s;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  padding: var(--pad);
+  border-top: 1px solid var(--rule);
 }
-#goals .restart:hover {
-  color: var(--ink-85);
+#actions {
+  position: relative;
+  width: 236px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  font-family: var(--font-data);
+  font-size: 11px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent);
+}
+#actions .row {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  gap: 12px;
+  height: 18px;
+  align-items: center;
+  cursor: pointer;
+  color: var(--ink-60);
+  white-space: nowrap;
+  max-width: 100%;
+  transition:
+    transform var(--t-room) var(--ease),
+    color var(--t-room) var(--ease),
+    opacity var(--t-room);
+}
+#actions .row:hover {
+  color: var(--ink-100);
+}
+#actions .row.last {
+  color: var(--ink-100);
+  cursor: default;
+}
+#actions .row.last::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  width: 6px;
+  height: 1px;
+  background: var(--ink-100);
+}
+#actions .t {
+  color: var(--ink-30);
+  min-width: 38px;
+}
+#actions .verb {
+  min-width: 60px;
+}
+#actions .detail {
+  color: var(--ink-50);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#map-cell {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: var(--col-l);
+  height: var(--band-b);
+  box-sizing: border-box;
+  border-top: 1px solid var(--rule);
+  padding: var(--pad);
+  display: flex;
+  flex-direction: column;
+}
+#map-cell .k {
+  position: absolute;
+  left: var(--pad);
+  top: var(--pad);
+}
+#map-cell .centre {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#map-cell .frame {
+  position: relative;
+  width: 100px;
+  height: 124px;
+  border: 1px solid var(--ink-18);
+  flex: none;
+}
+#map-cell canvas.map {
+  display: block;
 }
 
 /* ---- the command bar and the mode readout --------------------------------------------------------------------- */
 #cmdbar {
   position: absolute;
   left: max(50%, 760px);
-  top: 28px;
+  top: 10px;
   height: 28px;
   transform: translateX(-50%);
   display: flex;
@@ -436,7 +616,7 @@ kbd {
 }
 #cmdbar .slot.on {
   max-width: 180px;
-  margin-right: 24px;
+  margin-right: 40px;
   opacity: 1;
   transform: none;
   pointer-events: auto;
@@ -487,79 +667,112 @@ kbd {
 #modehud {
   position: absolute;
   left: max(50%, 760px);
-  top: 112px;
+  top: calc(var(--band-t) - 1px); /* hangs from the band: its ground covers the band's rule, no gap */
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  height: 28px;
-  padding: 0 12px;
+  justify-content: center;
+  height: 21px;
+  padding: 0 var(--pad);
   box-sizing: border-box;
-  border: 1px dashed var(--ink-40);
+  border: 1px solid var(--rule);
+  border-top: 0;
+  background: var(--cell);
   white-space: nowrap;
   font-family: var(--font-data);
-  font-weight: 500;
-  font-size: 11px;
+  font-size: 9px;
   letter-spacing: 0.1em;
-  color: var(--ink-40);
+  color: var(--ink-60);
   opacity: 0;
-  transition: opacity var(--t-base) var(--ease);
+  transition:
+    opacity var(--t-base) var(--ease),
+    background-color var(--t-hud) var(--ease);
   pointer-events: none !important;
 }
 #modehud.on {
   opacity: 1;
 }
 
-/* ---- top right: the pages, the object card ------------------------------------------------------------------- */
-#pages {
+/* ---- the right column: the card cell, then the layout cell ---------------------------------------------------- */
+#col-r-body {
   position: absolute;
-  right: var(--margin);
-  top: 28px;
-  height: 28px;
-  display: flex;
-  gap: 24px;
-  align-items: center;
-  font-size: 13px;
-}
-#pages > div {
-  color: var(--ink-50);
-  cursor: pointer;
-  height: 28px;
-  display: flex;
-  align-items: center;
-}
-#pages > div:hover {
-  color: var(--ink-100);
-}
-#card {
-  position: absolute;
-  right: var(--margin);
-  top: 88px;
-  width: 296px;
+  right: 0;
+  top: var(--band-t);
+  bottom: 0;
+  width: var(--col-r);
+  box-sizing: border-box;
+  border-left: 1px solid var(--rule); /* the column's rule lives here, so the cells sit inside it and never cover it */
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  opacity: 0;
-  transform: translateY(-8px);
-  transition:
-    opacity var(--t-base) var(--ease),
-    transform var(--t-base) var(--ease);
-  pointer-events: none !important;
-}
-#card.on {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto !important;
-}
-#card .top {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  overflow: hidden;
 }
 .kicker {
   font-family: var(--font-data);
   font-size: 11px;
   letter-spacing: 0.06em;
   color: var(--ink-30);
+}
+#card,
+#panel {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--pad);
+  /* no ink of their own: the column is the surface, the rules divide it */
+  border-bottom: 1px solid var(--rule);
+  overflow: hidden;
+  transition:
+    height 0.56s var(--ease),
+    flex-basis 0.56s var(--ease);
+}
+#panel {
+  flex: 0 1 51px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#card .inner,
+#panel .inner {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+#panel .inner {
+  flex: 1;
+  min-height: 0;
+}
+#card .inner > .kicker,
+#panel .inner > .kicker {
+  height: 18px;
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+#panel .body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: -12px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: none;
+  opacity: 0;
+  transition: opacity var(--t-base) var(--ease);
+}
+#panel.on .body {
+  opacity: 1;
+}
+#card .top {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: -12px;
+  opacity: 0;
+  transition: opacity var(--t-base);
+}
+#card.on .top {
+  opacity: 1;
 }
 #card .name,
 #panel .title {
@@ -609,9 +822,6 @@ kbd {
 #card .states .row.std .month {
   color: var(--std);
 }
-#card .states .row.head.std .month {
-  color: var(--std);
-}
 #card .states .mark {
   flex: 1;
 }
@@ -639,36 +849,6 @@ kbd {
 .entry .none {
   font-size: 14px;
   line-height: 1.6;
-}
-
-/* ---- the right panel: one slot ---------------------------------------------------------------------------------- */
-#panel {
-  position: absolute;
-  right: var(--margin);
-  top: 44%;
-  bottom: var(--margin);
-  width: 296px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  pointer-events: none !important;
-}
-#panel.on {
-  pointer-events: auto !important;
-}
-#panel .inner {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  max-height: 100%;
-  overflow: auto;
-  scrollbar-width: none;
-  padding: 2px 0;
-  opacity: 0;
-  transition: opacity var(--t-base) var(--ease);
-}
-#panel.on .inner {
-  opacity: 1;
 }
 #panel .top {
   display: flex;
@@ -767,6 +947,7 @@ kbd {
   box-sizing: border-box;
   font-size: 12px;
   position: relative;
+  flex: none;
 }
 #panel .seg .opt {
   flex: 1;
@@ -882,323 +1063,303 @@ kbd {
   color: var(--ink-70);
 }
 
-/* ---- bottom left: the map and the actions --------------------------------------------------------------------- */
-#left {
+/* ---- the bottom band: the timeline cells, a gap, the state's details ------------------------------------------ */
+#bottom {
   position: absolute;
-  left: var(--margin);
-  bottom: var(--margin);
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 24px;
-  align-items: flex-start;
-  transition: opacity var(--t-base);
-}
-#left.off {
-  opacity: 0;
-  pointer-events: none !important;
-}
-#left .section {
+  left: var(--col-l);
+  right: var(--col-r);
+  bottom: 0;
+  height: var(--band-b);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
-#left .frame {
-  position: relative;
-  width: 112px;
-  height: 150px;
-  border: 1px solid var(--ink-18);
+#timeline {
+  display: grid;
+  grid-template-columns: var(--colw) var(--colw) var(--colw) 1fr;
   flex: none;
 }
-#left canvas.map {
-  display: block;
-}
-#actions {
+#timeline .cell {
   position: relative;
-  width: 250px;
-  height: 126px;
-  font-family: var(--font-data);
-  font-size: 11px;
-  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
-  mask-image: linear-gradient(to bottom, #000 60%, transparent);
-}
-#actions .row {
-  position: absolute;
-  left: 0;
-  top: 0;
+  height: 32px;
+  padding: 0 var(--pad);
+  box-sizing: border-box;
   display: flex;
-  gap: 12px;
-  height: 18px;
   align-items: center;
+  justify-content: space-between;
   cursor: pointer;
-  color: var(--ink-60);
-  white-space: nowrap;
-  max-width: 100%;
-  transition:
-    transform var(--t-room) var(--ease),
-    color var(--t-room) var(--ease),
-    opacity var(--t-room);
-}
-#actions .row:hover {
-  color: var(--ink-100);
-}
-#actions .row.last {
-  color: var(--ink-100);
-  cursor: default;
-}
-#actions .row.last::before {
-  content: "";
-  position: absolute;
-  left: -12px;
-  top: 8px;
-  width: 6px;
-  height: 1px;
-  background: var(--ink-100);
-}
-#actions .t {
-  color: var(--ink-30);
-  min-width: 38px;
-}
-#actions .verb {
-  min-width: 60px;
-}
-#actions .detail {
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
   color: var(--ink-50);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-#camhint {
-  position: absolute;
-  left: var(--margin);
-  bottom: 8px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  pointer-events: none !important;
-  font-family: var(--font-data);
-  font-size: 10px;
-  color: var(--ink-25);
-  transition: opacity var(--t-room);
-}
-#camhint.off {
-  opacity: 0;
-}
-
-/* ---- bottom centre: the month and the rail ------------------------------------------------------------------- */
-#month {
-  position: absolute;
-  left: 50%;
-  bottom: var(--margin);
-  transform: translateX(-50%);
-  width: min(1000px, calc(100vw - 128px));
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-#month .date-row {
-  width: 100%;
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  height: 26px;
-  margin-bottom: 18px;
-}
-#month .date {
-  font-size: 22px;
-  font-weight: 500;
-  color: var(--ink-100);
-  letter-spacing: -0.01em;
-  line-height: 26px;
-}
-#month .make {
-  height: 22px;
-  display: flex;
-  align-items: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--t-base);
-}
-#month .make.on {
-  opacity: 1;
-  pointer-events: auto;
-}
-#month .make .btn {
-  cursor: pointer;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  padding: 0 9px;
-  box-sizing: border-box;
-  border: 1px solid var(--ink-18);
-  font-size: 12px;
-  color: var(--ink-60);
-  white-space: nowrap;
+  --acc: #ffffff;
+  --acc-hi: #ffffff;
   transition:
-    border-color var(--t-fast),
+    background var(--t-fast),
     color var(--t-fast);
+  white-space: nowrap;
+  min-width: 0;
 }
-#month .make .btn:hover {
-  color: var(--ink-100);
-  border-color: var(--ink-50);
+#timeline .cell:last-child {
+  border-right: 0;
 }
-#month .grid {
-  width: 100%;
-  height: 134px;
-  display: grid;
-  grid-template-columns: 260px 150px 1fr;
-  gap: 0 40px;
-  margin-bottom: 20px;
-  align-items: start;
-  font-family: var(--font-data);
-  font-size: 11px;
-  line-height: 18px;
-  overflow: hidden;
-}
-#month .col {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-#month .col.doc {
-  max-width: 520px;
-}
-#month .kv {
-  display: grid;
-  grid-template-columns: 96px 1fr;
-  gap: 2px 14px;
-  color: var(--ink-40);
-}
-#month .kv .v {
-  color: var(--ink-85);
-}
-#month .status.std {
+#timeline .cell.std {
+  --acc: var(--std);
+  --acc-hi: #ddd3ff;
   color: var(--std);
 }
-#month .status.off {
+#timeline .cell.off {
+  --acc: var(--rem);
+  --acc-hi: #ff9a86;
   color: var(--rem);
 }
-#month .status.before {
-  color: var(--ink-60);
+#timeline .cell.lit {
+  color: var(--acc);
+  background: color-mix(in srgb, var(--acc) 8%, transparent);
 }
-#month .names {
-  display: grid;
-  grid-template-columns: auto auto;
-  gap: 2px 24px;
-  font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 22px;
+#timeline .cell.lit.std {
+  background: rgba(196, 181, 245, 0.14);
 }
-#month .thing {
-  cursor: pointer;
-  color: var(--ink-60);
+#timeline .cell.lit.off {
+  background: rgba(224, 112, 92, 0.14);
 }
-#month .thing:hover {
-  color: var(--ink-100);
+#timeline .cell:hover {
+  background: color-mix(in srgb, var(--acc) 30%, transparent);
+  color: var(--acc-hi);
 }
-#month .col.doc .text {
-  font-family: var(--font-ui);
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--ink-85);
-  text-wrap: pretty;
-}
-#month .col.doc .by {
-  color: var(--ink-40);
-}
-#month .col.doc .none,
-#month .names .none {
-  font-family: var(--font-ui);
-  font-size: 14px;
-  line-height: 22px;
-}
-#month .names .none {
-  font-size: 13px;
-}
-/* the rail: months on a line; the hairline runs between them and carries the state */
-#month .rail {
-  position: relative;
-  width: 560px;
-  max-width: 100%;
-  height: 28px;
-  display: flex;
-  align-items: center;
-}
-#month .seg {
-  flex: 1;
-  height: 1px;
-  margin: 0 16px;
-  background: var(--ink-18);
-  transition: background var(--t-slow) var(--ease);
-}
-#month .seg.after-std {
-  margin-left: 0;
-}
-#month .seg.before-std {
-  margin-right: 0;
-}
-#month .seg.lit {
-  background: var(--ink-100);
-}
-#month .seg.drift {
-  background: linear-gradient(to right, var(--ink-40), rgba(224, 112, 92, 0.8));
-}
-#month .seg.drift.from-std {
-  background: linear-gradient(to right, var(--std), rgba(224, 112, 92, 0.8));
-}
-#month .cap {
-  position: relative;
-  flex: none;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  color: var(--ink-40);
-  transition:
-    color var(--t-slow) var(--ease),
-    border-color var(--t-slow) var(--ease);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  box-sizing: border-box;
-  border: 1px solid transparent;
-}
-#month .cap:hover {
-  color: var(--ink-100);
-}
-#month .cap.lit {
-  color: var(--ink-100);
-}
-#month .cap.std {
-  padding: 0 12px;
-  border-color: var(--ink-40);
-}
-#month .cap.std.lit {
-  color: var(--std);
-}
-#month .cap.std.here {
-  border-color: var(--std);
-}
-#month .cap.off {
-  color: var(--rem-55);
-}
-#month .cap.off.lit {
-  color: var(--rem);
-}
-#month .cap.pending {
+#timeline .cell.pending {
   color: var(--ink-18);
   cursor: default;
 }
-#month .cap .year {
+#timeline .m {
+  font-weight: 600;
+  font-size: 12px;
+}
+#timeline .y {
+  font-family: var(--font-data);
+  font-weight: 400;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--ink-30);
+}
+#timeline .cell.lit .y {
+  color: var(--ink-50);
+}
+#timeline .tag {
+  font-family: var(--font-data);
+  font-weight: 500;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--ink-30);
+}
+#timeline .cell.std .tag,
+#timeline .cell.off .tag,
+#timeline .cell.lit .tag {
+  color: inherit;
+}
+#timeline .tab {
   position: absolute;
-  left: 50%;
-  top: 100%;
-  transform: translateX(-50%);
-  margin-top: 6px;
+  left: -1px;
+  right: -1px;
+  top: -21px; /* stands on the cell: its ground covers the band's rule, no gap */
+  height: 22px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 1px solid var(--rule);
+  border-bottom: 0;
+  background: var(--cell);
+  font-family: var(--font-data);
+  font-weight: 400;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--ink-60);
   white-space: nowrap;
+  transition:
+    color var(--t-fast),
+    background-color var(--t-hud) var(--ease);
+  animation: fadeIn var(--t-base) both;
+}
+#timeline .cell:first-child .tab {
+  left: 0;
+}
+#timeline .cell:last-child .tab {
+  right: 0;
+}
+#timeline .tab:hover {
+  color: var(--ink-100);
+}
+#bottom .gap {
+  height: 10px;
+  flex: none;
+}
+#details {
+  display: grid;
+  grid-template-columns: var(--colw) var(--colw) 1fr;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--rule);
+  overflow: hidden;
+}
+#details .cell {
+  padding: 8px var(--pad);
+  box-sizing: border-box;
+  border-right: 1px solid var(--rule);
+  min-width: 0;
+}
+#details .cell.doc {
+  border-right: 0;
+}
+#details .cell.things {
+  background: rgba(255, 255, 255, 0.03);
+}
+#details .k {
+  font-family: var(--font-data);
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--ink-40);
+}
+#details .kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--ink-45);
+  margin-top: 5px;
+}
+#details .kv .v {
+  color: var(--ink-90);
+}
+#details .status.std {
+  color: var(--std);
+}
+#details .status.off {
+  color: var(--rem);
+}
+#details .status.before {
+  color: var(--ink-60);
+}
+#details .names {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 12px;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--ink-80);
+  margin-top: 5px;
+}
+#details .thing {
+  cursor: pointer;
+}
+#details .thing:hover {
+  color: var(--ink-100);
+}
+#details .doc .text {
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--ink-85);
+  margin-top: 5px;
+  text-wrap: pretty;
+}
+#details .doc .by {
   font-family: var(--font-data);
   font-size: 9px;
-  letter-spacing: 0.08em;
-  color: var(--ink-25);
-  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--ink-40);
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+#details .none {
+  font-size: 11px;
+  line-height: 15px;
+  margin-top: 5px;
+}
+
+/* ---- the confirm: before a state becomes the standard -------------------------------------------------------- */
+#confirm {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 4, 5, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  animation: fadeIn 0.2s both;
+}
+#confirm .box {
+  width: 360px;
+  background: #0a0a0c;
+  border: 1px solid var(--rule);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+#confirm .head {
+  padding: 14px var(--pad) 12px;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-data);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--ink-40);
+}
+#confirm .body {
+  padding: var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#confirm .date {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink-100);
+}
+#confirm .copy {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-60);
+  text-wrap: pretty;
+}
+#confirm .acts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--rule);
+}
+#confirm .acts > div {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+#confirm .cancel {
+  border-right: 1px solid var(--rule);
+  color: var(--ink-60);
+}
+#confirm .cancel:hover {
+  background: var(--ink-6);
+  color: var(--ink-100);
+}
+#confirm .go {
+  font-weight: 500;
+  color: var(--std);
+}
+#confirm .go:hover {
+  background: rgba(196, 181, 245, 0.12);
+}
+#confirm kbd {
+  font-size: 9px;
+  color: var(--ink-30);
+  border: 1px solid var(--ink-15);
+  padding: 1px 5px;
+}
+#confirm .go kbd {
+  color: rgba(196, 181, 245, 0.6);
+  border-color: rgba(196, 181, 245, 0.3);
 }
 
 /* ---- the guide: a spotlight on the target, a note tethered to it ---------------------------------------------- */
@@ -1226,7 +1387,8 @@ kbd {
   gap: 14px;
   padding: 18px 20px;
   box-sizing: border-box;
-  background: rgba(7, 7, 8, 0.7);
+  background: var(--cell);
+  border: 1px solid var(--rule);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   animation: fadeIn 0.4s var(--ease-io) both;
@@ -1653,12 +1815,4 @@ kbd {
 }
 #status .dim {
   color: var(--ink-30);
-}
-
-/* the map and the actions need room: under 1500 px they go */
-@media (max-width: 1499px) {
-  #left {
-    opacity: 0;
-    pointer-events: none !important;
-  }
 }

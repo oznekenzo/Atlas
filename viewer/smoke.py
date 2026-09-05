@@ -75,24 +75,25 @@ async def main():
         check(not await ev("document.getElementById('chrome').hidden"), "the chrome is up")
         check(await S("tour") == 0, "the tour starts on arrival")
         check(await ev("!!document.querySelector('#chrome .ring')"), "the spotlight is on its first target")
-        for _ in range(6):
+        for _ in range(7):
             await pg.keyboard.press("Enter")
             await pg.wait_for_timeout(40)
-        check(await S("tour") == -1 and await S("goals.ui"), "Enter walks the tour; Understand the UI is ticked")
+        check(await S("tour") == -1 and await S("goals.ui"), "Enter walks the seven-stop tour; Understand the UI is ticked")
 
         # --- the rail and the month ----------------------------------------------------------------------
-        check(await ev("document.querySelectorAll('#month .cap').length") == N, "four months on the rail")
-        check((await ev("document.querySelector('#month .cap.std').innerText")).startswith("Jul"), "July is framed as the standard")
-        check("Bay 1 cleared" in await ev("document.querySelector('#month .col.doc').innerText"), "May's entry is written")
+        check(await ev("document.querySelectorAll('#timeline .cell').length") == N, "four timeline cells")
+        check((await ev("document.querySelector('#timeline .cell.std').innerText")).startswith("Jul"), "July's cell is the standard")
+        check("Bay 1 cleared" in await ev("document.querySelector('#details .doc').innerText"), "May's entry is written")
         await pg.keyboard.press("ArrowRight")
         await pg.keyboard.press("ArrowRight")
         await pg.keyboard.press("ArrowRight")
         await pg.wait_for_timeout(120)
         check(await S("head") == 3, "→ moves through the states")
         check(await S("goals.move"), "Move through states is ticked")
-        month = await ev("document.getElementById('month').innerText")
-        check("Off standard" in month and "No entry." in month and "44 min" in month, "August: off standard, no entry, its numbers")
-        check((await ev("document.querySelector('#month .cap.lit').innerText")).startswith("Aug"), "the rail lights August")
+        month = await ev("document.getElementById('details').innerText")
+        check("OFF STANDARD" in month and "No entry." in month and "44 MIN" in month, "August: off standard, no entry, its numbers")
+        check((await ev("document.querySelector('#timeline .cell.lit .m').innerText")).startswith("Aug"), "the timeline lights August")
+        check(await ev("!!document.querySelector('#timeline .cell.lit .tab')"), "the current cell offers Make this the standard")
 
         # --- diff ----------------------------------------------------------------------------------------
         await pg.keyboard.press("d")
@@ -174,16 +175,64 @@ async def main():
         check(abs(mv["target"][0]) < 0.3 and abs(mv["target"][2]) < 0.3, "facing the room's centre")
         check(await ev("document.getElementById('map-slot').querySelector('canvas.map') !== null"), "the map is a canvas in the frame")
 
+        # --- the menu and the confirm -------------------------------------------------------------------------
+        await ev("window.__patina.S.toggleMenu()")
+        check(await ev("document.querySelectorAll('#menu .list .row').length") == 3, "the ATLAS menu: How it works, Notes, Restart demo")
+        await ev("window.__patina.S.closeMenus()")
+        await ev("window.__patina.go(3); window.__patina.S.askStandard()")
+        check(await ev("!!document.getElementById('confirm')"), "the tab asks before a state becomes the standard")
+        await pg.keyboard.press("Escape")
+        check(await S("standard") == 2 and not await S("confirmStd"), "esc keeps the old standard")
+        await ev("window.__patina.S.askStandard()")
+        await pg.keyboard.press("Enter")
+        check(await S("standard") == 3, "Enter makes August the standard")
+        await ev("window.__patina.S.setStandard ? null : null")
+        rid = await ev("window.__patina.S.history.find((a) => a.verb === 'go to').id")
+        await ev(f"window.__patina.S.restore({rid})")
+        check(await S("standard") == 2, "a restore returns the standard with the rest of the state")
+
+        # --- the HUD's attention: full on it, lighter in the room, nearly gone after four still seconds ---------
+        hud = lambda: ev("window.__patina.hud()")
+        await pg.mouse.move(100, 120)  # on the checklist
+        check(await hud() == "hud", "pointer on the HUD: full")
+        await pg.mouse.move(770, 392)  # the middle cell's centre at 1600 × 900
+        await pg.wait_for_timeout(60)
+        check(await hud() == "room", "pointer in the room: the middle level")
+        quiet = False
+        for _ in range(8):
+            await pg.wait_for_timeout(300)
+            if await hud() == "quiet":
+                quiet = True
+                break
+        check(quiet, f"one still second in the room: quiet (hud={await hud()}, moving={await S('moving')})")
+        await pg.mouse.move(100, 120)
+        await pg.wait_for_timeout(60)
+        check(await hud() == "quiet", "hovering over a gone HUD does not bring it back")
+        await pg.mouse.move(770, 392)
+        await ev("window.__patina.select(7)")
+        await pg.wait_for_timeout(60)
+        check(await hud() == "room", "a click on a thing wakes it to the middle level")
+        await ev("window.__patina.select(null)")
+        await pg.mouse.move(100, 120)
+        await pg.wait_for_timeout(60)
+        check(await hud() == "hud", "back on the HUD: full")
+        await pg.mouse.move(770, 392)
+        await ev("window.__patina.S.toggleMenu()")
+        await pg.wait_for_timeout(60)
+        check(await hud() == "hud", "an open menu pins it in full")
+        await ev("window.__patina.S.closeMenus()")
+        await pg.mouse.move(100, 120)
+
         # --- the other site: its set opens in place of this one --------------------------------------------
         await ev("window.__patina.S.pickSite('bellevue')")
         check(await S("goals.tour"), "picking the remote site ticks the tour goal")
         check(await ev("Object.keys(window.__patina.S.goals).length") == 6, "all six goals done")
         check(await S("set") == "bellevue" and await S("curtain") and await S("history.length") == 0, "the room empties under the curtain; the log starts over")
         await pg.wait_for_function("window.__patina.S.status === 'ready' && window.__patina.S.set === 'bellevue'", timeout=120000)
-        check(await ev("window.__patina.M.commits.length") == 1 and await ev("document.querySelectorAll('#month .cap').length") == 1, "Bellevue: one state on the rail")
-        check("Bellevue" in await ev("document.querySelector('#mark .site').innerText"), "the picker names the floor")
+        check(await ev("window.__patina.M.commits.length") == 1 and await ev("document.querySelectorAll('#timeline .cell').length") == 1, "Bellevue: one timeline cell")
+        check("Bellevue" in await ev("document.querySelector('#sites .site').innerText"), "the picker names the floor")
         check(await S("history[0].verb") == "open", "the log opens with the floor")
-        check(await S("standard") == 0 and "Standard" in await ev("document.getElementById('month').innerText"), "its one state is the standard")
+        check(await S("standard") == 0 and "Standard" in await ev("document.getElementById('details').innerText"), "its one state is the standard")
         check(await ev("window.__patina.stats()[0].labelled") > 0, "its objects are labelled from their boxes")
         await ev("window.__patina.select(2)")
         check("Tool chest" in await ev("document.getElementById('card').innerText"), "an object opens its card")

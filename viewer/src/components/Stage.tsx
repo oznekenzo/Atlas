@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Stage as Engine } from "../engine/stage";
 import { useStore } from "../store";
 import type { Manifest } from "../types";
+import { attentionLevel } from "../attention";
 
 /** Test/debug surface, the shape the headless harness drives. Exposed only in dev or with ?debug. */
 export type DebugApi = {
@@ -26,6 +27,7 @@ export type DebugApi = {
   engine: Engine;
   grab: () => string;
   mem: () => number | undefined;
+  hud: () => string;
 };
 declare global {
   interface Window {
@@ -77,6 +79,7 @@ export function Stage() {
         engine,
         grab: () => engine.grab(),
         mem: () => (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize,
+        hud: () => attentionLevel(),
       };
     }
     return () => {

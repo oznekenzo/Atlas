@@ -1,13 +1,14 @@
 import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useStore, writeGuide } from "./store";
+import { startAttention } from "./attention";
 import { Stage } from "./components/Stage";
 import { Title } from "./components/Title";
-import { CommandBar, Curtain, Goals, Guide, Mark, ModeHud, PageLinks } from "./components/Chrome";
+import { Bands, CommandBar, ConfirmStandard, Curtain, Goals, Guide, Menu, ModeHud, Sites } from "./components/Chrome";
 import { ObjectCard } from "./components/ObjectCard";
 import { Panel } from "./components/Panel";
-import { MonthBlock } from "./components/MonthBlock";
-import { MapAndActions } from "./components/MapAndActions";
+import { BottomBand } from "./components/BottomBand";
+import { Actions, MapCell } from "./components/LeftColumn";
 import { Pages } from "./components/Pages";
 
 const LEAVE_MS = 1300; // the deck fades to black, then the room is there
@@ -31,6 +32,11 @@ function useKeys() {
         return;
       }
       if (e.repeat) return;
+      if (s.confirmStd) {
+        if (k === "Enter") s.confirmStandard();
+        else if (k === "Escape") s.cancelStandard();
+        return;
+      }
       if (k === "Enter" && s.tour >= 0) return s.tourNext();
       if (k === "ArrowRight") s.step(1);
       else if (k === "ArrowLeft") s.step(-1);
@@ -99,37 +105,40 @@ function Status() {
 export default function App() {
   useKeys();
   useTransitions();
-  const { page, moving, draggedYet, inHand, closeSites, sitesOpen } = useStore(
+  useEffect(() => startAttention(), []);
+  const { page, moving, inHand, closeMenus, menus } = useStore(
     useShallow((s) => ({
       page: s.page,
       moving: s.moving,
-      draggedYet: s.history.some((a) => a.verb === "orbit" || a.verb === "pan" || a.verb === "dolly"),
       inHand: s.draft?.inHand != null,
-      closeSites: s.closeSites,
-      sitesOpen: s.sitesOpen,
+      closeMenus: s.closeMenus,
+      menus: s.sitesOpen || s.menuOpen,
     })),
   );
   const cls = [`page-${page}`, moving ? "moving" : "", inHand ? "in-hand" : ""].join(" ").trim();
   return (
-    <div id="app" className={cls} onClick={() => sitesOpen && closeSites()}>
+    <div id="app" className={cls} onClick={() => menus && closeMenus()}>
       <Stage />
       <Status />
-      <div id="scrim-b" />
       <div id="chrome" hidden={page === "title"}>
-        <Mark />
-        <Goals />
+        <Bands />
+        <Sites />
+        <div id="col-l-body">
+          <Goals />
+          <Actions />
+        </div>
+        <MapCell />
         <CommandBar />
         <ModeHud />
-        <PageLinks />
-        <ObjectCard />
-        <Panel />
-        <MapAndActions />
-        <div id="camhint" className={draggedYet ? "off" : ""}>
-          drag to look · scroll to zoom
+        <Menu />
+        <div id="col-r-body">
+          <ObjectCard />
+          <Panel />
         </div>
-        <MonthBlock />
+        <BottomBand />
         <Guide />
       </div>
+      <ConfirmStandard />
       <Pages />
       <Curtain />
       {page === "title" && <Title />}

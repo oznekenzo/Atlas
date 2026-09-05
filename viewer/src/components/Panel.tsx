@@ -1,36 +1,83 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
 import { diff, drift, metres, things } from "../scene";
 import { monthOf } from "../time";
 import type { Manifest } from "../types";
 
-/** Right side, one slot: what the mode calls for. The diff, the comparison to the standard, or the draft. */
+const CLOSED = 51; // the kicker alone
+const HOLD_MS = 560; // the cell keeps its content while it collapses
+
+type Live = { k: "compare"; a: number; b: number } | { k: "std"; head: number; standard: number } | { k: "draft" };
+
+/** Right column, second cell: what the mode calls for. The diff, the comparison to the standard, or the draft. */
 export function Panel() {
   const { M, mode, head, standard, ghosts, draft } = useStore(
     useShallow((s) => ({ M: s.manifest, mode: s.mode, head: s.head, standard: s.standard, ghosts: s.ghosts, draft: s.draft })),
   );
-  if (!M) return <div id="panel" />;
-  const showDraft = mode.kind === "draft";
-  const showCompare = !showDraft && mode.kind === "compare";
-  const showStd = !showDraft && !showCompare && ghosts && standard !== null && head !== standard;
-  const on = showDraft || showCompare || showStd;
+  const live: Live | null =
+    mode.kind === "draft" && draft
+      ? { k: "draft" }
+      : mode.kind === "compare"
+        ? { k: "compare", a: mode.a, b: mode.b }
+        : ghosts && standard !== null && head !== standard
+          ? { k: "std", head, standard }
+          : null;
+  const [shown, setShown] = useState<Live | null>(live);
+  const [h, setH] = useState(CLOSED);
+  const body = useRef<HTMLDivElement>(null);
+  const liveKey = live ? JSON.stringify(live) : "";
+  useEffect(() => {
+    if (live) {
+      setShown(live);
+      return;
+    }
+    const id = window.setTimeout(() => setShown(null), HOLD_MS);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveKey]);
+  useLayoutEffect(() => {
+    if (!live) {
+      setH(CLOSED);
+      return;
+    }
+    const el = body.current;
+    if (!el) return;
+    // the body scrolls, so its scroll height is the content's height: the kicker, the gap, the content, the padding
+    const measure = () => setH(18 + 6 + Math.round(el.scrollHeight) + 33);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveKey, shown, draft]);
+  const kicker =
+    shown?.k === "compare"
+      ? "LAYOUT · DIFF"
+      : shown?.k === "std"
+        ? "LAYOUT · COMPARE TO STANDARD"
+        : shown?.k === "draft"
+          ? "LAYOUT · DRAFT"
+          : "LAYOUT · NONE ACTIVE";
   return (
-    <>
-      <div id="scrim-r" className={on ? "on" : ""} />
-      <div id="panel" className={on ? "on" : ""}>
-        <div className="inner">
-          {showCompare && mode.kind === "compare" && <ComparePanel M={M} a={mode.a} b={mode.b} />}
-          {showStd && standard !== null && <StandardPanel M={M} head={head} standard={standard} />}
-          {showDraft && draft && <DraftPanel M={M} />}
-        </div>
+    <div id="panel" className={live ? "on" : ""} style={{ flexBasis: h }}>
+      <div className="inner">
+        <div className="kicker">{kicker}</div>
+        {M && shown && (
+          <div className="body" ref={body}>
+            {shown.k === "compare" && <ComparePanel M={M} a={shown.a} b={shown.b} />}
+            {shown.k === "std" && <StandardPanel M={M} head={shown.head} standard={shown.standard} />}
+            {shown.k === "draft" && draft && <DraftPanel M={M} />}
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 }
 
 const Entry = ({ doc, by }: { doc: string | null; by: string | null }) => (
   <div className="entry">
+    <div className="kicker">DOCS</div>
     {doc ? (
       <>
         <div className="text">{doc}</div>
@@ -59,7 +106,6 @@ function ComparePanel({ M, a, b }: { M: Manifest; a: number; b: number }) {
   return (
     <>
       <div className="top">
-        <div className="kicker">DIFF</div>
         <div className="sub">A real change, earlier → later.</div>
         <div className="title">
           {monthOf(M.commits[a].captured)} → {monthOf(M.commits[b].captured)}
@@ -105,7 +151,6 @@ function StandardPanel({ M, head, standard }: { M: Manifest; head: number; stand
   return (
     <>
       <div className="top">
-        <div className="kicker">COMPARE TO STANDARD</div>
         <div className="sub">A theoretical comparison: what this state must do to match the standard.</div>
         <div className="title">
           {monthOf(M.commits[head].captured)} → <span className="std">{monthOf(M.commits[standard].captured)}</span>
@@ -143,7 +188,6 @@ function DraftPanel({ M }: { M: Manifest }) {
   return (
     <>
       <div className="top">
-        <div className="kicker">DRAFT</div>
         <div className="title">{placed ? `${placed} placed` : "Draft a layout"}</div>
       </div>
       <div className="seg">

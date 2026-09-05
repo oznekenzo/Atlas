@@ -36,10 +36,11 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
                                        the month block read it and never re-derive it. src/scene.test.ts covers it (vitest)
                 src/demo.ts            the deck's slides, the checklist, the tour, the ?s= start presets
                 src/titleField.ts      the title's point field (the design's own code, typed)
-                src/components/        Title (the deck), Chrome (the mark and site picker, the checklist, the command bar, the
-                                       mode readout, the page links, the guide, the curtain), ObjectCard, Panel (the diff, the
-                                       comparison to the standard, the draft), MonthBlock (the month and the rail),
-                                       MapAndActions (the map and the reflog), Pages (How it works, Footnotes), Stage
+                src/layout.ts          the grid's numbers, and the cells the walkthrough can spotlight
+                src/components/        Title (the deck), Chrome (the bands, the site picker, the ATLAS menu, the checklist, the
+                                       command bar, the mode readout, the guide, the confirm, the curtain), LeftColumn (the
+                                       actions log, the map cell), ObjectCard and Panel (the right column's two cells),
+                                       BottomBand (the timeline cells and the state's details), Pages (How it works, Notes), Stage
                 ply2spz.mjs            ply → SPZ v3 using Spark's SpzWriter (NOT splat-transform: it writes SPZ v4, Spark 2.1 can't read it)
                 smoke.py               headless end-to-end check of the built viewer (npm run build && npx vite preview, then python3 smoke.py)
     AUDIT.md    architecture + performance audit: findings, what was fixed, known limitations
@@ -47,24 +48,30 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
 ## Screen
     The deck first: the name over a point field, five slides (the technology, the project, the problem, the
     fundamentals, the demo), and the floor; the captures load behind it from landing, and the last slide's ENTER
-    is live once the first is in. Then the room, full bleed, with the design's chrome around it:
-      top left      the mark and the site picker (another floor opens its set in place of this one, under the curtain);
-                    under it the demo checklist, six things to do, ticked by real state
-      top centre    the command bar — every command available right now with its key — and the mode readout under it
-      top right     How it works, Footnotes; the selected object's card (its months, its entry)
-      right         one slot for what the mode calls for: the diff, the comparison to the standard, the draft
-      bottom left   the map and the actions log (each entry restorable); hidden under 1500 px
-      bottom centre the month: its date, Make this the standard, details (sequence, status, stoppages, changeover,
-                    output), what is in it, its entry; and the rail of months, the standard framed in violet, the
-                    line after it shading toward red
-    Keys: ← → states · D diff · C compare to standard · N draft · M measure · ? how it works · F footnotes · esc back.
-    Every command is also a click. A first arrival runs a six-stop tour of the controls (Enter steps, Skip ends it).
+    is live once the first is in. Then the room, full bleed, under a grid of translucent bands with hairlines:
+      top band       the command bar (every command available now, with its key), the mode readout hanging under it
+      left column    the site picker in its cell (another floor opens its set in place of this one, under the
+                     curtain), the demo checklist (six things to do, ticked by real state), the
+                     actions log (each entry restorable), and the map in the bottom cell (click a thing to open it,
+                     bare floor to stand there)
+      right column   the ATLAS menu (How it works, Notes, Restart demo), then two cells that grow to their content:
+                     the selected object (its months, its entry) and the layout — the diff, the comparison to the
+                     standard, or the draft
+      bottom band    four timeline cells (month, year, STANDARD / OFF STANDARD / n of 4; the current one tinted, with
+                     a MAKE THIS THE STANDARD tab that asks before it acts) over the state's details: date, sequence,
+                     status, stoppages, changeover, output; what is in it; its entry
+    Keys: ← → states · D diff · C compare to standard · N draft · M measure · ? how it works · F notes · esc back.
+    Every command is also a click. A first arrival runs a seven-stop tour of the controls (Enter steps, Skip ends it).
     Diff (D): the state before this one against it, or the standard against a later one; added tinted green, removed
     red from the earlier capture's own splats, a moved thing's old place faded under an arrow with the distance.
     Compare to standard (C): the standard's ghosts drawn in this state from its own capture, violet, each drifted
     thing tied to where it belongs; the panel says what the state must do to match. Draft (N): a layout tried on the
     empty floor, from scratch or from a state whose things start as placements; pick from the tray, click the floor,
     click a placed thing to pick it up again; Measure counts what is down. Nothing is written back.
+    The grid is 268 px left, 328 px right, 48 px top, 164 px bottom; the picture is offset so the room centres in
+    the middle cell. Designed for 1280 px and up. The HUD follows attention: full while the pointer is on it,
+    lighter while the pointer is in the room or a drag is under way, and gone after one still second in the
+    room; a click on a thing brings it back, a menu or the walkthrough pins it in full.
     ?s=<preset> opens the room in a state for testing: empty, explore, selected, compare, drift, ghosts,
     restore-hand, measured, how, footnotes, history. ?nointro skips the deck; ?debug exposes window.__patina;
     ?set=<name> opens another set than the garage.

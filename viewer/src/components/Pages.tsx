@@ -51,7 +51,7 @@ export function Pages() {
       <div className="page" id="footnotes">
         <Back />
         <div className="body">
-          <div className="h">Footnotes</div>
+          <div className="h">Notes</div>
           <div className="notes">
             <div className="n">1</div>
             <div>Objects are found by voxel occupancy and matched by size and overlap. Two similar boxes can be confused.</div>
