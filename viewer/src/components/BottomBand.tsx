@@ -59,6 +59,8 @@ export function BottomBand() {
         <div className="cell state">
           <div className="k">STATE</div>
           <div className="kv">
+            <span>OUTPUT</span>
+            <span className="v">{c.stats?.output ?? "—"}</span>
             <span>DATE</span>
             <span className="v">{dateOf(c.captured).toUpperCase()}</span>
             <span>SEQUENCE</span>
@@ -71,8 +73,6 @@ export function BottomBand() {
             <span className="v">{c.stats?.stoppages ?? "—"}</span>
             <span>CHANGEOVER</span>
             <span className="v">{(c.stats?.changeover ?? "—").toUpperCase()}</span>
-            <span>OUTPUT</span>
-            <span className="v">{c.stats?.output ?? "—"}</span>
           </div>
         </div>
         <div className="cell things">
