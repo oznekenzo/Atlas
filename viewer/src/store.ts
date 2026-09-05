@@ -8,7 +8,20 @@
  */
 import { create } from "zustand";
 import type { Manifest, Site } from "./types";
-import { carry, centre } from "./scene";
+import { carry } from "./scene";
+import {
+  canSave as canSaveDraft,
+  clearAllDrafts,
+  draftDirty,
+  fitDrafts,
+  nameOf as draftName,
+  proposalOf,
+  readDrafts,
+  savedOf,
+  seedOf,
+  type Proposal,
+  type SavedDraft,
+} from "./drafts";
 import { GOALS, LANDING, PRESETS, SLIDES, TOUR } from "./demo";
 import { dateOf, monthOf } from "./time";
 
@@ -25,8 +38,9 @@ export type InHand = Placed & { at: boolean };
 /**
  * A draft: a layout tried on the empty floor. From scratch it starts bare; from a state it starts as that
  * state's things, each a placement that can be picked up and moved. Measure records how many things are down.
+ * Saved, it is a branch: `id` names its entry in `drafts`; null until the first save.
  */
-export type Draft = { base: number | null; placements: Placed[]; inHand: InHand | null; attempts: { n: number; text: string }[] };
+export type Draft = { id: number | null; base: number | null; placements: Placed[]; inHand: InHand | null; attempts: { n: number; text: string }[] };
 export type Snapshot = {
   head: number;
   mode: Mode;
@@ -78,6 +92,8 @@ export type State = {
   standard: number | null; // the state tagged as the approved layout
   ghosts: boolean; // compare to standard: the standard's ghosts drawn in this state
   draft: Draft | null;
+  drafts: SavedDraft[]; // the branches: saved drafts, per set, kept in the browser. Not in the snapshot: a restore never undeletes
+  draftSeq: number; // the last branch number minted; only grows, so a name is never reused
 
   site: string;
   sitesOpen: boolean;
@@ -116,6 +132,9 @@ export type State = {
   dropInHand: () => void;
   measure: () => void;
   leaveDraft: () => void;
+  saveDraft: () => void;
+  openDraft: (id: number) => boolean;
+  deleteDraft: (id: number) => void;
   // the chrome
   toggleSites: () => void;
   closeSites: () => void;
@@ -145,15 +164,16 @@ export type State = {
 };
 
 /** What a draft starts with: nothing from scratch, or a state's things where that state had them. */
-export const seedDraft = (m: Manifest | null, base: number | null): Placed[] =>
-  m === null || base === null
-    ? []
-    : m.objects
-        .filter((o) => o.present.includes(base))
-        .map((o) => {
-          const c = centre(o);
-          return { key: ++placedSeq, id: o.id, x: c.x, z: c.z };
-        });
+export const seedDraft = (m: Manifest | null, base: number | null): Placed[] => seedOf(m, base).map((p) => ({ ...p, key: ++placedSeq }));
+
+/** A proposal opened as a draft: keys minted now, attempts numbered, nothing in hand. */
+const inflate = (p: Proposal, id: number | null): Draft => ({
+  id,
+  base: p.base,
+  placements: p.placements.map((x) => ({ ...x, key: ++placedSeq })),
+  inHand: null,
+  attempts: p.attempts.map((text, i) => ({ n: i + 1, text })),
+});
 
 /** The state the deck lands in, held inside the set: LANDING, or a shorter set's last state. */
 export const landingOf = (m: Manifest | null): number => (m ? Math.min(LANDING, m.commits.length - 1) : LANDING);
@@ -215,16 +235,13 @@ const initial = () => {
   const saved = skip ? {} : readGuide();
   const arrived = !skip && !!saved.arrived;
   if (arrived) orbited = true; // a reload into the room is this page load's arrival: it drifts like one
-  const draft: Draft | null = preset?.draft
-    ? {
-        base: preset.draft.base,
-        placements: preset.draft.placements.map((p) => ({ ...p, key: ++placedSeq })),
-        inHand: null,
-        attempts: preset.draft.attempts.map((text, i) => ({ n: i + 1, text })),
-      }
-    : null;
+  const draft: Draft | null = preset?.draft ? inflate(preset.draft, null) : null;
+  const set = q.get("set") || (arrived && saved.set) || DEFAULT_SET;
+  const branches = readDrafts(set);
   return {
-    set: q.get("set") || (arrived && saved.set) || DEFAULT_SET,
+    set,
+    drafts: branches.drafts,
+    draftSeq: branches.seq,
     page: (preset?.page ?? (skip || arrived ? "room" : "title")) as Page,
     arrived,
     curtain: arrived,
@@ -327,6 +344,7 @@ export const useStore = create<State>((set, get) => {
       } catch {
         /* private mode */
       }
+      clearAllDrafts();
       const s = get();
       // the demo begins on the first floor: if the room shows another, its set loads again behind the deck
       const home = s.sites[0];
@@ -346,6 +364,8 @@ export const useStore = create<State>((set, get) => {
         mode: NORMAL,
         ghosts: false,
         draft: null,
+        drafts: [],
+        draftSeq: 0,
         selected: null,
         standard: s.manifest?.standard ?? s.standard,
         site: home?.id ?? s.site,
@@ -363,17 +383,19 @@ export const useStore = create<State>((set, get) => {
       const s = get();
       const M = s.manifest;
       const c = M?.commits[i];
-      if (!M || !c || !s.loaded[i] || s.mode.kind === "draft") return false;
+      if (!M || !c || !s.loaded[i]) return false;
+      // a draft with unsaved work holds the timeline; a clean one is left behind
+      if (s.mode.kind === "draft" && s.draft && draftDirty(s.draft, s.drafts, M)) return false;
       if (s.mode.kind === "normal" && i === s.head) return true;
       const selected = carry(M.objects, s.selected, [i]);
-      const patch = { head: i, mode: NORMAL, ghosts: false, selected };
+      const patch = { head: i, mode: NORMAL, ghosts: false, selected, draft: null };
       s.log("go to", dateOf(c.captured), patch);
       set({ ...patch, ...done("move") });
       return true;
     },
     step: (d) => {
       const s = get();
-      if (s.mode.kind !== "normal") return;
+      if (s.mode.kind === "compare") return;
       const n = s.manifest?.commits.length ?? 0;
       const i = Math.max(0, Math.min(n - 1, s.head + d));
       if (i !== s.head) s.go(i);
@@ -438,7 +460,7 @@ export const useStore = create<State>((set, get) => {
     enterDraft: () => {
       const s = get();
       if (s.mode.kind !== "normal" || !s.loaded[0]) return;
-      const draft: Draft = { base: s.head, placements: seedDraft(s.manifest, s.head), inHand: null, attempts: [] };
+      const draft: Draft = { id: null, base: s.head, placements: seedDraft(s.manifest, s.head), inHand: null, attempts: [] };
       const patch = { mode: { kind: "draft" } as Mode, selected: null, draft };
       s.log("draft", `from ${monthAt(s.head)}`, patch);
       set({ ...patch, ...done("draft") });
@@ -446,7 +468,7 @@ export const useStore = create<State>((set, get) => {
     setDraftBase: (base) => {
       const s = get();
       if (s.mode.kind !== "draft" || !s.draft) return;
-      const draft: Draft = { base, placements: seedDraft(s.manifest, base), inHand: null, attempts: [] };
+      const draft: Draft = { id: s.draft.id, base, placements: seedDraft(s.manifest, base), inHand: null, attempts: [] };
       s.log("draft", base === null ? "from scratch" : `from ${monthAt(base)}`, { draft });
       set({ draft });
     },
@@ -510,8 +532,43 @@ export const useStore = create<State>((set, get) => {
     leaveDraft: () => {
       const s = get();
       if (s.mode.kind !== "draft") return;
-      s.log("leave draft", "", { mode: NORMAL, draft: null });
+      s.log("leave draft", draftName(s.draft?.id ?? null, s.drafts, s.draftSeq), { mode: NORMAL, draft: null });
       set({ mode: NORMAL, draft: null });
+    },
+    // the branches: a saved draft, kept per set in the browser and shown after the states in the timeline
+    saveDraft: () => {
+      const s = get();
+      const d = s.draft;
+      if (s.mode.kind !== "draft" || !d || !canSaveDraft(d, s.drafts, s.manifest)) return;
+      const have = savedOf(s.drafts, d.id);
+      const id = have?.id ?? s.draftSeq + 1;
+      const entry: SavedDraft = { id, name: have?.name ?? `Draft ${id}`, savedAt: Date.now(), ...proposalOf(d) };
+      const drafts = have ? s.drafts.map((x) => (x.id === id ? entry : x)) : [...s.drafts, entry];
+      const draft: Draft = { ...d, id };
+      s.log("save draft", entry.name, { draft });
+      set({ draft, drafts, draftSeq: Math.max(s.draftSeq, id) });
+    },
+    openDraft: (id) => {
+      const s = get();
+      const entry = savedOf(s.drafts, id);
+      if (!entry || !s.loaded[0] || s.mode.kind === "compare") return false;
+      if (s.mode.kind === "draft" && s.draft) {
+        if (s.draft.id === id) return true;
+        if (draftDirty(s.draft, s.drafts, s.manifest)) return false;
+      }
+      const patch = { mode: { kind: "draft" } as Mode, selected: null, draft: inflate(entry, id) };
+      s.log("open draft", entry.name, patch);
+      set({ ...patch, ...done("draft") });
+      return true;
+    },
+    deleteDraft: (id) => {
+      const s = get();
+      const entry = savedOf(s.drafts, id);
+      if (!entry) return;
+      const drafts = s.drafts.filter((x) => x.id !== id);
+      const patch = s.mode.kind === "draft" && s.draft?.id === id ? { mode: NORMAL, draft: null } : {};
+      s.log("delete draft", entry.name, patch);
+      set({ ...patch, drafts });
     },
 
     // ---- the chrome
@@ -533,8 +590,10 @@ export const useStore = create<State>((set, get) => {
       if (!site) return;
       const tick = id !== s.site ? done("tour") : {};
       if (!site.set || site.set === s.set) return set({ site: id, sitesOpen: false, ...tick });
-      // another floor: the room empties under the curtain and the engine opens its set; the log starts over there
-      set({ site: id, sitesOpen: false, ...tick, ...emptyRoom(), set: site.set });
+      // another floor: the room empties under the curtain and the engine opens its set; the log starts over there,
+      // and the floor's own branches come in with it
+      const branches = readDrafts(site.set);
+      set({ site: id, sitesOpen: false, ...tick, ...emptyRoom(), set: site.set, drafts: branches.drafts, draftSeq: branches.seq });
     },
     openFoot: () => set((s) => (s.page === "footnotes" ? s : { page: "footnotes", menuOpen: false, returnTo: s.page })),
     back: () => set((s) => ({ page: s.returnTo || "room" })),
@@ -559,6 +618,7 @@ export const useStore = create<State>((set, get) => {
         loaded: m.commits.map(() => false),
         loadErrors: {},
         splatCount: m.commits.map(() => 0),
+        drafts: fitDrafts(s.drafts, m), // a branch saved against another build of the set is trimmed to this one
       })),
     setStatus: (status) => set({ status }),
     fail: (error) => set({ status: "error", error }),
@@ -596,7 +656,9 @@ export const useStore = create<State>((set, get) => {
       const { head, mode, selected, ghosts, standard, draft, cam } = a.snap;
       if (!st.loaded[head]) return false;
       if (mode.kind === "compare" && !(st.loaded[mode.a] && st.loaded[mode.b])) return false;
-      const patch = { head, mode, selected, ghosts, standard, draft: draft ? { ...draft, inHand: null } : null };
+      // a branch deleted since the entry was written reopens as an unsaved draft
+      const branch = draft && draft.id !== null && savedOf(st.drafts, draft.id) ? draft.id : null;
+      const patch = { head, mode, selected, ghosts, standard, draft: draft ? { ...draft, id: branch, inHand: null } : null };
       st.log("restore", `#${String(id).padStart(2, "0")} ${a.verb}`, { ...patch, cam });
       set({ ...patch, camRequest: cam ? { cam, seq: id } : st.camRequest });
       return true;

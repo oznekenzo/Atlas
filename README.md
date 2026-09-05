@@ -58,10 +58,12 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
       right column   the ATLAS menu (Notes, Restart demo), then two cells that grow to their content:
                      the selected object (its months, its entry) and the layout — the diff, the comparison to the
                      standard, or the draft
-      bottom band    four timeline cells (month, year, STANDARD / OFF STANDARD / n of 4; the current one tinted, with
-                     a MAKE THIS THE STANDARD tab that asks before it acts) over the state's details: date, sequence,
-                     status, stoppages, changeover, output; what is in it; its entry
-    Keys: ← → states · D diff · C compare to standard · N draft · M measure · F notes · esc back.
+      bottom band    the timeline: a cell per state (month, year, STANDARD / OFF STANDARD / n of 4; the current one
+                     tinted, with a MAKE THIS THE STANDARD tab that asks before it acts), then a dashed cell per
+                     branch (a saved draft: its name, BRANCH · FROM AUG); under them the state's details: date,
+                     sequence, status, stoppages, changeover, output; what is in it; its entry — or the branch's
+                     while a draft is open
+    Keys: ← → states · D diff · C compare to standard · N draft · M measure · S save draft · esc back.
     Every command is also a click. A first arrival runs a seven-stop tour of the controls (Enter steps, Skip ends it),
     and the camera drifts slowly around the room until the first press or scroll on the scene; once per page load.
     A reload after the deck opens on the room, on the floor it left, with the checklist and the tour as they were
@@ -71,7 +73,10 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
     Compare to standard (C): the standard's ghosts drawn in this state from its own capture, violet, each drifted
     thing tied to where it belongs; the panel says what the state must do to match. Draft (N): a layout tried on the
     empty floor, from scratch or from a state whose things start as placements; pick from the tray, click the floor,
-    click a placed thing to pick it up again; Measure counts what is down. Nothing is written back.
+    click a placed thing to pick it up again; Measure counts what is down. Save (S) keeps the draft as a branch:
+    a cell after the states, held in the browser per set; click it to return. A clean draft lets ← → and the
+    state cells through; unsaved work holds them, and esc discards it. Delete is in the panel; Restart demo
+    clears every branch. Nothing is written back to the captures.
     The grid is 268 px left, 328 px right, 48 px top, 164 px bottom; the picture is offset so the room centres in
     the middle cell. Designed for 1280 px and up. The HUD follows attention: full while the pointer is on it,
     lighter while the pointer is in the room or a drag is under way, and gone after two still seconds in the

@@ -3,6 +3,7 @@
  * names the controls, and the start presets (?s=<name>) that open the room in any state for testing.
  */
 import type { Mode } from "./store";
+import type { Proposal } from "./drafts";
 
 /** The state the deck lands in: the second month, June 2026, the floor with its first stations in. */
 export const LANDING = 1;
@@ -32,7 +33,7 @@ export const SLIDES: Slide[] = [
   {
     title: "DEMO",
     lead: "In this demo, a floor is captured once a month.",
-    body: "Four months. The third is the approved layout: the \u201cstandard\u201d. Move through the months. Diff their spatial states. Compare against the standard. See how far the floor has drifted from the standard. Draft a new layout proposal. Tour a remote factory.",
+    body: "Four months. The third is the approved layout: the \u201cstandard\u201d. Move through the months. Diff their spatial states. Compare against the standard. See how far the floor has drifted from the standard. Draft a new layout proposal and save it as a branch. Tour a remote factory.",
   },
 ];
 
@@ -72,7 +73,7 @@ export type Preset = {
   mode?: Mode;
   selected?: number;
   ghosts?: boolean;
-  draft?: { base: number | null; placements: { id: number; x: number; z: number }[]; attempts: string[] };
+  draft?: Proposal;
   history?: boolean;
 };
 export const PRESETS: Record<string, Preset> = {

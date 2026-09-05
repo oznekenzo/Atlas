@@ -54,7 +54,6 @@
   --band-b: 164px;
   --rule: rgba(255, 255, 255, 0.28);
   --cell: rgba(7, 7, 8, var(--cell-a)); /* every band, cell and tab: one surface, whose ink follows the HUD's attention */
-  --colw: calc((100vw - var(--col-l) - var(--col-r)) / 4);
   --pad: 16px;
 
   /* motion: one easing, four durations */
@@ -1046,6 +1045,53 @@ kbd {
   color: var(--ink-50);
   line-height: 1.5;
 }
+#panel .acts {
+  display: flex;
+  gap: 8px;
+}
+#panel .acts .act {
+  flex: 1;
+  height: 32px;
+  box-sizing: border-box;
+  border: 1px solid var(--ink-70);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--ink-70);
+  font-size: 12px;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast),
+    border-color var(--t-fast);
+}
+#panel .acts .act kbd {
+  font-size: 10px;
+  opacity: 0.7;
+}
+#panel .acts .act:hover {
+  background: var(--ink-100);
+  color: #0a0a0c;
+}
+#panel .acts .act.dim,
+#panel .acts .act.dim:hover {
+  background: transparent;
+  color: var(--ink-25);
+  border-color: var(--ink-15);
+  cursor: default;
+}
+#panel .acts .act.del {
+  flex: 0 0 auto;
+  padding: 0 14px;
+  color: var(--rem);
+  border-color: rgba(224, 112, 92, 0.5);
+}
+#panel .acts .act.del:hover {
+  background: var(--rem);
+  border-color: var(--rem);
+  color: #0a0a0c;
+}
 #panel .attempts {
   display: flex;
   flex-direction: column;
@@ -1076,8 +1122,7 @@ kbd {
   flex-direction: column;
 }
 #timeline {
-  display: grid;
-  grid-template-columns: var(--colw) var(--colw) var(--colw) 1fr;
+  display: grid; /* the columns come from the band: the states, then the branches, a little narrower */
   flex: none;
 }
 #timeline .cell {
@@ -1127,9 +1172,26 @@ kbd {
   background: color-mix(in srgb, var(--acc) 30%, transparent);
   color: var(--acc-hi);
 }
-#timeline .cell.pending {
+#timeline .cell.pending,
+#timeline .cell.locked {
   color: var(--ink-18);
   cursor: default;
+}
+/* a branch: a saved draft after the states; dashed, as the overlay draws what is not the real thing */
+#timeline .cell.branch,
+#timeline .cell:has(+ .cell.branch) {
+  border-right-style: dashed;
+}
+#timeline .cell.branch {
+  border-bottom-style: dashed;
+}
+#timeline .cell.branch.unsaved {
+  color: var(--ink-40);
+  cursor: default;
+}
+#timeline .cell.branch.unsaved:hover {
+  background: color-mix(in srgb, var(--acc) 8%, transparent);
+  color: var(--ink-40);
 }
 #timeline .m {
   font-weight: 600;
@@ -1196,8 +1258,7 @@ kbd {
   flex: none;
 }
 #details {
-  display: grid;
-  grid-template-columns: var(--colw) var(--colw) 1fr;
+  display: grid; /* the columns come from the band, so the hairlines meet the rail's */
   flex: 1;
   min-height: 0;
   border-top: 1px solid var(--rule);
