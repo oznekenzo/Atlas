@@ -32,3 +32,9 @@ export const shortDateOf = (captured: string): string => {
 
 /** "2.1 M" for a splat count. */
 export const compact = (n: number): string => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `${Math.round(n / 1e3)} k` : String(n));
+
+/** "May": the month alone, for the rail and the log. */
+export const monthOf = (captured: string): string => {
+  const d = capturedAt(captured);
+  return d ? d.toLocaleDateString("en-GB", { month: "short" }) : "—";
+};

@@ -8,7 +8,14 @@
    "captured": "2026-05-01T12:00:00",
    "file": "commits/c0.spz",
    "splats": 2053355,
-   "labels": "commits/c0.labels.bin"
+   "labels": "commits/c0.labels.bin",
+   "doc": "Bay 1 cleared for the layout trial. Old racking out, floor patched and marked. Nothing on it yet.",
+   "by": "R. Okafor, floor lead \u00b7 2 May 2026",
+   "stats": {
+    "stoppages": "0",
+    "changeover": "\u2014",
+    "output": "\u2014"
+   }
   },
   {
    "id": "c1",
@@ -18,7 +25,14 @@
    "captured": "2026-06-01T12:00:00",
    "file": "commits/c1.spz",
    "splats": 2075331,
-   "labels": "commits/c1.labels.bin"
+   "labels": "commits/c1.labels.bin",
+   "doc": "First stations in. The knot and the two plants stand in for the mixer and the two carts. Cart paths still crossed near the door; two stoppages came from that.",
+   "by": "R. Okafor, floor lead \u00b7 3 Jun 2026",
+   "stats": {
+    "stoppages": "6",
+    "changeover": "48 min",
+    "output": "1,120"
+   }
   },
   {
    "id": "c2",
@@ -28,7 +42,14 @@
    "captured": "2026-07-01T12:00:00",
    "file": "commits/c2.spz",
    "splats": 2145102,
-   "labels": "commits/c2.labels.bin"
+   "labels": "commits/c2.labels.bin",
+   "doc": "Approved as the standard. Fan and lamp added so both stations have air and light; the case holds the changeover kit. Paths no longer cross. Changeover under 35 minutes for the first time, which is what we were after.",
+   "by": "Approved by M. Reyes, plant manager \u00b7 7 Jul 2026",
+   "stats": {
+    "stoppages": "2",
+    "changeover": "31 min",
+    "output": "1,380"
+   }
   },
   {
    "id": "c3",
@@ -38,7 +59,14 @@
    "captured": "2026-08-01T12:00:00",
    "file": "commits/c3.spz",
    "splats": 2224066,
-   "labels": "commits/c3.labels.bin"
+   "labels": "commits/c3.labels.bin",
+   "doc": null,
+   "by": null,
+   "stats": {
+    "stoppages": "5",
+    "changeover": "44 min",
+    "output": "1,210"
+   }
   }
  ],
  "voxel": 0.05792301504710619,
@@ -92,12 +120,39 @@
  ],
  "calibration_m": 6.1,
  "standard": 2,
+ "diffs": {
+  "0-1": {
+   "doc": "Stations placed for the first time. This is the layout we started the trial with, before anyone had run a shift on it.",
+   "by": "R. Okafor \u00b7 3 Jun 2026"
+  },
+  "1-2": {
+   "doc": "Monstera and fan moved to open the cart path; lamp and case added. Done over the weekend shutdown so nothing was lost on the line.",
+   "by": "R. Okafor \u00b7 7 Jul 2026"
+  },
+  "2-3": {
+   "doc": "Monstera and fan pushed toward the door during the night shift of 28 Jul to clear space for a pallet drop. Tall plant, small plant and the case left Bay 1 the same night and were not returned.",
+   "by": "M. Reyes \u00b7 4 Aug 2026"
+  }
+ },
+ "sites": [
+  {
+   "id": "torrance",
+   "name": "Torrance \u00b7 Bay 1",
+   "count": 4
+  },
+  {
+   "id": "ravensburg",
+   "name": "Ravensburg \u00b7 Hall 2",
+   "count": 27
+  }
+ ],
  "objects": [
   {
    "id": 0,
    "source_id": 0,
    "name": "Tall plant",
-   "doc": "Present in c1 and c2.",
+   "doc": "Floor plant against the left wall. Not in the last state.",
+   "by": "R. Okafor \u00b7 Jun 2026",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -125,7 +180,8 @@
    "id": 1,
    "source_id": 1,
    "name": "Small plant",
-   "doc": "Present in c1 and c2.",
+   "doc": "Potted plant by the right wall. Not in the last state.",
+   "by": "R. Okafor \u00b7 Jun 2026",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -153,7 +209,8 @@
    "id": 2,
    "source_id": 2,
    "name": "Knot",
-   "doc": "Present in c1 to c3.",
+   "doc": "Stands in for the mixer. Fixed position: it is bolted in the real layout and should never appear in a diff.",
+   "by": "R. Okafor \u00b7 Jun 2026",
    "added_in": 1,
    "removed_in": null,
    "present": [
@@ -182,7 +239,8 @@
    "id": 3,
    "source_id": 3,
    "name": "Monstera",
-   "doc": "Present in c1 and c2; moved in c3.",
+   "doc": "Stands in for cart A. Must stay clear of the door path; when it drifts toward the far wall it blocks the second station.",
+   "by": "M. Reyes \u00b7 Jul 2026",
    "added_in": 1,
    "removed_in": 3,
    "present": [
@@ -210,7 +268,8 @@
    "id": 4,
    "source_id": 4,
    "name": "Fan",
-   "doc": "Present in c2; moved in c3.",
+   "doc": "Pedestal fan for station two. Cable runs along the right wall; if it is moved the cable crosses the path.",
+   "by": "R. Okafor \u00b7 Jul 2026",
    "added_in": 2,
    "removed_in": 3,
    "present": [
@@ -237,7 +296,8 @@
    "id": 5,
    "source_id": 6,
    "name": "Lamp",
-   "doc": "Present in c2 and c3.",
+   "doc": "Task light for station one. Nothing to know beyond that.",
+   "by": "R. Okafor \u00b7 Jul 2026",
    "added_in": 2,
    "removed_in": null,
    "present": [
@@ -265,7 +325,8 @@
    "id": 6,
    "source_id": 7,
    "name": "Suitcase",
-   "doc": "Present in c2.",
+   "doc": "",
+   "by": "",
    "added_in": 2,
    "removed_in": 3,
    "present": [
@@ -292,7 +353,8 @@
    "id": 7,
    "source_id": 8,
    "name": "Monstera",
-   "doc": "Present in c3, moved from its c2 position.",
+   "doc": "Stands in for cart A. Must stay clear of the door path; when it drifts toward the far wall it blocks the second station.",
+   "by": "M. Reyes \u00b7 Jul 2026",
    "added_in": 3,
    "removed_in": null,
    "present": [
@@ -319,7 +381,8 @@
    "id": 8,
    "source_id": 9,
    "name": "Fan",
-   "doc": "Present in c3, moved from its c2 position.",
+   "doc": "Pedestal fan for station two. Cable runs along the right wall; if it is moved the cable crosses the path.",
+   "by": "R. Okafor \u00b7 Jul 2026",
    "added_in": 3,
    "removed_in": null,
    "present": [

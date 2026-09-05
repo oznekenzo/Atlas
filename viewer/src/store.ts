@@ -2,37 +2,44 @@
  * Application state. Plain data plus the actions that move it; the engine subscribes, React selects.
  * Every user-visible action is logged to `history` with a snapshot of the state *after* it, so the
  * log doubles as a reflog: any entry can be restored.
+ *
+ * The room has three renderings (a state, a diff between two states, a draft on the empty floor), one
+ * overlay (the standard's ghosts), and around them the demo's script: the title deck, the checklist, the tour.
  */
 import { create } from "zustand";
 import type { Manifest } from "./types";
 import { chainOf } from "./identity";
-import type { Placement } from "./attribution";
-import { measure, type Measure } from "./measure";
+import { centre } from "./attribution";
+import { GOALS, PRESETS, SLIDES, TOUR } from "./demo";
+import { dateOf, monthOf } from "./time";
 
-export type Mode = { kind: "normal" } | { kind: "diff"; a: number; b: number } | { kind: "onion" } | { kind: "proposal" };
+export type Mode = { kind: "normal" } | { kind: "compare"; a: number; b: number; headBefore: number } | { kind: "draft" };
 export const NORMAL: Mode = { kind: "normal" };
-export const sameMode = (x: Mode, y: Mode) => x.kind === y.kind && (x.kind !== "diff" || y.kind !== "diff" || (x.a === y.a && x.b === y.b));
+export const sameMode = (x: Mode, y: Mode) => x.kind === y.kind && (x.kind !== "compare" || y.kind !== "compare" || (x.a === y.a && x.b === y.b));
+export type Page = "title" | "room" | "how" | "footnotes";
 
 export type Cam = { pos: [number, number, number]; target: [number, number, number] };
-export type Snapshot = { head: number; mode: Mode; selected: number | null; cam: Cam | null };
+/** A thing put down on the draft's floor. `key` tells copies of the same object apart. */
+export type Placed = { key: number; id: number; x: number; z: number };
+/** The thing in hand: following the pointer once `at` is true, nowhere yet before that. */
+export type InHand = Placed & { at: boolean };
+/**
+ * A draft: a layout tried on the empty floor. From scratch it starts bare; from a state it starts as that
+ * state's things, each a placement that can be picked up and moved. Measure records how many things are down.
+ */
+export type Draft = { base: number | null; placements: Placed[]; inHand: InHand | null; attempts: { n: number; text: string }[] };
+export type Snapshot = { head: number; mode: Mode; selected: number | null; ghosts: boolean; draft: Draft | null; cam: Cam | null };
 export type Action = { id: number; t: number; verb: string; detail: string; snap: Snapshot };
 export type Status = "loading" | "ready" | "error";
-/**
- * A proposal: a branch off `base` that puts things back where they stood in `target`. Placements are floor
- * positions by the target commit's object id; a commit measures them. It is hypothetical until reality commits it.
- */
-export type Proposal = {
-  name: string;
-  base: number;
-  target: number;
-  placements: Record<number, Placement>;
-  commits: { n: number; msg: string; report: Measure }[];
-};
 
-/** Entries the reflog and HEAD@{n} count: everything except terminal bookkeeping. */
-export const isNavigational = (a: Action) => a.verb !== "$" && a.verb !== "terminal";
+/** Entries the reflog counts: everything except bookkeeping. */
+export const isNavigational = (a: Action) => a.verb !== "$";
+
+const MAX_COPIES = 4; // of one object in a draft: each copy is its own mesh
+const GUIDE_KEY = "atlas.guide";
 
 let actionSeq = 0;
+let placedSeq = 0;
 const T0 = performance.now();
 
 export type State = {
@@ -44,6 +51,14 @@ export type State = {
   camera: Cam | null; // last recorded camera
   liveCamera: (() => Cam) | null; // engine-provided: the camera right now, so every snapshot is exact
   camRequest: { cam: Cam; seq: number } | null; // engine tweens to this when it changes
+
+  page: Page;
+  returnTo: Page;
+  slide: number; // the deck: 0 is the title, 1…SLIDES.length the slides
+  leaving: boolean; // the deck is fading to black on its way into the room
+  curtain: boolean; // the room is under black, about to fade up
+  preset: string | null; // the ?s= start state, if any
+
   head: number;
   mode: Mode;
   selected: number | null;
@@ -51,42 +66,65 @@ export type State = {
   loaded: boolean[]; // per commit
   loadErrors: Record<number, string>;
   splatCount: number[]; // per commit, once loaded
-  terminalOpen: boolean;
   moving: boolean; // camera in motion → chrome fades
-  proposal: Proposal | null; // the one branch; survives leaving it, so git checkout <name> returns to it
-  placing: number | null; // the thing in hand, following the pointer along the floor
-  intro: boolean; // the title card is up; the chrome waits until the user begins
-  standard: number | null; // the commit tagged as the approved layout; drift is measured from it
-  ghosts: boolean; // show the standard's ghosts in a drifted scene
+  standard: number | null; // the state tagged as the approved layout
+  ghosts: boolean; // compare to standard: the standard's ghosts drawn in this state
+  draft: Draft | null;
 
-  begin: () => void;
-  setStandard: (i: number | null) => void;
+  site: string;
+  sitesOpen: boolean;
+  goals: Record<string, boolean>;
+  tour: number; // -1 = off, else the step
+  openGoal: string | null;
+  hints: boolean;
+
+  // the deck
+  nextSlide: () => void;
+  prevSlide: () => void;
+  leave: () => void;
+  arrive: () => void;
+  liftCurtain: () => void;
+  restartDemo: () => void;
+  // the room
+  go: (i: number) => boolean;
+  step: (d: number) => void;
+  toggleCompare: () => void;
+  exitMode: () => void;
   toggleGhosts: () => void;
-  branch: (name: string, target: number) => boolean;
-  enterBranch: () => boolean;
-  beginPlace: (id: number) => void;
-  place: (id: number, x: number, z: number) => void;
-  drop: () => void;
-  unplace: (id: number) => void;
-  commitProposal: (msg: string) => Measure | null;
-  measureProposal: () => Measure | null;
-
+  makeStandard: () => void;
+  select: (id: number | null) => void;
+  esc: () => void;
+  // a draft
+  enterDraft: () => void;
+  setDraftBase: (base: number | null) => void;
+  pickFromTray: (id: number) => void;
+  pickUpPlaced: (key: number) => void;
+  moveInHand: (x: number, z: number) => void;
+  placeAt: (x: number, z: number) => void;
+  dropInHand: () => void;
+  measure: () => void;
+  leaveDraft: () => void;
+  // the chrome
+  toggleSites: () => void;
+  closeSites: () => void;
+  pickSite: (id: string) => void;
+  openHow: () => void;
+  openFoot: () => void;
+  back: () => void;
+  tourNext: () => void;
+  tourSkip: () => void;
+  toggleGoal: (id: string) => void;
+  // bookkeeping
   setManifest: (m: Manifest, refScale: number) => void;
   setStatus: (status: Status) => void;
   fail: (error: string) => void;
   markLoaded: (i: number, splats: number) => void;
   markFailed: (i: number, error: string) => void;
   log: (verb: string, detail?: string, snapOverride?: Partial<Snapshot>) => void;
-  /** Replace the newest entry if it has this verb (a continuing gesture), else append. */
   amend: (verb: string, detail: string, snapOverride?: Partial<Snapshot>) => void;
   restore: (id: number) => boolean;
   setCamera: (cam: Cam) => void;
-  checkout: (i: number) => boolean;
-  diff: (a: number, b: number) => boolean;
-  toggleOnion: () => void;
-  select: (id: number | null) => void;
   setHover: (id: number | null) => void;
-  setTerminal: (open: boolean) => void;
   setMoving: (m: boolean) => void;
 };
 
@@ -94,7 +132,7 @@ export type State = {
 export const traceChain = (m: Manifest, id: number): number[] => chainOf(m.objects, id);
 
 /**
- * The selection after a checkout: the same thing under whichever id it wears in the commits now shown,
+ * The selection after a change of state: the same thing under whichever id it wears in the states now shown,
  * or nothing if it is not in any of them. A selection never outlives the object it points at.
  */
 const carry = (m: Manifest, selected: number | null, shown: number[]): number | null => {
@@ -103,7 +141,7 @@ const carry = (m: Manifest, selected: number | null, shown: number[]): number | 
   return null;
 };
 
-/** Objects that differ between two commits. Shared by the engine, the terminal, the legend and the log. */
+/** Objects that differ between two commits. Shared by the engine, the panel and the log. */
 export const objectsChanged = (m: Manifest, a: number, b: number) => {
   const added = new Set<number>();
   const removed = new Set<number>();
@@ -116,206 +154,393 @@ export const objectsChanged = (m: Manifest, a: number, b: number) => {
   return { added, removed };
 };
 
-export const useStore = create<State>((set, get) => ({
-  status: "loading",
-  error: null,
-  manifest: null,
-  refScale: 1,
-  history: [],
-  camera: null,
-  liveCamera: null,
-  camRequest: null,
-  head: 0,
-  mode: NORMAL,
-  selected: null,
-  hover: null,
-  loaded: [],
-  loadErrors: {},
-  splatCount: [],
-  terminalOpen: false,
-  moving: false,
-  proposal: null,
-  placing: null,
-  intro: !new URLSearchParams(location.search).has("nointro"),
-  standard: null,
-  ghosts: false,
+/** What a draft starts with: nothing from scratch, or a state's things where that state had them. */
+export const seedDraft = (m: Manifest | null, base: number | null): Placed[] =>
+  m === null || base === null
+    ? []
+    : m.objects
+        .filter((o) => o.present.includes(base))
+        .map((o) => {
+          const c = centre(o);
+          return { key: ++placedSeq, id: o.id, x: c.x, z: c.z };
+        });
 
-  // time runs forward: the set opens on its first commit, not on HEAD
-  setManifest: (m, refScale) =>
-    set({
-      manifest: m,
-      refScale,
-      standard: m.standard,
-      head: 0,
-      loaded: m.commits.map(() => false),
-      loadErrors: {},
-      splatCount: m.commits.map(() => 0),
-    }),
-  setStatus: (status) => set({ status }),
-  setStandard: (i) => {
-    const st = get();
-    if (i === st.standard) return;
-    if (i === null) st.log("untag", "standard");
-    else st.log("tag", `standard  c${i}  ${st.manifest?.commits[i].hash ?? ""}`);
-    set({ standard: i });
-  },
-  toggleGhosts: () => {
-    const st = get();
-    st.log("ghosts", st.ghosts ? "off" : "on");
-    set({ ghosts: !st.ghosts });
-  },
-  begin: () => {
-    const st = get();
-    const c = st.manifest?.commits[0];
-    if (!st.intro || !c || !st.loaded[0]) return;
-    st.log("begin", `c0  ${c.hash}`);
-    set({ intro: false });
-  },
-  fail: (error) => set({ status: "error", error }),
-  markLoaded: (i, splats) =>
-    set((s) => {
-      const loaded = [...s.loaded];
-      loaded[i] = true;
-      const splatCount = [...s.splatCount];
-      splatCount[i] = splats;
-      return { loaded, splatCount };
-    }),
-  markFailed: (i, error) => set((s) => ({ loadErrors: { ...s.loadErrors, [i]: error } })),
+/** The design's default pair for a diff: the standard against a later state, otherwise the state before this one. */
+export const comparePair = (head: number, standard: number | null): [number, number] => {
+  const b = head === 0 ? 1 : head;
+  const a = standard !== null && head > standard ? standard : head === 0 ? 0 : head - 1;
+  return [a, b];
+};
 
-  // a snapshot describes the state AFTER the action; callers pass the parts that are about to change
-  log: (verb, detail = "", snapOverride = {}) =>
-    set((st) => {
-      const snap: Snapshot = { head: st.head, mode: st.mode, selected: st.selected, cam: st.liveCamera?.() ?? st.camera, ...snapOverride };
-      const a: Action = { id: ++actionSeq, t: performance.now() - T0, verb, detail, snap };
-      return { history: [...st.history, a] };
-    }),
-  amend: (verb, detail, snapOverride = {}) => {
-    const st = get();
-    const last = st.history[st.history.length - 1];
-    if (!last || last.verb !== verb) {
-      st.log(verb, detail, snapOverride);
-      return;
-    }
-    const a: Action = { ...last, t: performance.now() - T0, detail, snap: { ...last.snap, ...snapOverride } };
-    set({ history: [...st.history.slice(0, -1), a] });
-  },
-  restore: (id) => {
-    const st = get();
-    const a = st.history.find((x) => x.id === id);
-    if (!a || a === st.history[st.history.length - 1]) return false;
-    const { head, selected, cam } = a.snap;
-    const mode = a.snap.mode.kind === "proposal" && !st.proposal ? NORMAL : a.snap.mode; // a proposal that is gone cannot be restored
-    if (!st.loaded[head]) return false;
-    st.log("restore", `→ ${String(id).padStart(3, "0")}  ${a.verb}`, { head, mode, selected, cam });
-    set({ head, mode, selected, camRequest: cam ? { cam, seq: id } : st.camRequest });
-    return true;
-  },
-  setCamera: (camera) => set({ camera }),
+const readGuide = (): { tour?: number; hints?: boolean; done?: Record<string, boolean> } => {
+  try {
+    return JSON.parse(sessionStorage.getItem(GUIDE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+};
+export const writeGuide = (s: State) => {
+  try {
+    sessionStorage.setItem(GUIDE_KEY, JSON.stringify({ tour: s.tour, hints: s.hints, done: s.goals }));
+  } catch {
+    /* private mode */
+  }
+};
 
-  checkout: (i) => {
-    const st = get();
-    const c = st.manifest?.commits[i];
-    if (!c || !st.loaded[i]) return false;
-    const noop = st.mode.kind === "normal" && st.head === i;
-    const selected = carry(st.manifest!, st.selected, [i]);
-    st.log(noop ? "reset" : "checkout", `c${i}  ${c.hash}`, { head: i, mode: NORMAL, selected });
-    set({ head: i, mode: NORMAL, selected, placing: null });
-    return true;
-  },
-  // the proposal branch: things from the target carried onto the base's floor; a commit measures them
-  branch: (name, target) => {
-    const st = get();
-    const M = st.manifest;
-    const base = st.head;
-    if (!M || !st.loaded[base] || !st.loaded[target] || target === base) return false;
-    st.log("branch", `${name}  ← c${base}`, { mode: { kind: "proposal" }, selected: null });
-    set({ proposal: { name, base, target, placements: {}, commits: [] }, mode: { kind: "proposal" }, selected: null, placing: null });
-    return true;
-  },
-  enterBranch: () => {
-    const st = get();
-    const p = st.proposal;
-    if (!p || !st.loaded[p.base]) return false;
-    if (st.mode.kind === "proposal") return true;
-    st.log("checkout", p.name, { head: p.base, mode: { kind: "proposal" }, selected: null });
-    set({ head: p.base, mode: { kind: "proposal" }, selected: null, placing: null });
-    return true;
-  },
-  beginPlace: (id) => {
-    const st = get();
-    if (st.mode.kind !== "proposal" || !st.proposal) return;
-    set({ placing: id, selected: null });
-  },
-  place: (id, x, z) => set((s) => (s.proposal ? { proposal: { ...s.proposal, placements: { ...s.proposal.placements, [id]: { id, x, z } } } } : {})),
-  drop: () => {
-    const st = get();
-    const id = st.placing;
-    if (id === null || !st.proposal) return;
-    const p = st.proposal.placements[id];
-    if (p) st.log("place", `${st.manifest?.objects[id].name ?? id}  → ${p.x.toFixed(2)} ${p.z.toFixed(2)}`);
-    set({ placing: null });
-  },
-  unplace: (id) => {
-    const st = get();
-    if (!st.proposal) return;
-    const placements = { ...st.proposal.placements };
-    const had = id in placements;
-    delete placements[id];
-    if (had) st.log("unplace", st.manifest?.objects[id].name ?? String(id));
-    set({ proposal: { ...st.proposal, placements }, placing: null });
-  },
-  measureProposal: () => {
-    const st = get();
-    const M = st.manifest;
-    const p = st.proposal;
-    if (!M || !p) return null;
-    return measure(M.objects, p.base, p.target, p.placements, `c${p.target}`);
-  },
-  commitProposal: (msg) => {
-    const st = get();
-    const p = st.proposal;
-    if (!p || st.mode.kind !== "proposal") return null;
-    const report = st.measureProposal()!;
-    const n = p.commits.length + 1;
-    const mean = report.meanM === null ? "nothing placed" : `mean ${report.meanM.toFixed(2)} m`;
-    st.log("commit", `${p.name}  ${report.placed}/${report.ofN} placed · ${mean}`);
-    set({ proposal: { ...p, commits: [...p.commits, { n, msg, report }] }, placing: null });
-    return report;
-  },
-  diff: (a, b) => {
-    const st = get();
-    if (!st.manifest || a === b || !st.loaded[a] || !st.loaded[b]) return false;
-    const lo = Math.min(a, b);
-    const hi = Math.max(a, b);
-    const mode: Mode = { kind: "diff", a: lo, b: hi };
-    const { added, removed } = objectsChanged(st.manifest, lo, hi);
-    const selected = carry(st.manifest, st.selected, [lo, hi]);
-    st.log("diff", `c${lo}…c${hi}  +${added.size} −${removed.size}`, { head: hi, mode, selected });
-    set({ head: hi, mode, selected });
-    return true;
-  },
-  toggleOnion: () => {
-    const st = get();
-    const on = st.mode.kind !== "onion";
-    const mode: Mode = on ? { kind: "onion" } : NORMAL;
-    st.log("onion", on ? `${st.loaded.filter(Boolean).length} layers` : "off", { mode });
-    set({ mode });
-  },
-  select: (id) => {
-    const st = get();
-    if (id === st.selected) return;
-    const o = id === null ? null : st.manifest?.objects[id];
-    if (id !== null && !o) return;
-    if (o) st.log("select", o.name, { selected: id });
-    else st.log("deselect", "", { selected: null });
-    set({ selected: id });
-  },
-  setHover: (id) => set((s) => (s.hover === id ? {} : { hover: id })),
-  setTerminal: (open) => {
-    const st = get();
-    if (open === st.terminalOpen) return;
-    st.log("terminal", open ? "open" : "close");
-    set({ terminalOpen: open });
-  },
-  setMoving: (moving) => set((s) => (s.moving === moving ? {} : { moving })),
-}));
+/** The start state from the URL: a named preset, the bare room, or the title. */
+const initial = () => {
+  const q = new URLSearchParams(location.search);
+  const name = q.get("s");
+  const preset = name ? PRESETS[name] : undefined;
+  const skip = preset !== undefined || q.has("nointro");
+  const saved = skip ? {} : readGuide();
+  const draft: Draft | null = preset?.draft
+    ? {
+        base: preset.draft.base,
+        placements: preset.draft.placements.map((p) => ({ ...p, key: ++placedSeq })),
+        inHand: null,
+        attempts: preset.draft.attempts.map((text, i) => ({ n: i + 1, text })),
+      }
+    : null;
+  return {
+    page: (preset?.page ?? (skip ? "room" : "title")) as Page,
+    preset: preset ? name : null,
+    head: preset?.head ?? 0,
+    mode: preset?.mode ?? NORMAL,
+    selected: preset?.selected ?? null,
+    ghosts: preset?.ghosts ?? false,
+    draft,
+    tour: skip ? -1 : (saved.tour ?? 0),
+    hints: skip ? false : (saved.hints ?? true),
+    goals: saved.done ?? {},
+  };
+};
+
+export const useStore = create<State>((set, get) => {
+  const monthAt = (i: number) => {
+    const c = get().manifest?.commits[i];
+    return c ? monthOf(c.captured) : `c${i}`;
+  };
+  const nameOf = (id: number) => get().manifest?.objects[id]?.name ?? `object ${id}`;
+  /** The patch that ticks a goal, once. */
+  const done = (id: string): Partial<State> => {
+    const s = get();
+    if (s.goals[id]) return {};
+    return { goals: { ...s.goals, [id]: true }, openGoal: s.openGoal === id ? null : s.openGoal };
+  };
+  const snapOf = (s: State): Snapshot => ({
+    head: s.head,
+    mode: s.mode,
+    selected: s.selected,
+    ghosts: s.ghosts,
+    draft: s.draft,
+    cam: s.liveCamera?.() ?? s.camera,
+  });
+
+  return {
+    status: "loading",
+    error: null,
+    manifest: null,
+    refScale: 1,
+    history: [],
+    camera: null,
+    liveCamera: null,
+    camRequest: null,
+    returnTo: "room",
+    slide: 0,
+    leaving: false,
+    curtain: false,
+    hover: null,
+    loaded: [],
+    loadErrors: {},
+    splatCount: [],
+    moving: false,
+    standard: null,
+    site: "",
+    sitesOpen: false,
+    openGoal: null,
+    ...initial(),
+
+    // ---- the deck
+    nextSlide: () => {
+      const s = get();
+      if (s.page !== "title" || s.leaving) return;
+      if (s.slide >= SLIDES.length) {
+        if (s.loaded[0]) s.leave();
+        return;
+      }
+      set({ slide: s.slide + 1 });
+    },
+    prevSlide: () => {
+      const s = get();
+      if (s.page !== "title" || s.leaving || s.slide === 0) return;
+      set({ slide: s.slide - 1 });
+    },
+    leave: () => {
+      const s = get();
+      if (s.page !== "title" || s.leaving || !s.loaded[0]) return;
+      set({ leaving: true });
+    },
+    arrive: () => {
+      const s = get();
+      if (s.page !== "title") return;
+      const c = s.manifest?.commits[0];
+      s.log("begin", c ? dateOf(c.captured) : "");
+      set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0 });
+    },
+    liftCurtain: () => set((s) => (s.curtain ? { curtain: false } : {})),
+    restartDemo: () => {
+      try {
+        sessionStorage.removeItem(GUIDE_KEY);
+      } catch {
+        /* private mode */
+      }
+      const s = get();
+      set({
+        page: "title",
+        returnTo: "room",
+        slide: 0,
+        leaving: false,
+        curtain: false,
+        history: [],
+        goals: {},
+        tour: 0,
+        hints: true,
+        openGoal: null,
+        head: 0,
+        mode: NORMAL,
+        ghosts: false,
+        draft: null,
+        selected: null,
+        standard: s.manifest?.standard ?? s.standard,
+        site: s.manifest?.sites[0]?.id ?? "",
+        sitesOpen: false,
+      });
+    },
+
+    // ---- the room
+    go: (i) => {
+      const s = get();
+      const M = s.manifest;
+      const c = M?.commits[i];
+      if (!M || !c || !s.loaded[i] || s.mode.kind === "draft") return false;
+      if (s.mode.kind === "normal" && i === s.head) return true;
+      const selected = carry(M, s.selected, [i]);
+      const patch = { head: i, mode: NORMAL, ghosts: false, selected };
+      s.log("go to", dateOf(c.captured), patch);
+      set({ ...patch, ...done("move") });
+      return true;
+    },
+    step: (d) => {
+      const s = get();
+      if (s.mode.kind !== "normal") return;
+      const n = s.manifest?.commits.length ?? 0;
+      const i = Math.max(0, Math.min(n - 1, s.head + d));
+      if (i !== s.head) s.go(i);
+    },
+    toggleCompare: () => {
+      const s = get();
+      const M = s.manifest;
+      if (!M || s.mode.kind === "draft") return;
+      if (s.mode.kind === "compare") return s.exitMode();
+      const [a, b] = comparePair(s.head, s.standard);
+      if (a === b || !s.loaded[a] || !s.loaded[b]) return;
+      const mode: Mode = { kind: "compare", a, b, headBefore: s.head };
+      const selected = carry(M, s.selected, [a, b]);
+      const patch = { mode, head: b, ghosts: false, selected };
+      s.log("diff", `${monthAt(a)} → ${monthAt(b)}`, patch);
+      set({ ...patch, ...done("diff") });
+    },
+    exitMode: () => {
+      const s = get();
+      if (s.mode.kind !== "compare") return;
+      const head = s.mode.headBefore;
+      const patch = { mode: NORMAL, head, selected: carry(s.manifest!, s.selected, [head]) };
+      s.log("done", monthAt(head), patch);
+      set(patch);
+    },
+    toggleGhosts: () => {
+      const s = get();
+      if (s.standard === null || s.head === s.standard || s.mode.kind === "compare") return;
+      const on = !s.ghosts;
+      s.log("compare to standard", on ? "on" : "off", { ghosts: on });
+      set({ ghosts: on, ...(on ? done("std") : {}) });
+    },
+    makeStandard: () => {
+      const s = get();
+      if (s.mode.kind !== "normal" || s.head === s.standard) return;
+      s.log("make standard", monthAt(s.head), { ghosts: false });
+      set({ standard: s.head, ghosts: false });
+    },
+    select: (id) => {
+      const s = get();
+      if (s.mode.kind === "draft") return;
+      const next = id === s.selected ? null : id;
+      if (next !== null && !s.manifest?.objects[next]) return;
+      if (next === null && s.selected === null) return;
+      s.log(next === null ? "deselect" : "select", nameOf(next ?? s.selected!), { selected: next });
+      set({ selected: next });
+    },
+    esc: () => {
+      const s = get();
+      if (s.page === "how" || s.page === "footnotes") return s.back();
+      if (s.sitesOpen) return set({ sitesOpen: false });
+      if (s.openGoal) return set({ openGoal: null });
+      if (s.mode.kind === "draft") return s.draft?.inHand ? s.dropInHand() : s.leaveDraft();
+      if (s.selected !== null) return s.select(null);
+      if (s.mode.kind === "compare") return s.exitMode();
+      if (s.ghosts) s.toggleGhosts();
+    },
+
+    // ---- a draft
+    enterDraft: () => {
+      const s = get();
+      if (s.mode.kind !== "normal" || !s.loaded[0]) return;
+      const draft: Draft = { base: s.head, placements: seedDraft(s.manifest, s.head), inHand: null, attempts: [] };
+      const patch = { mode: { kind: "draft" } as Mode, selected: null, draft };
+      s.log("draft", `from ${monthAt(s.head)}`, patch);
+      set({ ...patch, ...done("draft") });
+    },
+    setDraftBase: (base) => {
+      const s = get();
+      if (s.mode.kind !== "draft" || !s.draft) return;
+      const draft: Draft = { base, placements: seedDraft(s.manifest, base), inHand: null, attempts: [] };
+      s.log("draft", base === null ? "from scratch" : `from ${monthAt(base)}`, { draft });
+      set({ draft });
+    },
+    pickFromTray: (id) => {
+      const s = get();
+      const d = s.draft;
+      if (s.mode.kind !== "draft" || !d) return;
+      if (d.inHand && d.inHand.id === id) return set({ draft: { ...d, inHand: null } });
+      const copies = d.placements.filter((p) => p.id === id).length + (d.inHand?.id === id ? 1 : 0);
+      if (copies >= MAX_COPIES) return;
+      const inHand: InHand = { key: ++placedSeq, id, x: 0, z: 0, at: false };
+      s.log("pick", nameOf(id), { draft: { ...d, inHand } });
+      set({ draft: { ...d, inHand } });
+    },
+    pickUpPlaced: (key) => {
+      const s = get();
+      const d = s.draft;
+      if (s.mode.kind !== "draft" || !d || d.inHand) return;
+      const p = d.placements.find((x) => x.key === key);
+      if (!p) return;
+      const draft: Draft = { ...d, placements: d.placements.filter((x) => x.key !== key), inHand: { ...p, at: true } };
+      s.log("pick", nameOf(p.id), { draft });
+      set({ draft });
+    },
+    moveInHand: (x, z) =>
+      set((s) =>
+        s.draft?.inHand && (s.draft.inHand.x !== x || s.draft.inHand.z !== z || !s.draft.inHand.at)
+          ? { draft: { ...s.draft, inHand: { ...s.draft.inHand, x, z, at: true } } }
+          : {},
+      ),
+    placeAt: (x, z) => {
+      const s = get();
+      const d = s.draft;
+      if (!d?.inHand) return;
+      const { key, id } = d.inHand;
+      const draft: Draft = { ...d, placements: [...d.placements, { key, id, x, z }], inHand: null };
+      s.log("place", nameOf(id), { draft });
+      set({ draft });
+    },
+    dropInHand: () => {
+      const s = get();
+      const d = s.draft;
+      if (!d?.inHand) return;
+      const draft: Draft = { ...d, inHand: null };
+      s.log("remove", nameOf(d.inHand.id), { draft });
+      set({ draft });
+    },
+    measure: () => {
+      const s = get();
+      const d = s.draft;
+      if (s.mode.kind !== "draft" || !d || d.placements.length === 0) return;
+      const text = `${d.placements.length} placed`;
+      const draft: Draft = { ...d, attempts: [...d.attempts, { n: d.attempts.length + 1, text }] };
+      s.log("measure", text, { draft });
+      set({ draft });
+    },
+    leaveDraft: () => {
+      const s = get();
+      if (s.mode.kind !== "draft") return;
+      s.log("leave draft", "", { mode: NORMAL, draft: null });
+      set({ mode: NORMAL, draft: null });
+    },
+
+    // ---- the chrome
+    toggleSites: () => set((s) => ({ sitesOpen: !s.sitesOpen })),
+    closeSites: () => set((s) => (s.sitesOpen ? { sitesOpen: false } : {})),
+    pickSite: (id) => {
+      const s = get();
+      set({ site: id, sitesOpen: false, ...(id !== s.site ? done("tour") : {}) });
+    },
+    openHow: () => set((s) => (s.page === "how" ? {} : { page: "how", returnTo: s.page === "footnotes" ? s.returnTo : s.page })),
+    openFoot: () => set((s) => (s.page === "footnotes" ? {} : { page: "footnotes", returnTo: s.page === "how" ? s.returnTo : s.page })),
+    back: () => set((s) => ({ page: s.returnTo || "room" })),
+    tourNext: () => set((s) => (s.tour + 1 >= TOUR.length ? { tour: -1, goals: { ...s.goals, ui: true } } : { tour: s.tour + 1 })),
+    tourSkip: () => set((s) => ({ tour: -1, goals: { ...s.goals, ui: true } })),
+    toggleGoal: (id) => {
+      const s = get();
+      const g = GOALS.find((x) => x.id === id);
+      if (!g || s.goals[id] || id === "ui" || s.tour >= 0) return;
+      set({ openGoal: s.openGoal === id ? null : id });
+    },
+
+    // ---- bookkeeping
+    setManifest: (m, refScale) =>
+      set((s) => ({
+        manifest: m,
+        refScale,
+        standard: m.standard,
+        site: s.site || m.sites[0]?.id || "",
+        loaded: m.commits.map(() => false),
+        loadErrors: {},
+        splatCount: m.commits.map(() => 0),
+      })),
+    setStatus: (status) => set({ status }),
+    fail: (error) => set({ status: "error", error }),
+    markLoaded: (i, splats) =>
+      set((s) => {
+        const loaded = [...s.loaded];
+        loaded[i] = true;
+        const splatCount = [...s.splatCount];
+        splatCount[i] = splats;
+        return { loaded, splatCount };
+      }),
+    markFailed: (i, error) => set((s) => ({ loadErrors: { ...s.loadErrors, [i]: error } })),
+
+    // a snapshot describes the state AFTER the action; callers pass the parts that are about to change
+    log: (verb, detail = "", snapOverride = {}) =>
+      set((st) => {
+        const snap: Snapshot = { ...snapOf(st), ...snapOverride };
+        const a: Action = { id: ++actionSeq, t: performance.now() - T0, verb, detail, snap };
+        return { history: [...st.history, a] };
+      }),
+    amend: (verb, detail, snapOverride = {}) => {
+      const st = get();
+      const last = st.history[st.history.length - 1];
+      if (!last || last.verb !== verb) {
+        st.log(verb, detail, snapOverride);
+        return;
+      }
+      const a: Action = { ...last, t: performance.now() - T0, detail, snap: { ...last.snap, ...snapOverride } };
+      set({ history: [...st.history.slice(0, -1), a] });
+    },
+    restore: (id) => {
+      const st = get();
+      const a = st.history.find((x) => x.id === id);
+      if (!a || a === st.history[st.history.length - 1]) return false;
+      const { head, mode, selected, ghosts, draft, cam } = a.snap;
+      if (!st.loaded[head]) return false;
+      if (mode.kind === "compare" && !(st.loaded[mode.a] && st.loaded[mode.b])) return false;
+      const patch = { head, mode, selected, ghosts, draft: draft ? { ...draft, inHand: null } : null };
+      st.log("restore", `#${String(id).padStart(2, "0")} ${a.verb}`, { ...patch, cam });
+      set({ ...patch, camRequest: cam ? { cam, seq: id } : st.camRequest });
+      return true;
+    },
+    setCamera: (camera) => set({ camera }),
+    setHover: (id) => set((s) => (s.hover === id ? {} : { hover: id })),
+    setMoving: (moving) => set((s) => (s.moving === moving ? {} : { moving })),
+  };
+});

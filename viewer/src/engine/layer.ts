@@ -26,7 +26,7 @@ export type Layer = Paintable & {
    * each other at the registration residual. Null when this commit changed nothing.
    */
   objects: Paintable | null;
-  /** One object on its own, by id: what a proposal carries across the floor. Built lazily, kept. */
+  /** One object on its own, by id: a ghost at the standard's place, or a thing carried across a draft's floor. Built lazily, kept. */
   parts: Map<number, Paintable>;
   /** Per label (object id + 1): a subsample of that object's splat centres in world space, flat xyz. For picking. */
   pts: (Float32Array | undefined)[];
@@ -56,7 +56,7 @@ export function setOpacity(mesh: SplatMesh, opacity: number) {
  * a stride copy — no decode, no re-upload of anything the GPU already has in the full mesh.
  */
 export const buildObjects = (L: Layer): Paintable | null => extract(L, (o) => o > 0);
-/** One object's splats as a mesh of their own, so a proposal can carry it across the floor. */
+/** One object's splats as a mesh of their own: a ghost at the standard's place, or a thing carried across a draft's floor. */
 export const buildObject = (L: Layer, id: number): Paintable | null => extract(L, (o) => o === id + 1);
 
 function extract(L: Layer, keep: (label: number) => boolean): Paintable | null {
@@ -88,7 +88,7 @@ function extract(L: Layer, keep: (label: number) => boolean): Paintable | null {
     packedSplats: new PackedSplats({ packedArray: sub, numSplats: count, splatEncoding: src?.splatEncoding }),
   });
   mesh.visible = false;
-  // its own RGBA source, so onion can isolate a single object's history out of the whole set
+  // its own RGBA source, so it can be painted apart from the capture it came from
   const rgba = new RgbaArray({ array: orig.slice(), count });
   mesh.splatRgba = rgba;
   mesh.updateGenerator();
@@ -112,6 +112,13 @@ export const setColor = (s: Style, o: number, rgb: readonly [number, number, num
   s.rgb[o * 3] = rgb[0];
   s.rgb[o * 3 + 1] = rgb[1];
   s.rgb[o * 3 + 2] = rgb[2];
+  s.alpha[o] = alpha;
+};
+
+/** Original colour, faded: how a thing's old place is drawn under the arrow to its new one. */
+export const setFade = (s: Style, o: number, f: number, alpha: number) => {
+  s.abs[o] = 0;
+  s.rgb[o * 3] = s.rgb[o * 3 + 1] = s.rgb[o * 3 + 2] = f;
   s.alpha[o] = alpha;
 };
 

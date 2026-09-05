@@ -9,11 +9,15 @@ and publishes to viewer/public/sets/<name>/.
 
 dataset.json keys:
   calibration_m   (required) tape-measured longest wall-to-wall span, metres
-  commits         (required) [{"file": "/abs/or/relative.ply", "message": "...", "captured": "ISO-8601"}, ...]
+  commits         (required) [{"file": "/abs/or/relative.ply", "message": "...", "captured": "ISO-8601",
+                               "doc": "...", "by": "...", "stats": {"stoppages", "changeover", "output"}}, ...]
+                  doc/by/stats are optional and pass through to the viewer untouched (doc null = no entry)
+  diffs           optional {"<a>-<b>": {"doc", "by"}}: the written entry for the diff between commits a < b
+  sites           optional [{"id", "name", "count"}]: the viewer's site picker; the first is this set
   registration    optional RegisterParams overrides
   diff            optional DiffParams overrides
   bake            optional BakeParams overrides
-  objects         optional {"<object id>": "name" | {"name", "kind": "plant"|"thing", "sub", "doc"}}; applied at publish
+  objects         optional {"<object id>": "name" | {"name", "kind": "plant"|"thing", "sub", "doc", "by"}}; applied at publish
   door            optional wall the door is on, in world axes: "-z" | "+z" | "-x" | "+x" (the viewer's sun rule)
   exclude         optional [<object id>, ...]: detections to drop at publish (artefacts); the rest are renumbered
   standard        optional <commit index>: the approved layout; the viewer measures every other scene's drift from it
@@ -24,6 +28,7 @@ dataset.json keys:
 import dataclasses
 import json
 import os
+import re
 from dataclasses import dataclass
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -71,6 +76,9 @@ class Commit:
     file: str                            # absolute path of the source capture
     message: str
     captured: str
+    doc: str | None = None               # the month's written entry, and who signed it; pass through to the viewer
+    by: str | None = None
+    stats: dict | None = None            # {"stoppages", "changeover", "output"}, strings, as the viewer shows them
 
 
 def _params(cls, block, section):
@@ -134,7 +142,12 @@ class Dataset:
             src = os.path.abspath(src)
             if not os.path.exists(src):
                 raise PipelineError(f"{self.json_path}: commits[{i}] capture not found: {src}")
-            self.commits.append(Commit(i, src, str(c["message"]), str(c["captured"])))
+            stats = c.get("stats")
+            if stats is not None and not (isinstance(stats, dict) and all(isinstance(v, str) for v in stats.values())):
+                raise PipelineError(f"{self.json_path}: commits[{i}].stats must map names to strings")
+            self.commits.append(Commit(i, src, str(c["message"]), str(c["captured"]),
+                                       None if c.get("doc") is None else str(c["doc"]),
+                                       None if c.get("by") is None else str(c["by"]), stats))
         self.register = _params(RegisterParams, spec.get("registration"), "registration")
         if self.register.up not in ("auto", "flip", "keep"):
             raise PipelineError(f"{self.json_path}: registration.up must be 'auto', 'flip' or 'keep'")
@@ -150,7 +163,7 @@ class Dataset:
                 raise PipelineError(f"{self.json_path}: objects[{key}] must be a name or an object with a name")
             if value.get("kind") not in (None, "plant", "thing"):
                 raise PipelineError(f"{self.json_path}: objects[{key}].kind must be 'plant' or 'thing'")
-            self.object_names[int(key)] = {k: str(v) for k, v in value.items() if k in ("name", "kind", "sub", "doc")}
+            self.object_names[int(key)] = {k: str(v) for k, v in value.items() if k in ("name", "kind", "sub", "doc", "by")}
         self.door = spec.get("door")
         if self.door is not None and self.door not in ("-z", "+z", "-x", "+x"):
             raise PipelineError(f"{self.json_path}: 'door' must be one of -z, +z, -x, +x")
@@ -162,6 +175,17 @@ class Dataset:
         if not isinstance(removed, dict) or not all(str(k).isdigit() and isinstance(v, int) and v >= 0 for k, v in removed.items()):
             raise PipelineError(f"{self.json_path}: 'removed' must map object ids to commit indices")
         self.removed = {int(k): v for k, v in removed.items()}
+        self.diffs = {}
+        for key, value in (spec.get("diffs") or {}).items():
+            m = re.fullmatch(r"(\d+)-(\d+)", str(key))
+            if not m or not (int(m[1]) < int(m[2]) < len(self.commits)):
+                raise PipelineError(f"{self.json_path}: diffs keys must be 'a-b' with a < b < {len(self.commits)}, got {key!r}")
+            if not isinstance(value, dict):
+                raise PipelineError(f"{self.json_path}: diffs[{key}] must be an object with doc and by")
+            self.diffs[key] = {k: (None if value.get(k) is None else str(value[k])) for k in ("doc", "by")}
+        self.sites = spec.get("sites") or []
+        if not isinstance(self.sites, list) or not all(isinstance(x, dict) and "id" in x and "name" in x for x in self.sites):
+            raise PipelineError(f"{self.json_path}: 'sites' must be a list of {{id, name, count}}")
         self.standard = spec.get("standard")
         if self.standard is not None and not (isinstance(self.standard, int) and 0 <= self.standard < len(self.commits)):
             raise PipelineError(f"{self.json_path}: 'standard' must be a commit index (0…{len(self.commits) - 1})")

@@ -148,7 +148,7 @@ def publish(ds):
         lo, hi = o["bbox_canon"]
         nid = new_id[o["id"]]
         meta = ds.object_names.get(o["id"], {})
-        extra = {k: meta[k] for k in ("kind", "sub", "doc") if k in meta}     # only what the dataset says
+        extra = {k: meta[k] for k in ("kind", "sub", "doc", "by") if k in meta}     # only what the dataset says
         objects.append({"id": nid, "source_id": o["id"], "name": meta.get("name", f"Object {nid:02d}"), **extra,
                         "added_in": o["added_in"], "removed_in": o["removed_in"], "present": o["present"],
                         "voxels": o["voxels"], "volume_vox_m3": o["volume_vox_m3"],
@@ -182,7 +182,8 @@ def publish(ds):
             fh.write(np.ascontiguousarray(lut[labels]).tobytes())
         commits.append({"id": f"c{c.index}", "index": c.index, "hash": digest, "message": c.message,
                         "captured": c.captured, "file": f"commits/c{c.index}.spz", "splats": spz_splats(spz),
-                        "labels": f"commits/c{c.index}.labels.bin"})
+                        "labels": f"commits/c{c.index}.labels.bin",
+                        "doc": c.doc, "by": c.by, **({"stats": c.stats} if c.stats else {})})
         log.info(f"c{c.index}  {commits[-1]['splats']:>9,} splats   {digest}")
 
     # the room box (walls, floor, ceiling) is axis-aligned in the canonical frame; the viewer frames the camera with it
@@ -190,6 +191,7 @@ def publish(ds):
     manifest = {"commits": commits, "voxel": objs["voxel"], "origin": objs["origin"], "shape": objs["shape"],
                 "room": box_to_world(lo, hi, WC), "world_from_ref": W.tolist(), "calibration_m": ds.calibration_m,
                 **({"door": ds.door} if ds.door else {}), **({"standard": ds.standard} if ds.standard is not None else {}),
+                **({"diffs": ds.diffs} if ds.diffs else {}), **({"sites": ds.sites} if ds.sites else {}),
                 "objects": objects}
     path = os.path.join(ds.pub_dir, "commits.json")
     with open(path, "w") as fh:

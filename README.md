@@ -1,8 +1,9 @@
 # Statefield
 
-STATE ATLAS (working names: Trace Systems, Alchemist, Worldstate, Patina) — spatial version control for gaussian-splat captures.
+ATLAS (working names: State Atlas, Trace Systems, Alchemist, Worldstate, Patina) — spatial version control for gaussian-splat captures.
 
-Six captures of one room → registered → voxel-diffed → objects tracked across commits → browser viewer with git semantics.
+Four captures of one room → registered → voxel-diffed → objects tracked across states → browser viewer with version-control
+semantics: states, diffs, a standard and the drift from it, and a written entry for every state, diff and object.
 
 ## Layout
     pipeline/   run.py             the CLI: python3 pipeline/run.py <set> [--only register|diff|bake|publish]
@@ -22,32 +23,47 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
                 src/manifest.ts        commits.json validation: a bad bake fails with the field name, not a stack trace
                 src/engine/stage.ts    three.js + Spark: boot, layers, mode → per-object style, picking, camera, idle render gate
                 src/engine/layer.ts    one commit on the GPU; declarative Style → RGBA repaint only when the style changes;
-                                       also the objects-only copy (labelled splats compacted) that onion layers and traces
+                                       also the objects-only copy (labelled splats compacted) a diff lends, and single objects
+                                       (a ghost at the standard's place, a thing carried across a draft's floor)
                 src/engine/gestures.ts camera gesture recording (orbit / pan / dolly, clicks excluded, dolly coalesced)
-                src/engine/overlay.ts  detection overlay: 2D boxes projected from the object bboxes, tags placed by
-                                       priority and dropped where they would collide with each other or the chrome
-                src/attribution.ts     what changed between two scenes as lines: moved N m, arrives, leaves (the diff's documentation)
-                src/measure.ts         how close a proposal is to its target: N m off, missing, not in the target; the tray
-                src/identity.ts        one physical thing across commits: follows moved_from/moved_to so the card, the
-                                       legend, blame and bisect give a thing one history, and a move reads as a move
-                src/components/        Intro (the title card: the load writes the log, → begins), Stage (mounts the engine),
-                                       Hud (the state of the scene), Nav (Commits: the list; Controls: the pill),
-                                       Legend (the diff's documentation, or a proposal's measurement), Card (the object's),
-                                       Tray (what a proposal can put back), ActionLog, Terminal
-                src/git.ts             the git command parser (pure); src/actions.ts adapts it to the store
+                src/engine/overlay.ts  detection overlay: framed boxes hugging each object's splats, tags placed by priority
+                                       and dropped where they would collide, arrows with distances for what moved or drifted
+                src/engine/minimap.ts  the map: the room from above, footprints, the standard's ghosts and links, the camera
+                src/attribution.ts     what changed between two scenes as lines: moved N m, arrives, leaves
+                src/drift.ts           a state against the standard: off by N m, missing, not in the standard
+                src/identity.ts        one physical thing across states: follows moved_from/moved_to so a move reads as a move
+                src/demo.ts            the deck's slides, the checklist, the tour, the ?s= start presets
+                src/titleField.ts      the title's point field (the design's own code, typed)
+                src/components/        Title (the deck), Chrome (the mark and site picker, the checklist, the command bar, the
+                                       mode readout, the page links, the guide, the curtain), ObjectCard, Panel (the diff, the
+                                       comparison to the standard, the draft), MonthBlock (the month and the rail),
+                                       MapAndActions (the map and the reflog), Pages (How it works, Footnotes), Stage
                 ply2spz.mjs            ply → SPZ v3 using Spark's SpzWriter (NOT splat-transform: it writes SPZ v4, Spark 2.1 can't read it)
                 smoke.py               headless end-to-end check of the built viewer (npm run build && npx vite preview, then python3 smoke.py)
     AUDIT.md    architecture + performance audit: findings, what was fixed, known limitations
 
 ## Screen
-    Left column, the scene: the mark, HEAD and its message and facts, the commits as a list (click checks out,
-    shift-click diffs against HEAD), the minimap, the reflog. Right column, the documentation: the diff's lines,
-    the selected object's card, a proposal's tray and measurement — only what the mode calls for. Bottom centre:
-    the controls. The room takes everything between.
-    A commit tagged as the standard (dataset.json "standard", or git tag standard <ref>) is the approved layout:
-    every other scene's right rail reports its drift from it — what moved and how far, what is missing, what is
-    not in the standard — and G shows the standard's ghosts in the room, each drifted thing drawn where it belongs
-    from the standard's own capture, tied to where it stands by a line with the distance.
+    The deck first: the name over a point field, five slides (the technology, the project, the problem, the
+    fundamentals, the demo), and the floor; the captures load behind it from landing, and the last slide's ENTER
+    is live once the first is in. Then the room, full bleed, with the design's chrome around it:
+      top left      the mark and the site picker; under it the demo checklist, six things to do, ticked by real state
+      top centre    the command bar — every command available right now with its key — and the mode readout under it
+      top right     How it works, Footnotes; the selected object's card (its months, its entry)
+      right         one slot for what the mode calls for: the diff, the comparison to the standard, the draft
+      bottom left   the map and the actions log (each entry restorable); hidden under 1500 px
+      bottom centre the month: its date, Make this the standard, details (sequence, status, stoppages, changeover,
+                    output), what is in it, its entry; and the rail of months, the standard framed in violet, the
+                    line after it shading toward red
+    Keys: ← → states · D diff · C compare to standard · N draft · M measure · ? how it works · F footnotes · esc back.
+    Every command is also a click. A first arrival runs a six-stop tour of the controls (Enter steps, Skip ends it).
+    Diff (D): the state before this one against it, or the standard against a later one; added tinted green, removed
+    red from the earlier capture's own splats, a moved thing's old place faded under an arrow with the distance.
+    Compare to standard (C): the standard's ghosts drawn in this state from its own capture, violet, each drifted
+    thing tied to where it belongs; the panel says what the state must do to match. Draft (N): a layout tried on the
+    empty floor, from scratch or from a state whose things start as placements; pick from the tray, click the floor,
+    click a placed thing to pick it up again; Measure counts what is down. Nothing is written back.
+    ?s=<preset> opens the room in a state for testing: empty, explore, selected, compare, drift, ghosts,
+    restore-hand, measured, how, footnotes, history. ?nointro skips the deck; ?debug exposes window.__patina.
 
 ## Run
     pip install -r pipeline/requirements.txt
@@ -60,10 +76,10 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
 ## Datasets
     viewer/public/sets/<name>/{commits.json, commits/*.spz, commits/*.labels.bin}
     the viewer opens the garage set (SET in src/engine/stage.ts); the synthetic set exists only for the pipeline's own test
-    the set opens on c0 behind the title card and loads forward in time; → (or Enter) begins; ?nointro skips the card
-    a proposal (git checkout -b <name> [<target>]) puts things from the target back on HEAD's floor: click one in the
-    tray, click the floor; git commit -m measures each against where it stood; git push refuses — remote is reality
-    dataset.json objects may carry a doc line ({"name", "doc"}); it is the object's card, and blame prints it first
+    dataset.json carries the documentation, passed through publish untouched: per commit "doc", "by" and "stats"
+    {stoppages, changeover, output} (doc null = no entry, shown as such); "diffs": {"a-b": {"doc", "by"}}; per object
+    "doc" and "by"; "sites": the site picker (the first is this set; the rest are labels until their sets are imported);
+    "standard": the commit that is the approved layout
 
 ## Bringing in a new set of captures
     0. python3 pipeline/slim_ply.py <export.ply> data/sets/<name>/source/cN.ply   (sources stay untracked)
@@ -99,15 +115,14 @@ Six captures of one room → registered → voxel-diffed → objects tracked acr
 - mesh.splatRgba must be followed by mesh.updateGenerator(); after that, mutate rgba.array + rgba.needsUpdate (no rebuild).
 - Per-splat RGBA injection is disabled when Spark LOD is on. Don't pass lod: true.
 - Hidden splats need rgb=0 AND alpha=0 (premultiplied blending; alpha 0 with rgb>0 adds light).
-- Onion draws the commit you are standing in whole, and every other commit as objects only: the room is untouched
-  between captures, so N copies of the walls cost N× and blur against each other at the ~1 cm registration residual.
-  Selecting an object first turns onion into a trace of that one object — only its own past states appear, following
-  the tracker's moved_from / moved_to links so a thing that was moved keeps its identity across commits.
-- The detection overlay is always on, re-projected every frame. Every value on a tag is measured (id, name, occupied
-  volume, the commits a state belongs to); nothing invents a confidence score, because there is no detector here to
-  be confident. Tags are dropped where they would collide, so the brackets stay dense and the type stays readable.
+- A diff draws the later capture whole and lends the earlier one's objects only: the room is untouched between
+  captures, so two copies of the walls would blur against each other at the ~1 cm registration residual.
+- The detection overlay is always on, re-projected every frame. Every value on it is measured (a name, a distance);
+  nothing invents a confidence score, because there is no detector here to be confident. Tags are dropped where they
+  would collide, so the frames stay dense and the type stays readable. The frames are also the hit boxes.
+- The deck is opaque, so the engine skips rendering while it is up; the captures still load and label behind it.
 - Spark regenerates a mesh only when its version moves: after rewriting rgba.array call mesh.updateVersion(), and again
   after changing mesh.opacity (it is baked at generation time). Visibility changes land only after Spark's async sort
   completes — give it frames (SparkRenderer's onDirty callback says when) and never stop the loop while spark.sorting.
-- Software-GL Chromium (the sandbox smoke test) never completes Spark's sort, so diff/onion/checkout look stale there.
+- Software-GL Chromium (the sandbox smoke test) never completes Spark's sort, so a diff or a change of state looks stale there.
   Everything that changes the visible set has to be eyeballed on a real GPU; smoke.py asserts state, not pixels.

@@ -4,7 +4,9 @@ Headless end-to-end check of the built viewer against the garage set.
     cd viewer && npm run build && npx vite preview --port 4173 &
     python3 smoke.py [http://127.0.0.1:4173]
 
-Drives the ?debug hooks (window.__patina) in a software-GL Chromium; asserts, does not eyeball.
+Drives the ?debug hooks (window.__patina) in a software-GL Chromium; asserts state, does not eyeball. Every check
+reads the store or the DOM rather than waiting on render frames: the software renderer drops to zero fps once two
+captures are loaded, so anything that needs a frame to land is done inside one evaluate.
 """
 
 import asyncio
@@ -16,8 +18,7 @@ from playwright.async_api import async_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:4173"
 ARGS = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--no-sandbox"]
-N = 4  # garage commits
-
+N = 4  # garage states
 
 FAILURES = []
 
@@ -31,198 +32,146 @@ def check(cond, msg):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch(args=ARGS, channel="chromium")
-        pg = await b.new_page(viewport={"width": 960, "height": 600})
+        pg = await b.new_page(viewport={"width": 1600, "height": 900})
         logs = []
         pg.on("console", lambda m: logs.append(f"[{m.type}] {m.text}"))
         pg.on("pageerror", lambda e: logs.append(f"[PAGEERROR] {e}"))
         await pg.route("**/fonts.googleapis.com/**", lambda r: r.abort())
         ev = pg.evaluate
+        S = lambda expr: ev(f"window.__patina.S.{expr}")
 
-        # --- boot ------------------------------------------------------------------------------
+        # --- the deck: the field, the name, the captures loading behind it ---------------------------
         t0 = time.time()
         await pg.goto(f"{BASE}/?debug")
         await pg.wait_for_function("window.__patina && window.__patina.S.loaded.some(Boolean)", timeout=120000)
-        print(f"first commit in {time.time() - t0:.1f}s")
-        # --- title card: c0 lands first, its log line is written, the chrome waits until the user begins -------
-        check(await ev("window.__patina.S.head") == 0, "opens on c0")
-        check(await ev("window.__patina.S.intro"), "title card up")
-        c0hash = await ev("window.__patina.M.commits[0].hash")
-        check(c0hash in await ev("document.getElementById('intro').innerText"), "title card writes the c0 log line")
-        check(await ev("getComputedStyle(document.getElementById('controls')).opacity") == "0", "chrome hidden behind the title card")
+        print(f"first capture in {time.time() - t0:.1f}s")
+        check(await S("page") == "title", "opens on the title")
+        check(await S("slide") == 0, "the name first")
+        check(await ev("!!document.querySelector('#title canvas.field')"), "the point field runs behind the name")
+        check(await ev("document.getElementById('chrome').hidden"), "the room's chrome waits behind the deck")
+        check("loading" in await ev("document.querySelector('#title .foot-l').innerText"), "the deck says what is still loading")
+        await pg.keyboard.press("Enter")
+        await pg.wait_for_timeout(120)
+        check(await S("slide") == 1, "Enter turns to the first slide")
+        check("Gaussian splatting" in await ev("document.querySelector('#title .slide.on .lead').innerText"), "slide 1 is the tech")
         await pg.keyboard.press("ArrowLeft")
-        check(await ev("window.__patina.S.intro"), "only → begins")
-        await pg.keyboard.press("ArrowRight")
-        await pg.wait_for_timeout(100)
-        check(not await ev("window.__patina.S.intro"), "→ begins")
-        check(await ev("window.__patina.S.head") == 0, "begin stays on c0")
-        check(await ev("window.__patina.S.history[0].verb") == "begin", "reflog starts with begin")
-        check(await ev("document.getElementById('tl') !== null"), "HUD mounted")
+        await pg.wait_for_timeout(60)
+        check(await S("slide") == 0, "← turns back")
+        for _ in range(5):
+            await pg.keyboard.press("ArrowRight")
+        await pg.wait_for_timeout(120)
+        check(await S("slide") == 5, "five slides")
         await pg.wait_for_function(f"window.__patina.loaded() === {N}", timeout=300000)
-        print(f"all {N} commits in {time.time() - t0:.1f}s; timings {json.dumps(await ev('window.__patina.timings'))}")
-        check(await ev("window.__patina.S.status") == "ready", "status ready")
+        print(f"all {N} captures in {time.time() - t0:.1f}s; timings {json.dumps(await ev('window.__patina.timings'))}")
+        check(await S("status") == "ready", "status ready")
+        check("ENTER THE FLOOR" in await ev("document.querySelector('#title .enter').innerText"), "the last slide offers the floor")
+        await pg.keyboard.press("Enter")
+        await pg.wait_for_timeout(100)
+        check(await S("leaving"), "the deck leaves")
+        await pg.wait_for_function("window.__patina.S.page === 'room'", timeout=10000)
+        check(await S("head") == 0, "arrives on the first state")
+        check(await S("history[0].verb") == "begin", "the log starts with begin")
+        await pg.wait_for_function("!window.__patina.S.curtain", timeout=5000)
+        check(not await ev("document.getElementById('chrome').hidden"), "the chrome is up")
+        check(await S("tour") == 0, "the tour starts on arrival")
+        check(await ev("!!document.querySelector('#chrome .ring')"), "the spotlight is on its first target")
+        for _ in range(6):
+            await pg.keyboard.press("Enter")
+            await pg.wait_for_timeout(40)
+        check(await S("tour") == -1 and await S("goals.ui"), "Enter walks the tour; Understand the UI is ticked")
 
-        # --- the standard: c2 is tagged; c3 drifts from it; G shows the standard's ghosts ----------------------
-        check(await ev("window.__patina.S.standard") == 2, "the set's standard is c2")
-        await ev("window.__patina.checkout(3)")
-        await pg.wait_for_timeout(300)
-        docs = await ev("document.getElementById('docs').innerText")
-        check("from standard" in docs and "mean" in docs, f"drift report at c3: {docs.replace(chr(10), ' | ')[:120]}")
-        # toggled on and off inside one evaluate: the ghosts add five meshes, which a software renderer pays for per frame
+        # --- the rail and the month ----------------------------------------------------------------------
+        check(await ev("document.querySelectorAll('#month .cap').length") == N, "four months on the rail")
+        check((await ev("document.querySelector('#month .cap.std').innerText")).startswith("Jul"), "July is framed as the standard")
+        check("Bay 1 cleared" in await ev("document.querySelector('#month .col.doc').innerText"), "May's entry is written")
+        await pg.keyboard.press("ArrowRight")
+        await pg.keyboard.press("ArrowRight")
+        await pg.keyboard.press("ArrowRight")
+        await pg.wait_for_timeout(120)
+        check(await S("head") == 3, "→ moves through the states")
+        check(await S("goals.move"), "Move through states is ticked")
+        month = await ev("document.getElementById('month').innerText")
+        check("Off standard" in month and "No entry." in month and "44 min" in month, "August: off standard, no entry, its numbers")
+        check((await ev("document.querySelector('#month .cap.lit').innerText")).startswith("Aug"), "the rail lights August")
+
+        # --- diff ----------------------------------------------------------------------------------------
+        await pg.keyboard.press("d")
+        await pg.wait_for_timeout(120)
+        mode = await S("mode")
+        check(mode["kind"] == "compare" and mode["a"] == 2 and mode["b"] == 3, f"D diffs the standard against August: {mode}")
+        check(await S("goals.diff"), "Diff spatial states is ticked")
+        panel = await ev("document.getElementById('panel').innerText")
+        check("Jul → Aug" in panel and "MOVED" in panel and "2.6 m" in panel, "the diff panel groups the change with distances")
+        check("night shift" in panel, "the diff's entry is written")
+        check("DIFF MODE" in await ev("document.getElementById('modehud').innerText"), "the mode readout says diff")
+        stats = await ev("window.__patina.stats()")
+        check(stats[3]["visible"] and stats[2]["drawn"] > 0, "August drawn whole, July lends its objects")
+        await pg.keyboard.press("Escape")
+        await pg.wait_for_timeout(60)
+        check(await S("mode.kind") == "normal" and await S("head") == 3, "esc leaves the diff where it was")
+
+        # --- compare to standard -------------------------------------------------------------------------
         g = await ev(
-            """(async () => { const P = window.__patina; P.S.toggleGhosts(); const on = P.S.ghosts;
+            """(async () => { const P = window.__patina; P.ghosts(); const on = P.S.ghosts;
                  const parts = [...P.engine.layers[2].parts.values()]; await Promise.all(parts.map((p) => p.mesh.initialized));
                  const shown = parts.filter((p) => p.mesh.visible && p.mesh.parent).length;
-                 const items = P.engine.boxItems(P.S); const ghosts = items.filter((i) => i.tone === 'ghost' && i.pickable === false).length;
-                 const links = items.filter((i) => i.link).length; P.S.toggleGhosts();
-                 return { on, parts: parts.length, shown, ghosts, links, off: !P.S.ghosts, hidden: parts.every((p) => !p.mesh.visible) }; })()"""
+                 const panel = document.getElementById('panel').innerText;
+                 return { on, parts: parts.length, shown, panel, goal: !!P.S.goals.std }; })()"""
         )
-        check(g["on"] and g["parts"] >= 2 and g["shown"] == g["parts"], f"ghosts on: {g['shown']} of the standard's parts shown")
-        check(g["ghosts"] >= 2 and g["links"] >= 1, f"{g['ghosts']} ghost brackets (not hit boxes), {g['links']} tied to a drifted thing")
-        check(g["off"] and g["hidden"], "ghosts off: parts hidden")
-        out = ""
-        for c in ["git tag", "git status"]:
-            out += "\n".join(l["t"] for l in await ev(f"window.__patina.git({c!r})")) + "\n"
-        check("standard → c2" in out and "drift from standard" in out, "git tag lists the standard; git status reports drift")
-        check(await ev("document.getElementById('intro').classList.contains('gone')"), "title card gone")
-
-        # --- the proposal branch: things from a target put down on the base's floor, measured by a commit -------
-        await ev(f"window.__patina.checkout({N - 1})")
-        await pg.keyboard.press("/")
-        await pg.wait_for_timeout(150)
-        await pg.keyboard.type("git checkout -b restore c2")
-        await pg.keyboard.press("Enter")
-        await pg.wait_for_timeout(120)
-        check(await ev("window.__patina.S.mode.kind") == "proposal", "git checkout -b opens a proposal")
-        tray = await ev("(window.__patina.M.objects.filter(o => o.present.includes(2) && !o.present.includes(%d)).map(o => o.id))" % (N - 1))
-        check(len(tray) > 0, f"tray holds what c2 had and HEAD lacks: {tray}")
-        first = tray[0]
-        await ev(f"window.__patina.place({first}, 0, 0); window.__patina.drop()")
-        await pg.wait_for_timeout(600)
-        check(await ev(f"window.__patina.S.proposal.placements[{first}] !== undefined"), "a thing is placed")
-        check(await ev("window.__patina.engine.overlay.placed.some(p => p.item.tone === 'ghost') || true"), "placed thing is a ghost item")
-        await pg.keyboard.type("git commit -m \"first try\"")
-        await pg.keyboard.press("Enter")
-        await pg.wait_for_timeout(120)
-        out = await ev("document.getElementById('term-out').innerText")
-        check("m off" in out, "commit measures the placement")
-        await pg.keyboard.type("git push")
-        await pg.keyboard.press("Enter")
-        await pg.wait_for_timeout(120)
-        out = await ev("document.getElementById('term-out').innerText")
-        check("remote is reality" in out and "stays local" in out, "push refused, the branch stays local")
-        check(await ev("document.querySelectorAll('#rail .branch i').length") == 2, "rail shows the branch with one commit and its head")
-        await pg.keyboard.type("git checkout main")
-        await pg.keyboard.press("Enter")
-        await pg.wait_for_timeout(120)
-        check(await ev("window.__patina.S.mode.kind") == "normal", "git checkout main leaves the proposal")
+        check(g["on"] and g["goal"], "C compares to the standard and ticks the goal")
+        check(g["parts"] >= 2 and g["shown"] == g["parts"], f"{g['shown']} of the standard's ghosts drawn from its own capture")
+        check("must move 2.6 m" in g["panel"] and "must add" in g["panel"], "the panel says what August must do")
         await pg.keyboard.press("Escape")
-        await pg.wait_for_timeout(100)
-        await pg.wait_for_timeout(800)
-        d = await ev("window.__patina.debug()")
-        check(d["centreRowLitPixels"] > 50, f"HEAD renders (lit {d['centreRowLitPixels']}/512, mean {d['centreRowMeanRGB']:.0f})")
+        check(not await S("ghosts"), "esc clears the comparison")
 
-        # --- modes ------------------------------------------------------------------------------
-        check(await ev("window.__patina.checkout(1)"), "checkout c1")
-        check("c1" in await ev("document.getElementById('tl').innerText"), "HUD follows HEAD")
-        check(await ev(f"window.__patina.diff({N - 2}, {N - 1})"), "diff c4..c5")
-        await pg.wait_for_timeout(300)
-        leg = await ev("document.getElementById('legend')?.innerText || ''")
-        check("added" in leg and "m³" in leg.lower(), f"legend derived: {leg.replace(chr(10), ' | ')}")
-        check(await ev("!!document.querySelector('#rail .bracket')"), "rail bracket in diff")
-        ms_diff = await ev("window.__patina.timings.lastModeMs")
-
-        # hover must not repaint unless emphasis changes; in diff mode it never does
-        await ev("window.__patina.timings.lastModeMs = -1; window.__patina.S.setHover(0)")
-        await pg.wait_for_timeout(50)
-        check(await ev("window.__patina.timings.lastModeMs") <= 1, "hover in diff mode: no repaint")
-        await ev("window.__patina.S.setHover(null)")
-
-        car = await ev(f"window.__patina.M.objects.find(o => o.added_in === {N - 1}).id")
-        car_name = await ev(f"window.__patina.M.objects[{car}].name")
-        await ev(f"window.__patina.checkout({N - 1}); window.__patina.select({car})")
-        await pg.wait_for_timeout(200)
-        ms_sel = await ev("window.__patina.timings.lastModeMs")
-        await ev(f"window.__patina.timings.lastModeMs = -1; window.__patina.S.setHover({car})")
-        await pg.wait_for_timeout(50)
-        check(await ev("window.__patina.timings.lastModeMs") <= 1, "hover over the selected object: no repaint")
-        card = await ev("document.getElementById('card')?.innerText || ''")
-        check("appeared" in card.lower(), f"card: {card.split(chr(10))[0]}")
-        print(f"  repaint: diff {ms_diff} ms, select {ms_sel} ms (software GL)")
-
-        # --- history / reflog / restore ----------------------------------------------------------
-        await ev("window.__patina.select(null)")
-        hist = await ev("window.__patina.S.history.map(a => a.verb)")
-        check(hist[-3:] == ["checkout", "select", "deselect"], f"history tail {hist[-3:]}")
-        sel_id = await ev("window.__patina.S.history.find(a => a.verb === 'select').id")
-        check(await ev(f"window.__patina.S.restore({sel_id})"), "restore select snapshot")
-        check(await ev("window.__patina.S.selected") == car, "restore re-selects the object")
-        check(await ev("window.__patina.S.camRequest !== null"), "restore requests a camera tween")
-        check(not await ev("window.__patina.S.restore(999999)"), "restore of unknown id refused")
-
-        # --- terminal -----------------------------------------------------------------------------
-        await pg.keyboard.press("/")
-        await pg.wait_for_timeout(200)
-        check(await ev("document.activeElement?.id") == "term-in", "terminal focused on open")
-        cmds = ["git log", "git diff c2 c3", f'git blame "{car_name}"', "git checkout HEAD~99", "git checkout zz", "git reset --hard c0", "git reflog"]
-        for c in cmds:
-            await pg.keyboard.type(c)
-            await pg.keyboard.press("Enter")
-            await pg.wait_for_timeout(120)
-        out = await ev("document.getElementById('term-out').innerText")
-        check("does not support reset" in out, "reset refused")
-        check("unknown revision (only" in out, "HEAD~n out of range reported")
-        check("unknown revision" in out and "'zz'" in out, "bad ref reported")
-        check("HEAD@{0}" in out, "reflog lists entries")
+        # --- a draft -------------------------------------------------------------------------------------
+        await pg.keyboard.press("n")
+        await pg.wait_for_timeout(120)
+        check(await S("mode.kind") == "draft" and await S("draft.base") == 3, "N drafts from this state")
+        check(await S("draft.placements.length") == 4, "the state's four things start as placements")
+        check(await S("goals.draft"), "Draft a layout proposal is ticked")
+        await ev("window.__patina.place(0, -1.0, 1.5); window.__patina.place(0, 0.8, 1.8)")
+        check(await S("draft.placements.length") == 6, "two copies of the tall plant placed")
+        await pg.keyboard.press("m")
+        await pg.wait_for_timeout(60)
+        check(await S("draft.attempts[0].text") == "6 placed", "M measures: 6 placed")
+        await ev("window.__patina.S.setDraftBase(null)")
+        check(await S("draft.placements.length") == 0, "from scratch starts bare")
+        stats = await ev("window.__patina.stats()")
+        check(stats[0]["visible"] and not stats[3]["visible"], "a draft stands on the empty capture")
         await pg.keyboard.press("Escape")
-        await pg.wait_for_timeout(100)
-        check(await ev("!document.getElementById('term')"), "terminal closes on Escape")
+        check(await S("mode.kind") == "normal" and await S("draft") is None, "esc leaves the draft")
 
-        # --- detection overlay -------------------------------------------------------------------
-        ink = "(() => { const c = document.querySelector('#stage .overlay'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++; return n; })()"
-        painted = await ev(ink)
-        check(painted > 500, f"detection boxes draw without being asked for ({painted:,} px)")
-        await ev("window.__patina.setCam(3.4, 1.9, 3.1)")
-        await pg.wait_for_timeout(900)
-        moved = await ev(ink)
-        check(moved > 500 and moved != painted, f"boxes re-project as the camera moves ({moved:,} px)")
+        # --- an object -----------------------------------------------------------------------------------
+        await ev("window.__patina.select(7)")
+        card = await ev("document.getElementById('card').innerText")
+        check("Monstera" in card and "moved 2.6 m" in card and "cart A" in card, "the card: name, its months, its entry")
+        await ev("window.__patina.select(7)")
+        check(await S("selected") is None, "the same thing again deselects")
 
-        # --- keys ignore modifiers ---------------------------------------------------------------
-        head0 = await ev("window.__patina.S.head")
-        await pg.keyboard.press("Meta+ArrowLeft")
-        await pg.wait_for_timeout(50)
-        check(await ev("window.__patina.S.head") == head0, "modifier chords do not navigate")
-        await ev("window.__patina.select(null)")  # git blame left an object selected; onion would trace it
-        await pg.keyboard.press("o")
-        await pg.wait_for_timeout(1500)
-        check("states, one room" in await ev("document.getElementById('tl').innerText"), "onion mode")
+        # --- the pages, the sites, the log -------------------------------------------------------------
+        await pg.keyboard.press("?")
+        await pg.wait_for_timeout(60)
+        check(await S("page") == "how" and "Register" in await ev("document.getElementById('how').innerText"), "? opens How it works")
+        await pg.keyboard.press("Escape")
+        await pg.keyboard.press("f")
+        await pg.wait_for_timeout(60)
+        foot = await ev("document.getElementById('footnotes').innerText")
+        check("60 cm" in foot and "build" in foot, "F opens Footnotes with the pipeline's numbers and the build")
+        await pg.keyboard.press("Escape")
+        check(await S("page") == "room", "esc returns to the room")
+        await ev("window.__patina.S.pickSite('ravensburg')")
+        check(await S("goals.tour"), "picking the remote site ticks the tour goal")
+        check(await ev("Object.keys(window.__patina.S.goals).length") == 6, "all six goals done")
+        did = await ev("window.__patina.S.history.find((a) => a.verb === 'diff').id")
+        check(await ev(f"window.__patina.S.restore({did})"), "a log entry restores")
+        check(await S("mode.kind") == "compare", "restore returns to the diff")
+        check(await ev("document.querySelectorAll('#actions .row').length") > 3, "the actions log lists the past")
+        await ev("window.__patina.S.esc()")
 
-        # onion draws the baseline room once plus every later commit's objects, not N whole rooms
-        st = await ev("window.__patina.stats()")
-        total = sum(L["n"] for L in st if L["loaded"])
-        drawn = sum(L["drawn"] for L in st if L["loaded"])
-        check(drawn < total * 0.55, f"onion draws {drawn:,} of {total:,} splats ({100 * drawn / total:.0f}%)")
-        check(st[N - 1]["drawn"] == st[N - 1]["n"], "HEAD's own capture supplies the room")
-        check(all(L["objects"] > 0 for L in st[1:] if L["loaded"]), f"objects-only layers built: {[L['objects'] for L in st[1:]]}")
-        d = await ev("window.__patina.debug()")
-        check(d["centreRowLitPixels"] > 50, f"onion renders (lit {d['centreRowLitPixels']}/512)")
-
-        # selecting an object in onion traces just that object through time
-        await ev(f"window.__patina.select({car})")
-        await pg.wait_for_timeout(1200)
-        tl = await ev("document.getElementById('tl').innerText")
-        check("TRACING" in tl, f"onion + selection traces one object: {tl.replace(chr(10), ' | ')}")
-        st2 = await ev("window.__patina.stats()")
-        check(sum(L["drawn"] for L in st2 if L["loaded"]) <= drawn, "tracing draws no more than full onion")
-        traced_ink = await ev(ink)
-        check(traced_ink > 0, f"tracing boxes each state of the object ({traced_ink:,} px)")
-        await ev("window.__patina.select(null)")
-        await pg.keyboard.press("o")
-        await pg.wait_for_timeout(400)
-
-        # --- idle render gate: no frames when nothing moves ----------------------------------------
-        await pg.wait_for_timeout(3500)  # settle window is 1.2 s; fps is a trailing 1 s average
-        f0 = await ev("window.__patina.timings.fps")
-        check((f0 or 0) <= 1, f"idle: {f0} fps (render loop gated)")
+        # --- restart -------------------------------------------------------------------------------------
+        await ev("window.__patina.S.restartDemo()")
+        check(await S("page") == "title" and await S("history.length") == 0 and await S("tour") == 0, "Restart demo returns to a clean deck")
 
         errs = [l for l in logs if ("error" in l.lower() or "PAGEERROR" in l) and "ERR_FAILED" not in l]
         check(not errs, f"console errors: {len(errs)}")

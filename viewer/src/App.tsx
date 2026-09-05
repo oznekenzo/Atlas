@@ -1,78 +1,94 @@
 import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { useStore } from "./store";
+import { useStore, writeGuide } from "./store";
 import { Stage } from "./components/Stage";
-import { Hud } from "./components/Hud";
-import { Legend } from "./components/Legend";
-import { Card } from "./components/Card";
-import { Terminal } from "./components/Terminal";
-import { Commits, Controls, Mark } from "./components/Nav";
-import { ActionLog } from "./components/ActionLog";
-import { Intro } from "./components/Intro";
-import { Tray } from "./components/Tray";
+import { Title } from "./components/Title";
+import { CommandBar, Curtain, Goals, Guide, Mark, ModeHud, PageLinks } from "./components/Chrome";
+import { ObjectCard } from "./components/ObjectCard";
+import { Panel } from "./components/Panel";
+import { MonthBlock } from "./components/MonthBlock";
+import { MapAndActions } from "./components/MapAndActions";
+import { Pages } from "./components/Pages";
 
+const LEAVE_MS = 1300; // the deck fades to black, then the room is there
 const isEditable = (t: EventTarget | null) => t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
 
 function useKeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isEditable(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || isEditable(e.target)) return;
       const s = useStore.getState();
-      if (s.intro) {
-        if (e.key === "ArrowRight" || e.key === "Enter" || e.key === " " || e.key === "j") {
+      const k = e.key;
+      if (s.page === "title") {
+        if (k === "Enter" || k === "ArrowRight" || k === " ") {
           e.preventDefault();
-          s.begin();
-        }
+          s.nextSlide();
+        } else if (k === "ArrowLeft" || k === "Backspace") s.prevSlide();
         return;
       }
-      if (s.terminalOpen || !s.manifest) return;
-      const last = s.manifest.commits.length - 1;
-      switch (e.key) {
-        case "/":
-        case "`":
-          e.preventDefault();
-          s.setTerminal(true);
-          break;
-        case "ArrowRight":
-        case "j":
-          s.checkout(Math.min(last, s.head + 1));
-          break;
-        case "ArrowLeft":
-        case "k":
-          s.checkout(Math.max(0, s.head - 1));
-          break;
-        case "d":
-        case "D":
-          if (s.mode.kind === "diff") s.checkout(s.head);
-          else if (s.head > 0) s.diff(s.head - 1, s.head);
-          break;
-        case "o":
-        case "O":
-          s.toggleOnion();
-          break;
-        case "g":
-        case "G":
-          if (s.standard !== null) s.toggleGhosts();
-          break;
-        case "Escape":
-          if (s.placing !== null) s.unplace(s.placing);
-          else if (s.selected !== null) s.select(null);
-          else if (s.mode.kind !== "normal") s.checkout(s.head);
-          break;
+      if (s.page !== "room") {
+        if (k === "Escape") s.back();
+        return;
       }
+      if (e.repeat) return;
+      if (k === "Enter" && s.tour >= 0) return s.tourNext();
+      if (k === "ArrowRight") s.step(1);
+      else if (k === "ArrowLeft") s.step(-1);
+      else if (k === "d" || k === "D") s.toggleCompare();
+      else if (k === "c" || k === "C") s.toggleGhosts();
+      else if (k === "n" || k === "N") s.enterDraft();
+      else if (k === "m" || k === "M") s.measure();
+      else if (k === "?") s.openHow();
+      else if (k === "f" || k === "F") s.openFoot();
+      else if (k === "Escape") s.esc();
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, []);
 }
 
-/** Boot failure. Progress is the title card's job. */
+/** The deck's exit and the room's arrival; the guide's persistence; the history preset's scripted past. */
+function useTransitions() {
+  const { leaving, curtain, preset, ready } = useStore(
+    useShallow((s) => ({ leaving: s.leaving, curtain: s.curtain, preset: s.preset, ready: s.status === "ready" })),
+  );
+  useEffect(() => {
+    if (!leaving) return;
+    const id = window.setTimeout(() => useStore.getState().arrive(), LEAVE_MS);
+    return () => clearTimeout(id);
+  }, [leaving]);
+  useEffect(() => {
+    if (!curtain) return;
+    const id = window.setTimeout(() => useStore.getState().liftCurtain(), 80);
+    return () => clearTimeout(id);
+  }, [curtain]);
+  useEffect(
+    () =>
+      useStore.subscribe((s, p) => {
+        if (s.goals !== p.goals || s.tour !== p.tour || s.hints !== p.hints) writeGuide(s);
+      }),
+    [],
+  );
+  useEffect(() => {
+    if (preset !== "history" || !ready) return;
+    const s = useStore.getState();
+    if (s.history.length) return;
+    s.go(1);
+    s.go(2);
+    s.toggleCompare();
+    s.exitMode();
+    s.go(3);
+    if (!useStore.getState().ghosts) s.toggleGhosts();
+  }, [preset, ready]);
+}
+
+/** Boot failure. */
 function Status() {
   const { status, error } = useStore(useShallow((s) => ({ status: s.status, error: s.error })));
   if (status !== "error") return null;
   return (
     <div id="status" role="alert">
-      <div className="k">could not open set</div>
+      <div className="k">could not open the set</div>
       <div className="msg">{error}</div>
       <div className="k dim">publish the garage set and reload</div>
     </div>
@@ -81,36 +97,41 @@ function Status() {
 
 export default function App() {
   useKeys();
-  const { moving, intro, lit, docs } = useStore(
+  useTransitions();
+  const { page, moving, draggedYet, inHand, closeSites, sitesOpen } = useStore(
     useShallow((s) => ({
+      page: s.page,
       moving: s.moving,
-      intro: s.intro,
-      lit: s.loaded.some(Boolean),
-      docs: s.selected !== null || s.mode.kind !== "normal" || s.standard !== null,
+      draggedYet: s.history.some((a) => a.verb === "orbit" || a.verb === "pan" || a.verb === "dolly"),
+      inHand: s.draft?.inHand != null,
+      closeSites: s.closeSites,
+      sitesOpen: s.sitesOpen,
     })),
   );
-  const cls = [moving ? "moving" : "", intro ? "intro" : "", lit ? "lit" : ""].join(" ").trim();
+  const cls = [`page-${page}`, moving ? "moving" : "", inHand ? "in-hand" : ""].join(" ").trim();
   return (
-    <div className={cls}>
+    <div id="app" className={cls} onClick={() => sitesOpen && closeSites()}>
       <Stage />
       <Status />
-      <Intro />
-      {/* left: the scene — who, where in time, the commits; the minimap and the reflog sit below, fixed */}
-      <div id="scene">
+      <div id="scrim-b" />
+      <div id="chrome" hidden={page === "title"}>
         <Mark />
-        <Hud />
-        <Commits />
-        <div id="map-slot" />
-        <ActionLog />
+        <Goals />
+        <CommandBar />
+        <ModeHud />
+        <PageLinks />
+        <ObjectCard />
+        <Panel />
+        <MapAndActions />
+        <div id="camhint" className={draggedYet ? "off" : ""}>
+          drag to look · scroll to zoom
+        </div>
+        <MonthBlock />
+        <Guide />
       </div>
-      {/* right: the documentation — the diff's, the object's, a proposal's; only what the mode calls for */}
-      <div id="docs" className={docs ? "on" : ""}>
-        <Tray />
-        <Legend />
-        <Card />
-      </div>
-      <Terminal />
-      <Controls />
+      <Pages />
+      <Curtain />
+      {page === "title" && <Title />}
     </div>
   );
 }

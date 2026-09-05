@@ -2,7 +2,7 @@
  * Manifest validation. The viewer trusts nothing about `commits.json` until it has passed here:
  * a bad bake fails loudly with a message that names the field, not deep inside the engine.
  */
-import type { Commit, Manifest, Obj } from "./types";
+import type { Commit, Entry, Manifest, Obj, Site } from "./types";
 
 class ManifestError extends Error {
   constructor(path: string, msg: string) {
@@ -47,8 +47,12 @@ const commit = (v: unknown, i: number): Commit => {
     file,
     labels,
     splats: isNum(v.splats) ? v.splats : 0,
+    doc: isStr(v.doc) && v.doc ? v.doc : null,
+    by: isStr(v.by) && v.by ? v.by : null,
+    stats: isObj(v.stats) ? { stoppages: text(v.stats.stoppages), changeover: text(v.stats.changeover), output: text(v.stats.output) } : null,
   };
 };
+const text = (v: unknown) => (isStr(v) ? v : isNum(v) ? String(v) : "—");
 
 const object = (v: unknown, i: number, nCommits: number, nObjects: number): Obj => {
   const p = `objects[${i}]`;
@@ -76,10 +80,31 @@ const object = (v: unknown, i: number, nCommits: number, nObjects: number): Obj 
     moved_from: link(v.moved_from, "moved_from"),
     moved_to: link(v.moved_to, "moved_to"),
     doc: isStr(v.doc) && v.doc ? v.doc : null,
+    by: isStr(v.by) && v.by ? v.by : null,
     bbox,
     voxels: isNum(v.voxels) ? v.voxels : 0,
     volume_vox_m3: isNum(v.volume_vox_m3) ? v.volume_vox_m3 : 0,
   };
+};
+
+const entries = (v: unknown, n: number): Record<string, Entry> => {
+  const out: Record<string, Entry> = {};
+  if (!isObj(v)) return out;
+  for (const [k, e] of Object.entries(v)) {
+    const m = /^(\d+)-(\d+)$/.exec(k);
+    if (!m || !(Number(m[1]) < Number(m[2]) && Number(m[2]) < n)) throw new ManifestError(`diffs.${k}`, "must be keyed a-b within the commits");
+    if (!isObj(e)) throw new ManifestError(`diffs.${k}`, "must be an object");
+    out[k] = { doc: isStr(e.doc) && e.doc ? e.doc : null, by: isStr(e.by) && e.by ? e.by : null };
+  }
+  return out;
+};
+
+const sites = (v: unknown): Site[] => {
+  if (!Array.isArray(v)) return [];
+  return v.map((s, i) => {
+    if (!isObj(s)) throw new ManifestError(`sites[${i}]`, "must be an object");
+    return { id: str(s.id, `sites[${i}].id`), name: str(s.name, `sites[${i}].name`), count: isNum(s.count) ? s.count : 0 };
+  });
 };
 
 export function parseManifest(raw: unknown): Manifest {
@@ -111,5 +136,7 @@ export function parseManifest(raw: unknown): Manifest {
     world_from_ref,
     calibration_m: isNum(raw.calibration_m) ? raw.calibration_m : 1,
     standard: isNum(raw.standard) && Number.isInteger(raw.standard) && raw.standard >= 0 && raw.standard < commits.length ? raw.standard : null,
+    diffs: entries(raw.diffs, commits.length),
+    sites: sites(raw.sites),
   };
 }

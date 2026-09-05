@@ -1,7 +1,7 @@
 /**
- * Drift from the standard: where the scene at HEAD differs from the commit marked as the approved layout.
- * A move is a thing standing somewhere else; a departure is a thing the standard has and HEAD lacks; an
- * arrival is a thing HEAD has and the standard does not. Pure, over attribution.ts and identity.ts.
+ * Drift from the standard: where a state differs from the one marked as the approved layout.
+ * A move is a thing standing somewhere else; a departure is a thing the standard has and the state lacks; an
+ * arrival is a thing the state has and the standard does not. Pure, over attribution.ts and identity.ts.
  */
 import type { Obj } from "./types";
 import { attribution, centre, metres, placementsOf, type Placement } from "./attribution";

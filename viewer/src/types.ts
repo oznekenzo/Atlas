@@ -1,4 +1,18 @@
-export type Commit = { id: string; index: number; hash: string; message: string; captured: string; file: string; splats: number; labels: string };
+export type Stats = { stoppages: string; changeover: string; output: string };
+export type Commit = {
+  id: string;
+  index: number;
+  hash: string;
+  message: string;
+  captured: string;
+  file: string;
+  splats: number;
+  labels: string;
+  /** The month's written entry and who signed it. Null when nobody wrote one; the viewer shows the absence. */
+  doc: string | null;
+  by: string | null;
+  stats: Stats | null;
+};
 export type Obj = {
   id: number;
   name: string;
@@ -8,13 +22,16 @@ export type Obj = {
   /** The same physical object before/after it was moved, if the tracker matched one. */
   moved_from: number | null;
   moved_to: number | null;
-  /** The object's card line, written at publish. Null when the dataset gave none. */
+  /** The object's written entry and who signed it, from the dataset. Null when there is none. */
   doc: string | null;
+  by: string | null;
   /** World space (metres, y up), aligned to the room: tight, and usable as-is. */
   bbox: [number[], number[]];
   voxels: number;
   volume_vox_m3: number;
 };
+export type Entry = { doc: string | null; by: string | null };
+export type Site = { id: string; name: string; count: number };
 export type Manifest = {
   commits: Commit[];
   objects: Obj[];
@@ -27,4 +44,8 @@ export type Manifest = {
   calibration_m: number;
   /** The commit marked as the approved layout, or null when the set has none. */
   standard: number | null;
+  /** Written entries for diffs, keyed "a-b". */
+  diffs: Record<string, Entry>;
+  /** The site picker. The first is this set; the rest are labels until their sets are imported. */
+  sites: Site[];
 };

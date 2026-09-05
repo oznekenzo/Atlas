@@ -1,30 +1,58 @@
 {
   "calibration_m": 6.1,
-  "calibration_note": "assumed long-wall span of a one-car garage \u2014 replace with a tape measurement and re-run",
+  "calibration_note": "assumed long-wall span of a one-car garage — replace with a tape measurement and re-run",
   "commits": [
     {
       "file": "source/c0.ply",
       "message": "Empty",
       "captured": "2026-05-01T12:00:00",
-      "source_export": "teleport-Garage Empty HD-njfhtj1nmfsa-mp631f4sy9ih.ply"
+      "source_export": "teleport-Garage Empty HD-njfhtj1nmfsa-mp631f4sy9ih.ply",
+      "stats": {
+        "stoppages": "0",
+        "changeover": "—",
+        "output": "—"
+      },
+      "doc": "Bay 1 cleared for the layout trial. Old racking out, floor patched and marked. Nothing on it yet.",
+      "by": "R. Okafor, floor lead · 2 May 2026"
     },
     {
       "file": "source/c1.ply",
       "message": "Started",
       "captured": "2026-06-01T12:00:00",
-      "source_export": "teleport-Garage Plants HD-1dnj5bnyf7p5-ffk8t2ixw11x.ply"
+      "source_export": "teleport-Garage Plants HD-1dnj5bnyf7p5-ffk8t2ixw11x.ply",
+      "stats": {
+        "stoppages": "6",
+        "changeover": "48 min",
+        "output": "1,120"
+      },
+      "doc": "First stations in. The knot and the two plants stand in for the mixer and the two carts. Cart paths still crossed near the door; two stoppages came from that.",
+      "by": "R. Okafor, floor lead · 3 Jun 2026"
     },
     {
       "file": "source/c2.ply",
       "message": "Standard",
       "captured": "2026-07-01T12:00:00",
-      "source_export": "teleport-Garage Plants & Things HD-81sw16n4cb92-d7o56dti3jp1.ply"
+      "source_export": "teleport-Garage Plants & Things HD-81sw16n4cb92-d7o56dti3jp1.ply",
+      "stats": {
+        "stoppages": "2",
+        "changeover": "31 min",
+        "output": "1,380"
+      },
+      "doc": "Approved as the standard. Fan and lamp added so both stations have air and light; the case holds the changeover kit. Paths no longer cross. Changeover under 35 minutes for the first time, which is what we were after.",
+      "by": "Approved by M. Reyes, plant manager · 7 Jul 2026"
     },
     {
       "file": "source/c3.ply",
       "message": "Drifted",
       "captured": "2026-08-01T12:00:00",
-      "source_export": "teleport-Garage Plants & Things Rearranged HD-lcwv33yuvdkx-26u2cw45n21f.ply"
+      "source_export": "teleport-Garage Plants & Things Rearranged HD-lcwv33yuvdkx-26u2cw45n21f.ply",
+      "stats": {
+        "stoppages": "5",
+        "changeover": "44 min",
+        "output": "1,210"
+      },
+      "doc": null,
+      "by": null
     }
   ],
   "diff": {
@@ -54,42 +82,80 @@
   "objects": {
     "0": {
       "name": "Tall plant",
-      "doc": "Present in c1 and c2."
+      "doc": "Floor plant against the left wall. Not in the last state.",
+      "by": "R. Okafor · Jun 2026"
     },
     "1": {
       "name": "Small plant",
-      "doc": "Present in c1 and c2."
+      "doc": "Potted plant by the right wall. Not in the last state.",
+      "by": "R. Okafor · Jun 2026"
     },
     "2": {
       "name": "Knot",
-      "doc": "Present in c1 to c3."
+      "doc": "Stands in for the mixer. Fixed position: it is bolted in the real layout and should never appear in a diff.",
+      "by": "R. Okafor · Jun 2026"
     },
     "3": {
       "name": "Monstera",
-      "doc": "Present in c1 and c2; moved in c3."
+      "doc": "Stands in for cart A. Must stay clear of the door path; when it drifts toward the far wall it blocks the second station.",
+      "by": "M. Reyes · Jul 2026"
     },
     "4": {
       "name": "Fan",
-      "doc": "Present in c2; moved in c3."
+      "doc": "Pedestal fan for station two. Cable runs along the right wall; if it is moved the cable crosses the path.",
+      "by": "R. Okafor · Jul 2026"
     },
     "6": {
       "name": "Lamp",
-      "doc": "Present in c2 and c3."
+      "doc": "Task light for station one. Nothing to know beyond that.",
+      "by": "R. Okafor · Jul 2026"
     },
     "7": {
       "name": "Suitcase",
-      "doc": "Present in c2."
+      "doc": "",
+      "by": ""
     },
     "8": {
       "name": "Monstera",
-      "doc": "Present in c3, moved from its c2 position."
+      "doc": "Stands in for cart A. Must stay clear of the door path; when it drifts toward the far wall it blocks the second station.",
+      "by": "M. Reyes · Jul 2026"
     },
     "9": {
       "name": "Fan",
-      "doc": "Present in c3, moved from its c2 position."
+      "doc": "Pedestal fan for station two. Cable runs along the right wall; if it is moved the cable crosses the path.",
+      "by": "R. Okafor · Jul 2026"
     }
   },
-  "objects_note": "diff ids. name, and doc: one factual line for the object's card",
+  "objects_note": "diff ids. name; doc and by: the object's written entry and who signed it (empty = no entry, shown as such)",
   "standard": 2,
-  "standard_note": "the commit that is the approved layout; every other scene's drift is measured against it"
+  "standard_note": "the commit that is the approved layout; every other scene's drift is measured against it",
+  "commits_note": "doc and by: the month's written entry and who signed it (null = no entry, shown as such); stats: the month's numbers as strings",
+  "diffs": {
+    "0-1": {
+      "doc": "Stations placed for the first time. This is the layout we started the trial with, before anyone had run a shift on it.",
+      "by": "R. Okafor · 3 Jun 2026"
+    },
+    "1-2": {
+      "doc": "Monstera and fan moved to open the cart path; lamp and case added. Done over the weekend shutdown so nothing was lost on the line.",
+      "by": "R. Okafor · 7 Jul 2026"
+    },
+    "2-3": {
+      "doc": "Monstera and fan pushed toward the door during the night shift of 28 Jul to clear space for a pallet drop. Tall plant, small plant and the case left Bay 1 the same night and were not returned.",
+      "by": "M. Reyes · 4 Aug 2026"
+    }
+  },
+  "diffs_note": "the written entry for a diff between two commits, keyed a-b",
+  "sites": [
+    {
+      "id": "torrance",
+      "name": "Torrance · Bay 1",
+      "count": 4
+    },
+    {
+      "id": "ravensburg",
+      "name": "Ravensburg · Hall 2",
+      "count": 27
+    }
+  ],
+  "sites_note": "the site picker: the first is this set; the others are labels only until their sets are imported"
 }

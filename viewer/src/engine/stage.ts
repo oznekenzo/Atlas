@@ -8,7 +8,7 @@ import { SparkRenderer, SplatMesh, RgbaArray, unpackSplat } from "@sparkjsdev/sp
 import type { Manifest } from "../types";
 import { parseManifest } from "../manifest";
 import { loadLabels, makeVoxelLookup, refScaleOf, roomBox } from "../labels";
-import { useStore, objectsChanged, traceChain, type State, type Cam } from "../store";
+import { useStore, objectsChanged, type State, type Cam, type Placed } from "../store";
 import {
   ADD,
   REM,
@@ -18,6 +18,7 @@ import {
   paint,
   setColor,
   setDim,
+  setFade,
   setHidden,
   setOpacity,
   type Layer,
@@ -25,17 +26,17 @@ import {
   type Style,
 } from "./layer";
 import { Gestures } from "./gestures";
-import { Overlay, type BoxItem } from "./overlay";
+import { Overlay, type BoxItem, type Tone } from "./overlay";
 import { Minimap } from "./minimap";
 import { centre } from "../attribution";
-import { measure } from "../measure";
 import { drift } from "../drift";
+import { monthOf } from "../time";
 
 const SET = "garage"; // the one set the viewer opens
 const CLICK_MS = 250;
-const GHOST_OPACITY = 0.12;
-const STANDARD_GHOST_OPACITY = 0.35; // the standard's ghost of a drifted thing, where it belongs
-const GHOST_FOCUS_OPACITY = 0.4; // tracing one object draws far less, so its past states can be bolder
+const STANDARD_GHOST_OPACITY = 0.35; // the standard's ghost of a thing, where it belongs
+const IN_HAND_OPACITY = 0.7; // a draft's thing in hand, following the pointer
+const OLD_PLACE_ALPHA = 0.5; // in a diff, a moved thing's old place under the arrow to its new one
 const UNFOCUSED_DIM = 0.45;
 const DIM_DELAY_MS = 200; // the dim on selection starts after the documentation rail has begun to rise…
 const DIM_MS = 1000; // …and takes this long, slower than the rail
@@ -77,6 +78,7 @@ export class Stage {
   private readonly floorHit = new THREE.Vector3();
   private readonly ndc = new THREE.Vector2();
   private boxes: THREE.Box3[] = []; // tight, room-aligned: the minimap footprint, and the bracket until the commit loads
+  private copies = new Map<number, Paintable>(); // a draft's placements by key: each its own mesh, so copies are cheap
   private pickR = 0; // world metres a bracket extends past the object's splats
   private voxelOf: (x: number, y: number, z: number) => number = () => -1;
   private gestures: Gestures;
@@ -137,7 +139,15 @@ export class Stage {
         if (s.camRequest && s.camRequest !== prev.camRequest) this.tweenTo(s.camRequest.cam);
       }),
       useStore.subscribe((s, prev) => {
-        if (s.head !== prev.head || s.mode !== prev.mode || s.selected !== prev.selected || s.loaded !== prev.loaded) {
+        if (
+          s.head !== prev.head ||
+          s.mode !== prev.mode ||
+          s.selected !== prev.selected ||
+          s.loaded !== prev.loaded ||
+          s.ghosts !== prev.ghosts ||
+          s.standard !== prev.standard ||
+          s.draft !== prev.draft
+        ) {
           this.applyMode(s);
         }
       }),
@@ -147,15 +157,17 @@ export class Stage {
       }),
       // a thing in hand follows the pointer; the orbit waits
       useStore.subscribe((s, prev) => {
-        if (s.placing !== prev.placing) {
-          this.controls.enableRotate = s.placing === null;
-          this.controls.enablePan = s.placing === null;
-          this.renderer.domElement.style.cursor = s.placing === null ? "" : "crosshair";
+        const held = s.draft?.inHand != null;
+        if (held !== (prev.draft?.inHand != null)) {
+          this.controls.enableRotate = !held;
+          this.controls.enablePan = !held;
+          this.renderer.domElement.style.cursor = held ? "crosshair" : "";
           this.touch();
         }
       }),
+      // the deck is opaque: nothing renders behind it until the user arrives
       useStore.subscribe((s, prev) => {
-        if (s.proposal !== prev.proposal || s.ghosts !== prev.ghosts || s.standard !== prev.standard) this.applyMode(s);
+        if (s.page !== prev.page) this.touch();
       }),
     );
     this.raf = requestAnimationFrame(this.loop);
@@ -308,6 +320,33 @@ export class Stage {
     this.touch();
   }
 
+  /** The objects a diff between two states changes, with a move told apart from a removal plus an addition. */
+  private changes(a: number, b: number) {
+    const M = this.M!;
+    const { added, removed } = objectsChanged(M, a, b);
+    const movedOld = new Set<number>();
+    const movedNew = new Set<number>();
+    for (const o of M.objects) {
+      if (removed.has(o.id) && o.moved_to !== null && added.has(o.moved_to)) {
+        movedOld.add(o.id);
+        movedNew.add(o.moved_to);
+      }
+    }
+    return { added, removed, movedOld, movedNew };
+  }
+
+  /** The standard's ghosts: these objects drawn from the standard's own capture, where it put them. */
+  private standardGhosts(ids: number[], standard: number, nObj: number) {
+    for (const id of ids) {
+      const part = this.part(standard, id);
+      if (!part || !part.mesh.parent) continue;
+      part.mesh.position.set(0, 0, 0);
+      part.mesh.visible = true;
+      setOpacity(part.mesh, STANDARD_GHOST_OPACITY);
+      paint(part, makeStyle(nObj));
+    }
+  }
+
   /** Recompute every layer's visibility, opacity and per-object style from the store. Unchanged layers are not repainted. */
   applyMode(s: State) {
     const M = this.M;
@@ -316,7 +355,7 @@ export class Stage {
     const nObj = M.objects.length;
     // emphasis is selection only: hovering never changes what the room looks like
     const sel = s.selected === null ? -1 : s.selected + 1;
-    const wanted = sel > 0 || s.mode.kind === "diff" ? UNFOCUSED_DIM : 1; // one dim, whichever asks for it
+    const wanted = sel > 0 || s.mode.kind === "compare" ? UNFOCUSED_DIM : 1; // one dim, whichever asks for it
     if (wanted !== this.dimTo) {
       this.dimFrom = this.dimNow();
       this.dimTo = wanted;
@@ -332,53 +371,72 @@ export class Stage {
       if (L.objects) L.objects.mesh.visible = false;
       for (const part of L.parts.values()) part.mesh.visible = false;
     }
+    for (const c of this.copies.values()) c.mesh.visible = false;
 
-    if (s.mode.kind === "diff") {
+    if (s.mode.kind === "compare") {
+      // the later state as it is, its additions tinted; the earlier state lends its objects: what left tinted,
+      // what moved faded under the arrow to where it went, everything else hidden
       const { a: ca, b: cb } = s.mode;
       const A = this.layers[ca];
       const B = this.layers[cb];
       if (!A || !B) return;
-      const { added, removed } = objectsChanged(M, ca, cb);
+      const { added, removed, movedOld, movedNew } = this.changes(ca, cb);
       const sb: Style = makeStyle(nObj);
       const sa: Style = makeStyle(nObj);
       for (let o = 0; o <= nObj; o++) {
         if (added.has(o - 1)) setColor(sb, o, ADD, 1);
+        else if (movedNew.has(o - 1)) setDim(sb, o, 1);
         else setDim(sb, o, dim); // the same ramp as a selection's dim, so entering a diff fades the same way
-        if (removed.has(o - 1)) setColor(sa, o, REM, REMOVED_ALPHA);
+        if (movedOld.has(o - 1)) setFade(sa, o, 0.9, OLD_PLACE_ALPHA);
+        else if (removed.has(o - 1)) setColor(sa, o, REM, REMOVED_ALPHA);
         else setHidden(sa, o);
       }
-      for (const L of [A, B]) {
-        L.mesh.visible = true;
-        setOpacity(L.mesh, 1);
-      }
+      B.mesh.visible = true;
+      setOpacity(B.mesh, 1);
       paint(B, sb);
-      paint(A, sa);
-    } else if (s.mode.kind === "onion") {
-      // Every state at once, standing in the commit you are on: HEAD's own capture is the room, and every
-      // other commit lends only its objects. The room is untouched between captures, so drawing it once
-      // per commit would cost N× and blur N copies of the same wall at the registration residual.
-      // With an object selected this becomes a trace of that one object: only its past states appear.
-      const traced = s.selected === null ? null : new Set(traceChain(M, s.selected));
-      const shell = this.layers[s.head];
-      if (shell) {
-        shell.mesh.visible = true;
-        setOpacity(shell.mesh, 1);
-        const st = makeStyle(nObj);
-        const lit = (o: number) => (traced ? traced.has(o - 1) : o === sel);
-        if (traced || sel > 0) for (let o = 0; o <= nObj; o++) if (!lit(o)) setDim(st, o, UNFOCUSED_DIM);
-        paint(shell, st);
+      if (A.objects) {
+        A.objects.mesh.visible = true;
+        setOpacity(A.objects.mesh, 1);
+        paint(A.objects, sa);
       }
-      const chain = traced;
-      const ghost = makeStyle(nObj);
-      // when tracing, every other object's splats are hidden rather than drawn faintly
-      if (chain) for (let o = 0; o <= nObj; o++) if (!chain.has(o - 1)) setHidden(ghost, o);
-      for (let i = 0; i < this.layers.length; i++) {
-        if (i === s.head) continue;
-        const objects = this.layers[i]?.objects;
-        if (!objects) continue;
-        objects.mesh.visible = true;
-        setOpacity(objects.mesh, chain === null ? GHOST_OPACITY : GHOST_FOCUS_OPACITY);
-        paint(objects, ghost);
+      this.pruneCopies(new Set());
+    } else if (s.mode.kind === "draft") {
+      // the empty floor, and on it every placement drawn from its own splats; the standard's ghosts as a guide if asked
+      const L0 = this.layers[0];
+      if (L0) {
+        L0.mesh.visible = true;
+        setOpacity(L0.mesh, 1);
+        paint(L0, makeStyle(nObj));
+      }
+      const live = new Set<number>();
+      const d = s.draft;
+      if (d) {
+        const place = (p: Placed, opacity: number) => {
+          const c = this.copy(p.key, p.id);
+          if (!c || !c.mesh.parent) return;
+          const o = centre(M.objects[p.id]);
+          c.mesh.position.set(p.x - o.x, 0, p.z - o.z);
+          c.mesh.visible = true;
+          setOpacity(c.mesh, opacity);
+          paint(c, makeStyle(nObj));
+        };
+        for (const p of d.placements) {
+          live.add(p.key);
+          place(p, 1);
+        }
+        if (d.inHand) {
+          live.add(d.inHand.key);
+          if (d.inHand.at) place(d.inHand, IN_HAND_OPACITY);
+        }
+      }
+      this.pruneCopies(live);
+      if (s.ghosts && s.standard !== null) {
+        const std = s.standard;
+        this.standardGhosts(
+          M.objects.filter((o) => o.present.includes(std)).map((o) => o.id),
+          std,
+          nObj,
+        );
       }
     } else {
       const L = this.layers[s.head];
@@ -389,30 +447,14 @@ export class Stage {
         if (dim < 1) for (let o = 0; o <= nObj; o++) if (o !== focus) setDim(st, o, dim);
         paint(L, st);
       }
-      // the standard's ghosts: a drifted thing where the standard put it, drawn from the standard's own capture
-      if (s.ghosts && s.standard !== null && s.head !== s.standard && s.mode.kind === "normal") {
-        for (const l of drift(M.objects, s.standard, s.head).lines) {
-          if (l.k === "extra") continue;
-          const part = this.part(s.standard, l.stdId);
-          if (!part || !part.mesh.parent) continue;
-          part.mesh.position.set(0, 0, 0);
-          part.mesh.visible = true;
-          setOpacity(part.mesh, STANDARD_GHOST_OPACITY);
-          paint(part, makeStyle(nObj));
-        }
+      // compare to standard: a drifted or missing thing where the standard put it, from the standard's own capture
+      if (s.ghosts && s.standard !== null && s.head !== s.standard) {
+        const ids = drift(M.objects, s.standard, s.head)
+          .lines.filter((l) => l.k !== "extra")
+          .map((l) => (l as { stdId: number }).stdId);
+        this.standardGhosts(ids, s.standard, nObj);
       }
-      // a proposal: the base commit as it is, plus each placed thing's own splats carried to where it was put
-      if (s.mode.kind === "proposal" && s.proposal) {
-        for (const pl of Object.values(s.proposal.placements)) {
-          const part = this.part(s.proposal.target, pl.id);
-          if (!part || !part.mesh.parent) continue;
-          const c = centre(M.objects[pl.id]);
-          part.mesh.position.set(pl.x - c.x, 0, pl.z - c.z);
-          part.mesh.visible = true;
-          setOpacity(part.mesh, 1);
-          paint(part, makeStyle(nObj));
-        }
-      }
+      this.pruneCopies(new Set());
     }
     this.touch();
     this.timings.lastModeMs = Math.round(performance.now() - t0);
@@ -436,6 +478,42 @@ export class Stage {
     return built;
   }
 
+  /** A draft placement's own mesh, by key: one object extracted again for every copy. Built on first use. */
+  private copy(key: number, id: number): Paintable | null {
+    const have = this.copies.get(key);
+    if (have) return have;
+    const M = this.M!;
+    const L = this.layers[M.objects[id].present[0]];
+    if (!L) return null;
+    const built = buildObject(L, id);
+    if (!built) return null;
+    this.copies.set(key, built);
+    void built.mesh.initialized.then(() => {
+      if (this.disposed) return;
+      if (this.copies.get(key) !== built) {
+        built.rgba.dispose();
+        built.mesh.dispose();
+        return;
+      }
+      this.scene.add(built.mesh);
+      this.applyMode(useStore.getState());
+      this.touch();
+    });
+    return built;
+  }
+
+  /** Drop the meshes of placements that are gone. */
+  private pruneCopies(live: Set<number>) {
+    for (const [key, c] of this.copies) {
+      if (live.has(key)) continue;
+      this.copies.delete(key);
+      if (!c.mesh.parent) continue; // still initialising: the callback disposes it
+      this.scene.remove(c.mesh);
+      c.rgba.dispose();
+      c.mesh.dispose();
+    }
+  }
+
   /** Where the pointer meets the floor, clamped inside the room. */
   private floorAt(ev: { clientX: number; clientY: number }): THREE.Vector3 | null {
     const r = this.renderer.domElement.getBoundingClientRect();
@@ -446,8 +524,8 @@ export class Stage {
     return this.floorHit;
   }
 
-  /** Object under the pointer: whichever bracket the overlay drew there. What you see is what you can click. */
-  pick(ev: { clientX: number; clientY: number }): number | null {
+  /** What is under the pointer: whichever bracket the overlay drew there. What you see is what you can click. */
+  pick(ev: { clientX: number; clientY: number }): BoxItem | null {
     const r = this.renderer.domElement.getBoundingClientRect();
     return this.overlay.hitTest(ev.clientX - r.left, ev.clientY - r.top);
   }
@@ -522,96 +600,102 @@ export class Stage {
   }
 
   /**
-   * What the detection overlay should box, given the mode: what is present now, what changed, or —
-   * when tracing — every position one object has occupied. Labels carry measured values only.
+   * What the detection overlay should box, in the design's language: every thing in the state by name; in a
+   * diff what was added, removed and moved with an arrow to where it was; against the standard what matches,
+   * what drifted with an arrow to where it belongs, and the standard's ghosts; in a draft what has been put down.
    */
   private boxItems(s: State): BoxItem[] {
     const M = this.M;
     if (!M) return [];
-    const vol = (o: number) => `${M.objects[o].volume_vox_m3.toFixed(2)} m³`;
-    const tag = (o: number) => {
-      const name = M.objects[o].name;
-      return `${name} · ${vol(o)}`;
-    };
     const items: BoxItem[] = [];
+    const name = (o: number) => M.objects[o].name;
+    const yOf = (o: number) => (M.objects[o].bbox[0][1] + M.objects[o].bbox[1][1]) / 2;
+    const mid = (o: number) => {
+      const c = centre(M.objects[o]);
+      return new THREE.Vector3(c.x, yOf(o), c.z);
+    };
+    const dist = (p: number, q: number) => {
+      const a = centre(M.objects[p]);
+      const b = centre(M.objects[q]);
+      return Math.hypot(a.x - b.x, a.z - b.z);
+    };
+    const lit = (o: number) => o === s.selected || o === s.hover;
     // the bracket hugs the object's splats in the commit it is drawn from; the box stands in until that commit loads
-    const push = (o: number, commit: number, label: string, tone: BoxItem["tone"], emphasis: boolean) =>
-      items.push({ id: o, box: this.boxes[o], pts: this.layers[commit]?.pts[o + 1], label, tone, emphasis });
-    const shown = (o: number) => (M.objects[o].present.includes(s.head) ? s.head : M.objects[o].present[0]);
+    const push = (it: Partial<BoxItem> & { id: number; label: string; tone: Tone }, commit: number) =>
+      items.push({ box: this.boxes[it.id], pts: this.layers[commit]?.pts[it.id + 1], emphasis: false, ...it });
 
-    if (s.mode.kind === "diff") {
+    if (s.mode.kind === "compare") {
       const { a, b } = s.mode;
-      const { added, removed } = objectsChanged(M, a, b);
-      for (const o of added) push(o, b, `+ ${tag(o)}`, "add", o === s.selected || o === s.hover);
-      for (const o of removed) push(o, a, `− ${tag(o)}`, "rem", o === s.selected || o === s.hover);
-      return items;
-    }
-    if (s.mode.kind === "onion") {
-      const chain = s.selected === null ? null : traceChain(M, s.selected);
-      if (chain) {
-        for (const o of chain) {
-          const at = M.objects[o].present.map((c) => `c${c}`).join(" ");
-          push(o, shown(o), `${at} · ${vol(o)}`, "trace", o === s.selected);
-        }
-        return items;
+      const { added, removed, movedOld, movedNew } = this.changes(a, b);
+      for (const ob of M.objects) {
+        const o = ob.id;
+        if (movedNew.has(o)) {
+          const old = ob.moved_from!;
+          push({ id: o, label: `Δ ${name(o)}`, tone: "neutral", emphasis: lit(o), link: mid(old), linkLabel: `${dist(old, o).toFixed(1)} m` }, b);
+        } else if (added.has(o)) push({ id: o, label: `+ ${name(o)}`, tone: "add", emphasis: lit(o) }, b);
+        else if (movedOld.has(o))
+          push({ id: o, label: monthOf(M.commits[a].captured), tone: "ghost", dashed: true, faint: true, pickable: false }, a);
+        else if (removed.has(o)) push({ id: o, label: `− ${name(o)}`, tone: "rem", dashed: true, emphasis: lit(o) }, a);
+        else if (ob.present.includes(b)) push({ id: o, label: `= ${name(o)}`, tone: "neutral", faint: true, emphasis: lit(o) }, b);
       }
-      for (const ob of M.objects) push(ob.id, shown(ob.id), tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
       return items;
     }
+    if (s.mode.kind === "draft") {
+      const d = s.draft;
+      if (d) {
+        const counts = new Map<number, number>();
+        for (const p of d.placements) counts.set(p.id, (counts.get(p.id) ?? 0) + 1);
+        const seen = new Map<number, number>();
+        const shiftOf = (p: Placed) => {
+          const c = centre(M.objects[p.id]);
+          return new THREE.Vector3(p.x - c.x, 0, p.z - c.z);
+        };
+        for (const p of d.placements) {
+          const n = (seen.get(p.id) ?? 0) + 1;
+          seen.set(p.id, n);
+          const label = (counts.get(p.id) ?? 1) > 1 ? `${name(p.id)} ${n}` : name(p.id);
+          push({ id: p.id, key: p.key, label, tone: "neutral", emphasis: s.hover === p.id, shift: shiftOf(p) }, M.objects[p.id].present[0]);
+        }
+        if (d.inHand?.at) {
+          const p = d.inHand;
+          push(
+            { id: p.id, key: p.key, label: `${name(p.id)} · in hand`, tone: "neutral", emphasis: true, pickable: false, shift: shiftOf(p) },
+            M.objects[p.id].present[0],
+          );
+        }
+      }
+      if (s.ghosts && s.standard !== null) {
+        for (const ob of M.objects)
+          if (ob.present.includes(s.standard)) push({ id: ob.id, label: name(ob.id), tone: "std", dashed: true, pickable: false }, s.standard);
+      }
+      return items;
+    }
+    // a state: everything in it; against the standard, marked by how it stands
+    const std = s.standard;
+    const D = s.ghosts && std !== null && s.head !== std ? drift(M.objects, std, s.head) : null;
+    const offById = new Map(D ? D.lines.flatMap((l) => (l.k === "off" ? [[l.id, l] as const] : [])) : []);
+    const extra = new Set(D ? D.lines.flatMap((l) => (l.k === "extra" ? [l.id] : [])) : []);
     for (const ob of M.objects) {
       if (!ob.present.includes(s.head)) continue;
-      push(ob.id, s.head, tag(ob.id), "neutral", ob.id === s.selected || ob.id === s.hover);
-    }
-    if (s.ghosts && s.standard !== null && s.head !== s.standard) {
-      // the drift: each drifted thing tied to its ghost at the standard's place; what is missing shown as a ghost alone
-      const byId = new Map(items.map((it) => [it.id, it]));
-      const yOf = (id: number) => (M.objects[id].bbox[0][1] + M.objects[id].bbox[1][1]) / 2;
-      for (const l of drift(M.objects, s.standard, s.head).lines) {
-        if (l.k === "extra") {
-          const it = byId.get(l.id);
-          if (it) {
-            it.tone = "rem";
-            it.label = `${M.objects[l.id].name} · not in standard`;
-          }
-          continue;
-        }
-        const name = M.objects[l.stdId].name;
-        items.push({
-          id: l.stdId,
-          box: this.boxes[l.stdId],
-          pts: this.layers[s.standard]?.pts[l.stdId + 1],
-          label: l.k === "off" ? `${name} · standard` : `${name} · standard, missing`,
-          tone: "ghost",
-          emphasis: false,
-          pickable: false,
-        });
-        if (l.k === "off") {
-          const it = byId.get(l.id);
-          if (it) {
-            it.link = new THREE.Vector3(l.from.x, yOf(l.stdId), l.from.z);
-            it.linkLabel = `${l.metres.toFixed(1)} m`;
-          }
-        }
+      const o = ob.id;
+      if (!D) {
+        push({ id: o, label: name(o), tone: "neutral", emphasis: lit(o) }, s.head);
+        continue;
       }
+      const off = offById.get(o);
+      if (off) {
+        const link = new THREE.Vector3(off.from.x, yOf(off.stdId), off.from.z);
+        push(
+          { id: o, label: `Δ ${name(o)}`, tone: "neutral", emphasis: lit(o), link, linkLabel: `${off.metres.toFixed(1)} m`, linkTone: "std" },
+          s.head,
+        );
+      } else if (extra.has(o)) push({ id: o, label: `− ${name(o)}`, tone: "neutral", emphasis: lit(o) }, s.head);
+      else push({ id: o, label: `= ${name(o)}`, tone: "std", emphasis: lit(o) }, s.head);
     }
-    if (s.mode.kind === "proposal" && s.proposal) {
-      // what the proposal has put down: dashed, shifted to where it stands, tagged with how far off it is
-      const p = s.proposal;
-      const report = measure(M.objects, p.base, p.target, p.placements, `c${p.target}`);
-      const offOf = new Map(report.lines.filter((l) => l.k === "off").map((l) => [l.id, l.metres ?? 0]));
-      for (const pl of Object.values(p.placements)) {
-        const c = centre(M.objects[pl.id]);
-        const inHand = s.placing === pl.id;
-        const label = inHand ? `${M.objects[pl.id].name} · in hand` : `${M.objects[pl.id].name} · ${(offOf.get(pl.id) ?? 0).toFixed(2)} m off`;
-        items.push({
-          id: pl.id,
-          box: this.boxes[pl.id],
-          pts: this.layers[p.target]?.pts[pl.id + 1],
-          label,
-          tone: "ghost",
-          emphasis: inHand || pl.id === s.selected || pl.id === s.hover,
-          shift: new THREE.Vector3(pl.x - c.x, 0, pl.z - c.z),
-        });
+    if (D && std !== null) {
+      for (const l of D.lines) {
+        if (l.k === "off") push({ id: l.stdId, label: name(l.stdId), tone: "std", dashed: true, pickable: false }, std);
+        else if (l.k === "missing") push({ id: l.stdId, label: `+ ${name(l.stdId)}`, tone: "std", dashed: true, pickable: false }, std);
       }
     }
     return items;
@@ -621,7 +705,7 @@ export class Stage {
     cancelAnimationFrame(this.raf);
     this.raf = requestAnimationFrame(this.loop);
     this.lastTick = performance.now();
-    if (this.paused) return;
+    if (this.paused || useStore.getState().page === "title") return;
     const tweening = this.stepTween();
     if (this.dimRunning) {
       // step the dim ramp; the frame that paints its end value, however late it comes, is the last
@@ -661,15 +745,15 @@ export class Stage {
   };
   private onPointerMove = (ev: PointerEvent) => {
     const st = useStore.getState();
-    if (st.placing !== null) {
+    if (st.mode.kind === "draft" && st.draft?.inHand) {
       const at = this.floorAt(ev);
-      if (at) st.place(st.placing, at.x, at.z);
+      if (at) st.moveInHand(at.x, at.z);
       return;
     }
     if (this.dragging) return; // no hover churn mid-gesture
-    const id = this.pick(ev);
-    this.renderer.domElement.style.cursor = id === null ? "" : "pointer";
-    useStore.getState().setHover(id);
+    const hit = this.pick(ev);
+    this.renderer.domElement.style.cursor = hit === null ? "" : "pointer";
+    st.setHover(hit?.id ?? null);
   };
   private onPointerDown = () => {
     this.downAt = performance.now();
@@ -679,19 +763,21 @@ export class Stage {
   };
   private onPointerUp = (ev: PointerEvent) => {
     this.dragging = false;
-    if (performance.now() - this.downAt < CLICK_MS) {
-      const st = useStore.getState();
-      if (st.placing !== null) {
-        st.drop(); // the thing in hand is put down where the pointer is
+    if (performance.now() - this.downAt >= CLICK_MS) return;
+    const st = useStore.getState();
+    st.closeSites();
+    if (st.mode.kind === "draft") {
+      if (st.draft?.inHand) {
+        const at = this.floorAt(ev); // where the click landed, in case the pointer never moved on the way
+        if (at) st.placeAt(at.x, at.z);
         return;
       }
       const hit = this.pick(ev);
-      if (hit !== null && st.mode.kind === "proposal" && st.proposal?.placements[hit]) {
-        st.beginPlace(hit); // a placed thing is picked up again
-        return;
-      }
-      st.select(hit !== null && hit === st.selected ? null : hit); // clicking the selected thing again lets it go
+      if (hit?.key !== undefined) st.pickUpPlaced(hit.key); // a placed thing is picked up again
+      return;
     }
+    const hit = this.pick(ev);
+    st.select(hit?.id ?? null); // the selected thing again lets it go; the floor deselects
   };
   private onPointerLeave = () => {
     this.dragging = false;
@@ -735,6 +821,11 @@ export class Stage {
       L.objects?.mesh.dispose();
     }
     this.layers = [];
+    for (const c of this.copies.values()) {
+      c.rgba.dispose();
+      c.mesh.dispose();
+    }
+    this.copies.clear();
     this.spark.dispose();
     this.overlay.dispose();
     this.minimap.dispose();
