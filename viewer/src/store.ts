@@ -8,14 +8,12 @@
  */
 import { create } from "zustand";
 import type { Manifest } from "./types";
-import { chainOf } from "./identity";
-import { centre } from "./attribution";
+import { carry, centre } from "./scene";
 import { GOALS, PRESETS, SLIDES, TOUR } from "./demo";
 import { dateOf, monthOf } from "./time";
 
 export type Mode = { kind: "normal" } | { kind: "compare"; a: number; b: number; headBefore: number } | { kind: "draft" };
 export const NORMAL: Mode = { kind: "normal" };
-export const sameMode = (x: Mode, y: Mode) => x.kind === y.kind && (x.kind !== "compare" || y.kind !== "compare" || (x.a === y.a && x.b === y.b));
 export type Page = "title" | "room" | "how" | "footnotes";
 
 export type Cam = { pos: [number, number, number]; target: [number, number, number] };
@@ -28,12 +26,17 @@ export type InHand = Placed & { at: boolean };
  * state's things, each a placement that can be picked up and moved. Measure records how many things are down.
  */
 export type Draft = { base: number | null; placements: Placed[]; inHand: InHand | null; attempts: { n: number; text: string }[] };
-export type Snapshot = { head: number; mode: Mode; selected: number | null; ghosts: boolean; draft: Draft | null; cam: Cam | null };
+export type Snapshot = {
+  head: number;
+  mode: Mode;
+  selected: number | null;
+  ghosts: boolean;
+  standard: number | null;
+  draft: Draft | null;
+  cam: Cam | null;
+};
 export type Action = { id: number; t: number; verb: string; detail: string; snap: Snapshot };
 export type Status = "loading" | "ready" | "error";
-
-/** Entries the reflog counts: everything except bookkeeping. */
-export const isNavigational = (a: Action) => a.verb !== "$";
 
 const MAX_COPIES = 4; // of one object in a draft: each copy is its own mesh
 const GUIDE_KEY = "atlas.guide";
@@ -128,32 +131,6 @@ export type State = {
   setMoving: (m: boolean) => void;
 };
 
-/** One physical object across the commits (see identity.ts). */
-export const traceChain = (m: Manifest, id: number): number[] => chainOf(m.objects, id);
-
-/**
- * The selection after a change of state: the same thing under whichever id it wears in the states now shown,
- * or nothing if it is not in any of them. A selection never outlives the object it points at.
- */
-const carry = (m: Manifest, selected: number | null, shown: number[]): number | null => {
-  if (selected === null) return null;
-  for (const id of chainOf(m.objects, selected)) if (shown.some((c) => m.objects[id].present.includes(c))) return id;
-  return null;
-};
-
-/** Objects that differ between two commits. Shared by the engine, the panel and the log. */
-export const objectsChanged = (m: Manifest, a: number, b: number) => {
-  const added = new Set<number>();
-  const removed = new Set<number>();
-  for (const o of m.objects) {
-    const inA = o.present.includes(a);
-    const inB = o.present.includes(b);
-    if (inB && !inA) added.add(o.id);
-    if (inA && !inB) removed.add(o.id);
-  }
-  return { added, removed };
-};
-
 /** What a draft starts with: nothing from scratch, or a state's things where that state had them. */
 export const seedDraft = (m: Manifest | null, base: number | null): Placed[] =>
   m === null || base === null
@@ -229,6 +206,7 @@ export const useStore = create<State>((set, get) => {
     return { goals: { ...s.goals, [id]: true }, openGoal: s.openGoal === id ? null : s.openGoal };
   };
   const snapOf = (s: State): Snapshot => ({
+    standard: s.standard,
     head: s.head,
     mode: s.mode,
     selected: s.selected,
@@ -288,7 +266,7 @@ export const useStore = create<State>((set, get) => {
       s.log("begin", c ? dateOf(c.captured) : "");
       set({ page: "room", returnTo: "room", leaving: false, curtain: true, slide: 0 });
     },
-    liftCurtain: () => set((s) => (s.curtain ? { curtain: false } : {})),
+    liftCurtain: () => set((s) => (s.curtain ? { curtain: false } : s)),
     restartDemo: () => {
       try {
         sessionStorage.removeItem(GUIDE_KEY);
@@ -325,7 +303,7 @@ export const useStore = create<State>((set, get) => {
       const c = M?.commits[i];
       if (!M || !c || !s.loaded[i] || s.mode.kind === "draft") return false;
       if (s.mode.kind === "normal" && i === s.head) return true;
-      const selected = carry(M, s.selected, [i]);
+      const selected = carry(M.objects, s.selected, [i]);
       const patch = { head: i, mode: NORMAL, ghosts: false, selected };
       s.log("go to", dateOf(c.captured), patch);
       set({ ...patch, ...done("move") });
@@ -346,7 +324,7 @@ export const useStore = create<State>((set, get) => {
       const [a, b] = comparePair(s.head, s.standard);
       if (a === b || !s.loaded[a] || !s.loaded[b]) return;
       const mode: Mode = { kind: "compare", a, b, headBefore: s.head };
-      const selected = carry(M, s.selected, [a, b]);
+      const selected = carry(M.objects, s.selected, [a, b]);
       const patch = { mode, head: b, ghosts: false, selected };
       s.log("diff", `${monthAt(a)} → ${monthAt(b)}`, patch);
       set({ ...patch, ...done("diff") });
@@ -355,7 +333,7 @@ export const useStore = create<State>((set, get) => {
       const s = get();
       if (s.mode.kind !== "compare") return;
       const head = s.mode.headBefore;
-      const patch = { mode: NORMAL, head, selected: carry(s.manifest!, s.selected, [head]) };
+      const patch = { mode: NORMAL, head, selected: carry(s.manifest!.objects, s.selected, [head]) };
       s.log("done", monthAt(head), patch);
       set(patch);
     },
@@ -369,7 +347,7 @@ export const useStore = create<State>((set, get) => {
     makeStandard: () => {
       const s = get();
       if (s.mode.kind !== "normal" || s.head === s.standard) return;
-      s.log("make standard", monthAt(s.head), { ghosts: false });
+      s.log("make standard", monthAt(s.head), { standard: s.head, ghosts: false });
       set({ standard: s.head, ghosts: false });
     },
     select: (id) => {
@@ -412,7 +390,11 @@ export const useStore = create<State>((set, get) => {
       const s = get();
       const d = s.draft;
       if (s.mode.kind !== "draft" || !d) return;
-      if (d.inHand && d.inHand.id === id) return set({ draft: { ...d, inHand: null } });
+      if (d.inHand && d.inHand.id === id) {
+        const draft: Draft = { ...d, inHand: null };
+        s.log("remove", nameOf(id), { draft });
+        return set({ draft });
+      }
       const copies = d.placements.filter((p) => p.id === id).length + (d.inHand?.id === id ? 1 : 0);
       if (copies >= MAX_COPIES) return;
       const inHand: InHand = { key: ++placedSeq, id, x: 0, z: 0, at: false };
@@ -433,7 +415,7 @@ export const useStore = create<State>((set, get) => {
       set((s) =>
         s.draft?.inHand && (s.draft.inHand.x !== x || s.draft.inHand.z !== z || !s.draft.inHand.at)
           ? { draft: { ...s.draft, inHand: { ...s.draft.inHand, x, z, at: true } } }
-          : {},
+          : s,
       ),
     placeAt: (x, z) => {
       const s = get();
@@ -470,13 +452,13 @@ export const useStore = create<State>((set, get) => {
 
     // ---- the chrome
     toggleSites: () => set((s) => ({ sitesOpen: !s.sitesOpen })),
-    closeSites: () => set((s) => (s.sitesOpen ? { sitesOpen: false } : {})),
+    closeSites: () => set((s) => (s.sitesOpen ? { sitesOpen: false } : s)),
     pickSite: (id) => {
       const s = get();
       set({ site: id, sitesOpen: false, ...(id !== s.site ? done("tour") : {}) });
     },
-    openHow: () => set((s) => (s.page === "how" ? {} : { page: "how", returnTo: s.page === "footnotes" ? s.returnTo : s.page })),
-    openFoot: () => set((s) => (s.page === "footnotes" ? {} : { page: "footnotes", returnTo: s.page === "how" ? s.returnTo : s.page })),
+    openHow: () => set((s) => (s.page === "how" ? s : { page: "how", returnTo: s.page === "footnotes" ? s.returnTo : s.page })),
+    openFoot: () => set((s) => (s.page === "footnotes" ? s : { page: "footnotes", returnTo: s.page === "how" ? s.returnTo : s.page })),
     back: () => set((s) => ({ page: s.returnTo || "room" })),
     tourNext: () => set((s) => (s.tour + 1 >= TOUR.length ? { tour: -1, goals: { ...s.goals, ui: true } } : { tour: s.tour + 1 })),
     tourSkip: () => set((s) => ({ tour: -1, goals: { ...s.goals, ui: true } })),
@@ -531,16 +513,16 @@ export const useStore = create<State>((set, get) => {
       const st = get();
       const a = st.history.find((x) => x.id === id);
       if (!a || a === st.history[st.history.length - 1]) return false;
-      const { head, mode, selected, ghosts, draft, cam } = a.snap;
+      const { head, mode, selected, ghosts, standard, draft, cam } = a.snap;
       if (!st.loaded[head]) return false;
       if (mode.kind === "compare" && !(st.loaded[mode.a] && st.loaded[mode.b])) return false;
-      const patch = { head, mode, selected, ghosts, draft: draft ? { ...draft, inHand: null } : null };
+      const patch = { head, mode, selected, ghosts, standard, draft: draft ? { ...draft, inHand: null } : null };
       st.log("restore", `#${String(id).padStart(2, "0")} ${a.verb}`, { ...patch, cam });
       set({ ...patch, camRequest: cam ? { cam, seq: id } : st.camRequest });
       return true;
     },
     setCamera: (camera) => set({ camera }),
-    setHover: (id) => set((s) => (s.hover === id ? {} : { hover: id })),
-    setMoving: (moving) => set((s) => (s.moving === moving ? {} : { moving })),
+    setHover: (id) => set((s) => (s.hover === id ? s : { hover: id })),
+    setMoving: (moving) => set((s) => (s.moving === moving ? s : { moving })),
   };
 });

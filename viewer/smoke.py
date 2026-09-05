@@ -168,6 +168,14 @@ async def main():
         check(await S("mode.kind") == "compare", "restore returns to the diff")
         check(await ev("document.querySelectorAll('#actions .row').length") > 3, "the actions log lists the past")
         await ev("window.__patina.S.esc()")
+        # --- the map: a footprint picks, bare floor moves the camera there facing the centre ------------
+        mv = await ev(
+            """(() => { const P = window.__patina; P.mapGo(-1.2, 1.8); const a = P.S.history.at(-1);
+                 return { verb: a.verb, pos: a.snap.cam.pos, target: a.snap.cam.target }; })()"""
+        )
+        check(mv["verb"] == "move" and abs(mv["pos"][0] + 1.2) < 0.2 and abs(mv["pos"][2] - 1.8) < 0.2, f"a click on the map's floor puts the camera there: {mv['pos']}")
+        check(abs(mv["target"][0]) < 0.3 and abs(mv["target"][2]) < 0.3, "facing the room's centre")
+        check(await ev("document.getElementById('map-slot').querySelector('canvas.map') !== null"), "the map is a canvas in the frame")
 
         # --- restart -------------------------------------------------------------------------------------
         await ev("window.__patina.S.restartDemo()")

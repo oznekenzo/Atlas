@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "../store";
-import { drift } from "../drift";
+import { status as statusOf } from "../scene";
 import { dateOf, monthOf, yearOf } from "../time";
 
 /** Bottom centre: the month. Its date, its details, what is in it, its entry, and the rail of months under it. */
@@ -23,15 +23,7 @@ export function MonthBlock() {
   const std = standard;
   const cmp = mode.kind === "compare" ? mode : null;
   const things = M.objects.filter((o) => o.present.includes(head));
-  // status, as designed: the standard, off or on it after, before it before
-  let status = { text: "Before standard", cls: "before" };
-  if (std !== null) {
-    if (head === std) status = { text: "Standard", cls: "std" };
-    else if (head > std) {
-      const d = drift(M.objects, std, head);
-      status = d.off + d.missing > 0 ? { text: "Off standard", cls: "off" } : { text: "On standard", cls: "on" };
-    }
-  }
+  const status = statusOf(M.objects, head, std);
   const canMakeStd = mode.kind === "normal" && head !== std;
   const rangeA = cmp ? cmp.a : head;
   const rangeB = cmp ? cmp.b : head;

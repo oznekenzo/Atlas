@@ -8,7 +8,7 @@ import { SparkRenderer, SplatMesh, RgbaArray, unpackSplat } from "@sparkjsdev/sp
 import type { Manifest } from "../types";
 import { parseManifest } from "../manifest";
 import { loadLabels, makeVoxelLookup, refScaleOf, roomBox } from "../labels";
-import { useStore, objectsChanged, type State, type Cam, type Placed } from "../store";
+import { useStore, type State, type Cam, type Placed } from "../store";
 import {
   ADD,
   REM,
@@ -28,8 +28,7 @@ import {
 import { Gestures } from "./gestures";
 import { Overlay, type BoxItem, type Tone } from "./overlay";
 import { Minimap } from "./minimap";
-import { centre } from "../attribution";
-import { drift } from "../drift";
+import { centre, diff, drift, metres, type Change } from "../scene";
 import { monthOf } from "../time";
 
 const SET = "garage"; // the one set the viewer opens
@@ -66,17 +65,21 @@ export class Stage {
 
   private M: Manifest | null = null;
   layers: (Layer | undefined)[] = [];
-  // the dim on selection: a ramp between 1 and UNFOCUSED_DIM, repainted each frame while it runs
+  // the dim on selection: the head layer's recolor uniform ramps between 1 and UNFOCUSED_DIM; nothing is repainted.
+  // The selected thing is drawn as its own part at full colour on top, and stays while the dim fades back out.
+  private dimTarget = 1;
+  private dimValue = 1;
   private dimFrom = 1;
-  private dimTo = 1;
   private dimT0 = 0;
-  private dimFocus = 0; // the label kept bright while the dim fades back out after a deselect
-  private dimRunning = false; // true until a frame has painted the ramp's end value
+  private focusId: number | null = null; // the thing kept bright, kept until the ramp is back at 1
   private bounds: THREE.Box3 | null = null; // the room, shrunk by the margin: the camera and its target stay inside
+  private roomCentre = new THREE.Vector3(); // what a click on the map's floor turns the camera toward
+  private eyeY = 1.6; // standing height for a camera put down from the map
   private readonly floorRay = new THREE.Raycaster();
   private readonly floor = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // y = 0: where a proposal puts things down
   private readonly floorHit = new THREE.Vector3();
   private readonly ndc = new THREE.Vector2();
+  private readonly dirTmp = new THREE.Vector3();
   private boxes: THREE.Box3[] = []; // tight, room-aligned: the minimap footprint, and the bracket until the commit loads
   private copies = new Map<number, Paintable>(); // a draft's placements by key: each its own mesh, so copies are cheap
   private pickR = 0; // world metres a bracket extends past the object's splats
@@ -123,6 +126,15 @@ export class Stage {
     this.overlay.resize(el.clientWidth, el.clientHeight);
     // the map is a section of the scene rail; the rail leaves it a slot. Without one (tests, other hosts) it sits beside the stage.
     this.minimap = new Minimap(document.getElementById("map-slot") ?? el.parentElement ?? el);
+    this.minimap.onPick = (item) => {
+      const st = useStore.getState();
+      if (st.mode.kind === "draft") {
+        if (item.key !== undefined && !st.draft?.inHand) st.pickUpPlaced(item.key);
+        return;
+      }
+      st.select(item.id);
+    };
+    this.minimap.onGo = (x, z) => this.goFromMap(x, z);
 
     useStore.setState({ liveCamera: () => this.gestures.snapshot() });
     this.controls.addEventListener("change", this.onControlsChange);
@@ -289,13 +301,6 @@ export class Stage {
     }
   }
 
-  /** Where the dim ramp is right now, eased. */
-  private dimNow(): number {
-    const u = Math.min(1, Math.max(0, performance.now() - this.dimT0 - DIM_DELAY_MS) / DIM_MS);
-    const e = 1 - Math.pow(1 - u, 3);
-    return this.dimFrom + (this.dimTo - this.dimFrom) * e;
-  }
-
   /** Keep the camera and what it orbits inside the room. Orbit re-derives its spherical state from the position, so a clamp holds. */
   private clampToRoom() {
     const b = this.bounds;
@@ -311,28 +316,15 @@ export class Stage {
     const span = Math.max(size.x, size.z) || 1;
     const diag = size.length() || 1;
     this.controls.target.set(c.x, box.min.y + size.y * 0.3, c.z);
-    this.camera.position.set(c.x + size.x * 0.46, box.min.y + Math.min(size.y * 0.6, 1.7), c.z + size.z * 0.46);
+    this.roomCentre.set(c.x, box.min.y + size.y * 0.3, c.z);
+    this.eyeY = box.min.y + Math.min(size.y * 0.6, 1.7);
+    this.camera.position.set(c.x + size.x * 0.46, this.eyeY, c.z + size.z * 0.46);
     this.controls.minDistance = span * 0.1;
     this.controls.maxDistance = diag * 0.9;
     this.camera.far = span * 20;
     this.camera.updateProjectionMatrix();
     this.controls.update();
     this.touch();
-  }
-
-  /** The objects a diff between two states changes, with a move told apart from a removal plus an addition. */
-  private changes(a: number, b: number) {
-    const M = this.M!;
-    const { added, removed } = objectsChanged(M, a, b);
-    const movedOld = new Set<number>();
-    const movedNew = new Set<number>();
-    for (const o of M.objects) {
-      if (removed.has(o.id) && o.moved_to !== null && added.has(o.moved_to)) {
-        movedOld.add(o.id);
-        movedNew.add(o.moved_to);
-      }
-    }
-    return { added, removed, movedOld, movedNew };
   }
 
   /** The standard's ghosts: these objects drawn from the standard's own capture, where it put them. */
@@ -354,19 +346,17 @@ export class Stage {
     const t0 = performance.now();
     const nObj = M.objects.length;
     // emphasis is selection only: hovering never changes what the room looks like
-    const sel = s.selected === null ? -1 : s.selected + 1;
-    const wanted = sel > 0 || s.mode.kind === "compare" ? UNFOCUSED_DIM : 1; // one dim, whichever asks for it
-    if (wanted !== this.dimTo) {
-      this.dimFrom = this.dimNow();
-      this.dimTo = wanted;
+    const wanted = s.selected !== null && s.mode.kind === "normal" ? UNFOCUSED_DIM : 1;
+    if (wanted !== this.dimTarget) {
+      this.dimFrom = this.dimValue;
+      this.dimTarget = wanted;
       this.dimT0 = performance.now();
-      this.dimRunning = true;
-      if (sel > 0) this.dimFocus = sel;
     }
-    const dim = this.dimNow();
-    const focus = sel > 0 ? sel : this.dimFocus;
+    if (s.selected !== null && s.mode.kind === "normal") this.focusId = s.selected;
+    else if (this.dimValue >= 1) this.focusId = null; // the ramp is back: the part can go
     for (const L of this.layers) {
       if (!L) continue;
+      L.mesh.recolor.setScalar(1); // only the head layer carries the dim, set below
       L.mesh.visible = false;
       if (L.objects) L.objects.mesh.visible = false;
       for (const part of L.parts.values()) part.mesh.visible = false;
@@ -380,15 +370,15 @@ export class Stage {
       const A = this.layers[ca];
       const B = this.layers[cb];
       if (!A || !B) return;
-      const { added, removed, movedOld, movedNew } = this.changes(ca, cb);
+      const d = diff(M.objects, ca, cb);
       const sb: Style = makeStyle(nObj);
       const sa: Style = makeStyle(nObj);
       for (let o = 0; o <= nObj; o++) {
-        if (added.has(o - 1)) setColor(sb, o, ADD, 1);
-        else if (movedNew.has(o - 1)) setDim(sb, o, 1);
-        else setDim(sb, o, dim); // the same ramp as a selection's dim, so entering a diff fades the same way
-        if (movedOld.has(o - 1)) setFade(sa, o, 0.9, OLD_PLACE_ALPHA);
-        else if (removed.has(o - 1)) setColor(sa, o, REM, REMOVED_ALPHA);
+        if (d.added.has(o - 1)) setColor(sb, o, ADD, 1);
+        else if (d.movedTo.has(o - 1)) setDim(sb, o, 1);
+        else setDim(sb, o, UNFOCUSED_DIM); // the unchanged recede at once; a diff has no ramp
+        if (d.movedFrom.has(o - 1)) setFade(sa, o, 0.9, OLD_PLACE_ALPHA);
+        else if (d.removed.has(o - 1)) setColor(sa, o, REM, REMOVED_ALPHA);
         else setHidden(sa, o);
       }
       B.mesh.visible = true;
@@ -443,15 +433,22 @@ export class Stage {
       if (L) {
         L.mesh.visible = true;
         setOpacity(L.mesh, 1);
-        const st = makeStyle(nObj);
-        if (dim < 1) for (let o = 0; o <= nObj; o++) if (o !== focus) setDim(st, o, dim);
-        paint(L, st);
+        L.mesh.recolor.setScalar(this.dimValue); // the whole capture recedes as one uniform: no repaint
+        paint(L, makeStyle(nObj));
+      }
+      // the thing in focus, at full colour over the dimmed capture, from its own splats
+      if (this.focusId !== null && M.objects[this.focusId].present.includes(s.head)) {
+        const part = this.part(s.head, this.focusId);
+        if (part && part.mesh.parent) {
+          part.mesh.position.set(0, 0, 0);
+          part.mesh.visible = true;
+          setOpacity(part.mesh, 1);
+          paint(part, makeStyle(nObj));
+        }
       }
       // compare to standard: a drifted or missing thing where the standard put it, from the standard's own capture
       if (s.ghosts && s.standard !== null && s.head !== s.standard) {
-        const ids = drift(M.objects, s.standard, s.head)
-          .lines.filter((l) => l.k !== "extra")
-          .map((l) => (l as { stdId: number }).stdId);
+        const ids = drift(M.objects, s.standard, s.head).lines.flatMap((l) => (l.k === "move" || l.k === "add" ? [l.stdId] : []));
         this.standardGhosts(ids, s.standard, nObj);
       }
       this.pruneCopies(new Set());
@@ -543,6 +540,25 @@ export class Stage {
     this.gestures.record("frame", this.M?.objects[id]?.name ?? `obj ${id}`);
   }
 
+  /** Put the camera on this floor point at standing height, facing the room's centre, and log it. */
+  goFromMap(x: number, z: number) {
+    const c = this.roomCentre;
+    const pos = new THREE.Vector3(x, this.eyeY, z);
+    if (this.bounds) pos.clamp(this.bounds.min, this.bounds.max);
+    // standing on the centre itself: keep the current heading rather than look at your own feet
+    const target = c.clone();
+    if (Math.hypot(pos.x - c.x, pos.z - c.z) < 0.3) {
+      this.camera.getWorldDirection(this.dirTmp);
+      target.set(pos.x + this.dirTmp.x * 2, c.y, pos.z + this.dirTmp.z * 2);
+    }
+    const cam: Cam = { pos: [pos.x, pos.y, pos.z], target: [target.x, target.y, target.z] };
+    this.gestures.flushDolly();
+    const st = useStore.getState();
+    st.setCamera(cam);
+    st.log("move", `from the map · ${x.toFixed(1)}, ${z.toFixed(1)} m`, { cam });
+    this.tweenTo(cam, 500);
+  }
+
   setCam(x: number, y: number, z: number) {
     this.cancelTween();
     this.camera.position.set(x, y, z);
@@ -614,11 +630,6 @@ export class Stage {
       const c = centre(M.objects[o]);
       return new THREE.Vector3(c.x, yOf(o), c.z);
     };
-    const dist = (p: number, q: number) => {
-      const a = centre(M.objects[p]);
-      const b = centre(M.objects[q]);
-      return Math.hypot(a.x - b.x, a.z - b.z);
-    };
     const lit = (o: number) => o === s.selected || o === s.hover;
     // the bracket hugs the object's splats in the commit it is drawn from; the box stands in until that commit loads
     const push = (it: Partial<BoxItem> & { id: number; label: string; tone: Tone }, commit: number) =>
@@ -626,17 +637,14 @@ export class Stage {
 
     if (s.mode.kind === "compare") {
       const { a, b } = s.mode;
-      const { added, removed, movedOld, movedNew } = this.changes(a, b);
-      for (const ob of M.objects) {
-        const o = ob.id;
-        if (movedNew.has(o)) {
-          const old = ob.moved_from!;
-          push({ id: o, label: `Δ ${name(o)}`, tone: "neutral", emphasis: lit(o), link: mid(old), linkLabel: `${dist(old, o).toFixed(1)} m` }, b);
-        } else if (added.has(o)) push({ id: o, label: `+ ${name(o)}`, tone: "add", emphasis: lit(o) }, b);
-        else if (movedOld.has(o))
-          push({ id: o, label: monthOf(M.commits[a].captured), tone: "ghost", dashed: true, faint: true, pickable: false }, a);
-        else if (removed.has(o)) push({ id: o, label: `− ${name(o)}`, tone: "rem", dashed: true, emphasis: lit(o) }, a);
-        else if (ob.present.includes(b)) push({ id: o, label: `= ${name(o)}`, tone: "neutral", faint: true, emphasis: lit(o) }, b);
+      const label = (c: Change) => ({ same: `= ${c.name}`, moved: `Δ ${c.name}`, added: `+ ${c.name}`, removed: `− ${c.name}` })[c.k];
+      for (const c of diff(M.objects, a, b).changes) {
+        if (c.k === "moved") {
+          push({ id: c.id, label: label(c), tone: "neutral", emphasis: lit(c.id), link: mid(c.from), linkLabel: metres(c.metres) }, b);
+          push({ id: c.from, label: monthOf(M.commits[a].captured), tone: "ghost", dashed: true, faint: true, pickable: false }, a);
+        } else if (c.k === "added") push({ id: c.id, label: label(c), tone: "add", emphasis: lit(c.id) }, b);
+        else if (c.k === "removed") push({ id: c.id, label: label(c), tone: "rem", dashed: true, emphasis: lit(c.id) }, a);
+        else push({ id: c.id, label: label(c), tone: "neutral", faint: true, emphasis: lit(c.id) }, b);
       }
       return items;
     }
@@ -673,30 +681,22 @@ export class Stage {
     // a state: everything in it; against the standard, marked by how it stands
     const std = s.standard;
     const D = s.ghosts && std !== null && s.head !== std ? drift(M.objects, std, s.head) : null;
-    const offById = new Map(D ? D.lines.flatMap((l) => (l.k === "off" ? [[l.id, l] as const] : [])) : []);
-    const extra = new Set(D ? D.lines.flatMap((l) => (l.k === "extra" ? [l.id] : [])) : []);
-    for (const ob of M.objects) {
-      if (!ob.present.includes(s.head)) continue;
-      const o = ob.id;
-      if (!D) {
-        push({ id: o, label: name(o), tone: "neutral", emphasis: lit(o) }, s.head);
-        continue;
-      }
-      const off = offById.get(o);
-      if (off) {
-        const link = new THREE.Vector3(off.from.x, yOf(off.stdId), off.from.z);
+    if (!D || std === null) {
+      for (const ob of M.objects)
+        if (ob.present.includes(s.head)) push({ id: ob.id, label: name(ob.id), tone: "neutral", emphasis: lit(ob.id) }, s.head);
+      return items;
+    }
+    for (const l of D.lines) {
+      if (l.k === "keep") push({ id: l.id, label: `= ${name(l.id)}`, tone: "std", emphasis: lit(l.id) }, s.head);
+      else if (l.k === "remove") push({ id: l.id, label: `− ${name(l.id)}`, tone: "neutral", emphasis: lit(l.id) }, s.head);
+      else if (l.k === "move") {
+        const link = new THREE.Vector3(l.from.x, yOf(l.stdId), l.from.z);
         push(
-          { id: o, label: `Δ ${name(o)}`, tone: "neutral", emphasis: lit(o), link, linkLabel: `${off.metres.toFixed(1)} m`, linkTone: "std" },
+          { id: l.id, label: `Δ ${name(l.id)}`, tone: "neutral", emphasis: lit(l.id), link, linkLabel: metres(l.metres), linkTone: "std" },
           s.head,
         );
-      } else if (extra.has(o)) push({ id: o, label: `− ${name(o)}`, tone: "neutral", emphasis: lit(o) }, s.head);
-      else push({ id: o, label: `= ${name(o)}`, tone: "std", emphasis: lit(o) }, s.head);
-    }
-    if (D && std !== null) {
-      for (const l of D.lines) {
-        if (l.k === "off") push({ id: l.stdId, label: name(l.stdId), tone: "std", dashed: true, pickable: false }, std);
-        else if (l.k === "missing") push({ id: l.stdId, label: `+ ${name(l.stdId)}`, tone: "std", dashed: true, pickable: false }, std);
-      }
+        push({ id: l.stdId, label: name(l.stdId), tone: "std", dashed: true, pickable: false }, std);
+      } else push({ id: l.stdId, label: `+ ${name(l.stdId)}`, tone: "std", dashed: true, pickable: false }, std);
     }
     return items;
   }
@@ -707,10 +707,14 @@ export class Stage {
     this.lastTick = performance.now();
     if (this.paused || useStore.getState().page === "title") return;
     const tweening = this.stepTween();
-    if (this.dimRunning) {
-      // step the dim ramp; the frame that paints its end value, however late it comes, is the last
-      if (performance.now() - this.dimT0 >= DIM_DELAY_MS + DIM_MS) this.dimRunning = false;
-      this.applyMode(useStore.getState());
+    if (this.dimValue !== this.dimTarget) {
+      // step the dim ramp on the uniform; when it lands back at 1 the focused part is released
+      const u = Math.min(1, Math.max(0, performance.now() - this.dimT0 - DIM_DELAY_MS) / DIM_MS);
+      const e = 1 - Math.pow(1 - u, 3);
+      this.dimValue = u >= 1 ? this.dimTarget : this.dimFrom + (this.dimTarget - this.dimFrom) * e;
+      const L = this.layers[useStore.getState().head];
+      if (L) L.mesh.recolor.setScalar(this.dimValue);
+      if (u >= 1 && this.dimTarget === 1) this.applyMode(useStore.getState());
       this.touch();
     }
     const moved = this.controls.update();

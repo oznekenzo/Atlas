@@ -20,6 +20,7 @@ export type DebugApi = {
   pause: (p: boolean) => void;
   lookAt: (id: number, d?: number, h?: number) => void;
   setCam: (x: number, y: number, z: number) => void;
+  mapGo: (x: number, z: number) => void;
   debug: () => unknown;
   stats: () => unknown;
   engine: Engine;
@@ -70,6 +71,7 @@ export function Stage() {
         },
         lookAt: (id, d, h) => engine.lookAt(id, d, h),
         setCam: (x, y, z) => engine.setCam(x, y, z),
+        mapGo: (x, z) => engine.goFromMap(x, z),
         debug: () => engine.debug(),
         stats: () => engine.stats(),
         engine,

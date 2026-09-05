@@ -1,7 +1,8 @@
 /**
  * The map: a top-down plan of the room in the design's small frame. Object footprints, the standard's
  * ghosts dashed in violet with their links, and the camera with its field of view. Drawn from the render
- * loop on the same frames as the detection overlay, so it never lags the view.
+ * loop on the same frames as the detection overlay, so it never lags the view. It is also a control: a
+ * footprint picks the thing, bare floor puts the camera there.
  */
 import * as THREE from "three";
 import { TONES, type BoxItem } from "./overlay";
@@ -14,9 +15,16 @@ const CONE_M = 3.2; // metres the view cone reaches
 
 const rgba = (t: BoxItem["tone"], a: number) => `rgba(${TONES[t][0]}, ${TONES[t][1]}, ${TONES[t][2]}, ${a})`;
 
+type Hit = { x0: number; y0: number; x1: number; y1: number; item: BoxItem };
+
 export class Minimap {
   readonly canvas = document.createElement("canvas");
+  /** A footprint was clicked. */
+  onPick: ((item: BoxItem) => void) | null = null;
+  /** Bare floor was clicked, at these world coordinates. */
+  onGo: ((x: number, z: number) => void) | null = null;
   private ctx: CanvasRenderingContext2D;
+  private hits: Hit[] = []; // what the last draw put down, for picking
   private dpr = 1;
   private room: THREE.Box3 | null = null;
   private scale = 1; // px per metre
@@ -28,7 +36,47 @@ export class Minimap {
     this.canvas.className = "map";
     parent.appendChild(this.canvas);
     this.ctx = this.canvas.getContext("2d")!;
+    this.canvas.addEventListener("pointermove", this.onMove);
+    this.canvas.addEventListener("click", this.onClick);
   }
+
+  private local(ev: MouseEvent): [number, number] {
+    const r = this.canvas.getBoundingClientRect();
+    return [ev.clientX - r.left, ev.clientY - r.top];
+  }
+
+  /** The footprint under a canvas point, the smallest when they overlap; ghosts are seen, not clicked. */
+  private hitAt(px: number, pz: number): BoxItem | null {
+    let best: Hit | null = null;
+    for (const h of this.hits) {
+      if (h.item.pickable === false || px < h.x0 || px > h.x1 || pz < h.y0 || pz > h.y1) continue;
+      if (!best || (h.x1 - h.x0) * (h.y1 - h.y0) < (best.x1 - best.x0) * (best.y1 - best.y0)) best = h;
+    }
+    return best?.item ?? null;
+  }
+
+  /** Canvas point → world floor coordinates, or null outside the room. */
+  private worldAt(px: number, pz: number): [number, number] | null {
+    const r = this.room;
+    if (!r) return null;
+    const x = (px - this.ox) / this.scale - MARGIN_M + r.min.x;
+    const z = (pz - this.oz) / this.scale - MARGIN_M + r.min.z;
+    if (x < r.min.x || x > r.max.x || z < r.min.z || z > r.max.z) return null;
+    return [x, z];
+  }
+
+  private onMove = (ev: PointerEvent) => {
+    const [px, pz] = this.local(ev);
+    this.canvas.style.cursor = this.hitAt(px, pz) ? "pointer" : this.worldAt(px, pz) ? "crosshair" : "";
+  };
+  private onClick = (ev: MouseEvent) => {
+    ev.stopPropagation();
+    const [px, pz] = this.local(ev);
+    const hit = this.hitAt(px, pz);
+    if (hit) return this.onPick?.(hit);
+    const w = this.worldAt(px, pz);
+    if (w) this.onGo?.(w[0], w[1]);
+  };
 
   /** Fit the room (x across, z down) into the frame, centred. */
   setRoom(room: THREE.Box3) {
@@ -82,6 +130,7 @@ export class Minimap {
     ctx.fill();
 
     // footprints: filled for what is there, dashed for a ghost
+    this.hits = [];
     for (const it of items) {
       const sx = it.shift?.x ?? 0;
       const sz = it.shift?.z ?? 0;
@@ -89,6 +138,7 @@ export class Minimap {
       const [bx, bz] = this.px(it.box.max.x + sx, it.box.max.z + sz);
       const w = Math.max(3, bx - ax);
       const h = Math.max(3, bz - az);
+      this.hits.push({ x0: ax - 2, y0: az - 2, x1: ax + w + 2, y1: az + h + 2, item: it });
       if (it.dashed) {
         ctx.setLineDash([2, 3]);
         ctx.strokeStyle = rgba(it.tone, 0.8);
@@ -129,6 +179,8 @@ export class Minimap {
   }
 
   dispose() {
+    this.canvas.removeEventListener("pointermove", this.onMove);
+    this.canvas.removeEventListener("click", this.onClick);
     this.canvas.remove();
   }
 }

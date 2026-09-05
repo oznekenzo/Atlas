@@ -14,7 +14,8 @@
     "types": [
       "vite/client"
     ],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "resolveJsonModule": true
   },
   "include": [
     "src"

@@ -29,9 +29,9 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
                 src/engine/overlay.ts  detection overlay: framed boxes hugging each object's splats, tags placed by priority
                                        and dropped where they would collide, arrows with distances for what moved or drifted
                 src/engine/minimap.ts  the map: the room from above, footprints, the standard's ghosts and links, the camera
-                src/attribution.ts     what changed between two scenes as lines: moved N m, arrives, leaves
-                src/drift.ts           a state against the standard: off by N m, missing, not in the standard
-                src/identity.ts        one physical thing across states: follows moved_from/moved_to so a move reads as a move
+                src/scene.ts           the scene model: things (one physical object across states, by its chain of ids), diffs,
+                                       drift, standing, months — one definition of a move; the engine, the panels, the card and
+                                       the month block read it and never re-derive it. src/scene.test.ts covers it (vitest)
                 src/demo.ts            the deck's slides, the checklist, the tour, the ?s= start presets
                 src/titleField.ts      the title's point field (the design's own code, typed)
                 src/components/        Title (the deck), Chrome (the mark and site picker, the checklist, the command bar, the
@@ -70,7 +70,7 @@ semantics: states, diffs, a standard and the drift from it, and a written entry 
     python3 pipeline/make_synthetic.py && python3 pipeline/run.py synthetic      # or: python3 pipeline/test_synthetic.py
                                                                                 # (pipeline test only; its published set is ignored)
     python3 pipeline/run.py garage
-    cd viewer && npm install && npm run dev            # npm run check = typecheck + prettier; npm run build typechecks first
+    cd viewer && npm install && npm run dev            # npm run check = typecheck + prettier + vitest; npm run build typechecks first
     ?debug on the URL exposes window.__patina (the hooks smoke.py drives); the dev server exposes it always
 
 ## Datasets

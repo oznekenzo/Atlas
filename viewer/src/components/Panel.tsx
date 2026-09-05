@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { useStore, objectsChanged } from "../store";
-import { centre } from "../attribution";
-import { drift } from "../drift";
+import { useStore } from "../store";
+import { diff, drift, metres, things } from "../scene";
 import { monthOf } from "../time";
 import type { Manifest } from "../types";
 
@@ -43,34 +42,17 @@ const Entry = ({ doc, by }: { doc: string | null; by: string | null }) => (
   </div>
 );
 
+/** The diff, grouped as the design groups it: unchanged, moved with the distance, removed, added. */
 function ComparePanel({ M, a, b }: { M: Manifest; a: number; b: number }) {
   const groups = useMemo(() => {
-    const { added, removed } = objectsChanged(M, a, b);
-    const movedNew = new Map<number, number>(); // new id → old id
-    for (const o of M.objects) if (removed.has(o.id) && o.moved_to !== null && added.has(o.moved_to)) movedNew.set(o.moved_to, o.id);
-    const movedOld = new Set(movedNew.values());
-    const dist = (p: number, q: number) => {
-      const x = centre(M.objects[p]);
-      const y = centre(M.objects[q]);
-      return Math.hypot(x.x - y.x, x.z - y.z);
-    };
-    const un: { name: string; value: string }[] = [];
-    const mv: { name: string; value: string }[] = [];
-    const rm: { name: string; value: string }[] = [];
-    const ad: { name: string; value: string }[] = [];
-    for (const o of M.objects) {
-      const old = movedNew.get(o.id);
-      if (old !== undefined) mv.push({ name: o.name, value: `${dist(old, o.id).toFixed(1)} m` });
-      else if (added.has(o.id)) ad.push({ name: o.name, value: "" });
-      else if (movedOld.has(o.id)) continue;
-      else if (removed.has(o.id)) rm.push({ name: o.name, value: "" });
-      else if (o.present.includes(a) && o.present.includes(b)) un.push({ name: o.name, value: "" });
-    }
+    const d = diff(M.objects, a, b);
+    const of = (k: "same" | "moved" | "removed" | "added") =>
+      d.changes.filter((c) => c.k === k).map((c) => ({ name: c.name, value: c.k === "moved" ? metres(c.metres) : "" }));
     return [
-      { sign: "=", title: "UNCHANGED", cls: "un", lines: un },
-      { sign: "Δ", title: "MOVED", cls: "mv", lines: mv },
-      { sign: "−", title: "REMOVED", cls: "rm", lines: rm },
-      { sign: "+", title: "ADDED", cls: "ad", lines: ad },
+      { sign: "=", title: "UNCHANGED", cls: "un", lines: of("same") },
+      { sign: "Δ", title: "MOVED", cls: "mv", lines: of("moved") },
+      { sign: "−", title: "REMOVED", cls: "rm", lines: of("removed") },
+      { sign: "+", title: "ADDED", cls: "ad", lines: of("added") },
     ];
   }, [M, a, b]);
   const e = M.diffs[`${a}-${b}`] ?? { doc: null, by: null };
@@ -105,19 +87,20 @@ function ComparePanel({ M, a, b }: { M: Manifest; a: number; b: number }) {
   );
 }
 
+/** What this state must do to match the standard. */
 function StandardPanel({ M, head, standard }: { M: Manifest; head: number; standard: number }) {
   const lines = useMemo(() => {
     const d = drift(M.objects, standard, head);
-    const off = new Set(d.lines.flatMap((l) => (l.k === "off" ? [l.id] : [])));
-    const extra = new Set(d.lines.flatMap((l) => (l.k === "extra" ? [l.id] : [])));
-    const out: { sign: string; name: string; value: string; keep?: boolean }[] = [];
-    for (const o of M.objects)
-      if (o.present.includes(head) && !off.has(o.id) && !extra.has(o.id)) out.push({ sign: "=", name: o.name, value: "keep", keep: true });
-    for (const l of d.lines) if (l.k === "off") out.push({ sign: "Δ", name: M.objects[l.id].name, value: `must move ${l.metres.toFixed(1)} m` });
-    for (const l of d.lines) if (l.k === "extra") out.push({ sign: "−", name: M.objects[l.id].name, value: "must remove" });
-    for (const l of d.lines) if (l.k === "missing") out.push({ sign: "+", name: M.objects[l.stdId].name, value: "must add" });
-    if (out.length === 0) out.push({ sign: "", name: "On standard", value: "", keep: true });
-    return out;
+    const out = d.lines.map((l) =>
+      l.k === "keep"
+        ? { sign: "=", name: l.name, value: "keep", keep: true }
+        : l.k === "move"
+          ? { sign: "Δ", name: l.name, value: `must move ${metres(l.metres)}`, keep: false }
+          : l.k === "remove"
+            ? { sign: "−", name: l.name, value: "must remove", keep: false }
+            : { sign: "+", name: l.name, value: "must add", keep: false },
+    );
+    return out.length ? out : [{ sign: "", name: "On standard", value: "", keep: true }];
   }, [M, head, standard]);
   return (
     <>
@@ -141,11 +124,13 @@ function StandardPanel({ M, head, standard }: { M: Manifest; head: number; stand
   );
 }
 
+/** The draft: where it starts from, the tray of every thing, what has been put down. */
 function DraftPanel({ M }: { M: Manifest }) {
   const { draft, head, standard, setBase, pick } = useStore(
     useShallow((s) => ({ draft: s.draft!, head: s.head, standard: s.standard, setBase: s.setDraftBase, pick: s.pickFromTray })),
   );
   const [open, setOpen] = useState(false);
+  const tray = useMemo(() => things(M.objects), [M]);
   const placed = draft.placements.length;
   const baseMonth = monthOf(M.commits[draft.base ?? head].captured);
   const counts = new Map<number, number>();
@@ -194,20 +179,16 @@ function DraftPanel({ M }: { M: Manifest }) {
         )}
       </div>
       <div className="tray">
-        {M.objects
-          .filter((o) => o.moved_from === null) // one row per thing; its later ids are the same thing moved
-          .map((o) => {
-            const ids = [o.id];
-            for (let n = o.moved_to; n !== null; n = M.objects[n].moved_to) ids.push(n);
-            const n = ids.reduce((s, i) => s + (counts.get(i) ?? 0), 0);
-            const hand = draft.inHand !== null && ids.includes(draft.inHand.id);
-            return (
-              <div key={o.id} className={["row", hand ? "hand" : "", n ? "placed" : ""].join(" ").trim()} onClick={() => pick(o.id)}>
-                <span>{o.name}</span>
-                <span className="state">{hand ? "in hand" : `× ${n}`}</span>
-              </div>
-            );
-          })}
+        {tray.map((t) => {
+          const n = t.ids.reduce((s, i) => s + (counts.get(i) ?? 0), 0);
+          const hand = draft.inHand !== null && t.ids.includes(draft.inHand.id);
+          return (
+            <div key={t.root} className={["row", hand ? "hand" : "", n ? "placed" : ""].join(" ").trim()} onClick={() => pick(t.root)}>
+              <span>{t.name}</span>
+              <span className="state">{hand ? "in hand" : `× ${n}`}</span>
+            </div>
+          );
+        })}
       </div>
       <div className="hint">{hint}</div>
       {draft.attempts.length > 0 && (
