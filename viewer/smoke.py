@@ -151,14 +151,10 @@ async def main():
         check(await S("selected") is None, "the same thing again deselects")
 
         # --- the pages, the sites, the log -------------------------------------------------------------
-        await pg.keyboard.press("?")
-        await pg.wait_for_timeout(60)
-        check(await S("page") == "how" and "Register" in await ev("document.getElementById('how').innerText"), "? opens How it works")
-        await pg.keyboard.press("Escape")
         await pg.keyboard.press("f")
         await pg.wait_for_timeout(60)
         foot = await ev("document.getElementById('footnotes').innerText")
-        check("60 cm" in foot and "build" in foot, "F opens Footnotes with the pipeline's numbers and the build")
+        check("NEXT STEPS" in foot and "Gaussian splats" in foot, "F opens Notes: the bento")
         await pg.keyboard.press("Escape")
         check(await S("page") == "room", "esc returns to the room")
         did = await ev("window.__patina.S.history.find((a) => a.verb === 'diff').id")
@@ -177,7 +173,7 @@ async def main():
 
         # --- the menu and the confirm -------------------------------------------------------------------------
         await ev("window.__patina.S.toggleMenu()")
-        check(await ev("document.querySelectorAll('#menu .list .row').length") == 3, "the ATLAS menu: How it works, Notes, Restart demo")
+        check(await ev("document.querySelectorAll('#menu .list .row').length") == 2, "the ATLAS menu: Notes, Restart demo")
         await ev("window.__patina.S.closeMenus()")
         await ev("window.__patina.go(3); window.__patina.S.askStandard()")
         check(await ev("!!document.getElementById('confirm')"), "the tab asks before a state becomes the standard")

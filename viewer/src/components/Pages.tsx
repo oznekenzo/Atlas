@@ -10,66 +10,96 @@ const Back = () => {
   );
 };
 
-/** How it works and Footnotes: one screen each over the dimmed room, esc or Back returns to where you were. */
+/** Notes: one screen over the dimmed room, esc or Back returns to where you were. */
 export function Pages() {
   const { page } = useStore(useShallow((s) => ({ page: s.page })));
-  if (page === "how")
-    return (
-      <div className="page" id="how">
-        <Back />
-        <div className="body">
-          <div className="h">How it works</div>
-          <div className="rows">
-            <div className="t">State</div>
-            <div>The room is scanned. Each scan is one state, dated.</div>
-            <div className="t">Register</div>
-            <div>All states are aligned into one frame, so a spot is the same spot every month.</div>
-            <div className="t">Diff</div>
-            <div>Any two states: what was added, removed, moved, and how far.</div>
-            <div className="t std">Standard</div>
-            <div>One state is declared the standard. Every later state is measured against it: the drift.</div>
-          </div>
-          <div className="diagram">
-            <div className="box" />
-            <div className="link" />
-            <div className="box" />
-            <div className="link" />
-            <div className="box std">
-              <div className="cap">STANDARD</div>
-            </div>
-            <div className="link" />
-            <div className="box">
-              <div className="ghost" />
-              <div className="cap below">DRIFT · 2.6 m</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
   if (page === "footnotes")
     return (
       <div className="page" id="footnotes">
+        <div className="t-rader mark">ATLAS</div>
         <Back />
-        <div className="body">
-          <div className="h">Notes</div>
-          <div className="notes">
-            <div className="n">1</div>
-            <div>Objects are found by voxel occupancy and matched by size and overlap. Two similar boxes can be confused.</div>
-            <div className="n">2</div>
-            <div>The room is assumed rectangular. Anything within 60 cm of a wall is ignored.</div>
-            <div className="n">3</div>
-            <div>
-              The Torrance states are a garage; plants stand in for carts and tools. The Bellevue floor is one state: a Harley-Davidson service bay
-              captured by Paolo Tosolini with an XGRIDS PortalCam, shared on superspl.at under CC BY 4.0. Its objects were boxed by hand.
+        <div className="links">
+          <span className="on">Notes</span>
+        </div>
+        <div className="bento">
+          <div className="cell title">
+            <div className="kicker">NOTES</div>
+            <div className="big">
+              Atlas Prototype
+              <br />
+              <span className="dim">Sep 2026</span>
             </div>
-            <div className="n">4</div>
-            <div>Distances are in metres, in the state&apos;s own frame. Registration residual is about 1 cm.</div>
-            <div className="n">5</div>
-            <div>Nothing you do here changes a state.</div>
-            <div className="n">6</div>
-            <div>Next: a real floor, weekly states, and the drift list issued as a work order.</div>
           </div>
-          <div className="colophon">Torrance set · captured May–Aug 2026 · Bellevue set · one state · build {__GIT_HASH__} · written 4 Sep 2026</div>
+          <div className="cell c01">
+            <div className="kicker">01 · BRIEF</div>
+            <div className="text quote">
+              Make one thing you’d put in front of Christopher Nolan and Denis Villeneuve. You set the scope. I want to see what you think exceptional
+              looks like.
+            </div>
+          </div>
+          <div className="cell c02">
+            <div className="kicker">02 · TECHNOLOGY</div>
+            <div className="lead">Gaussian splats</div>
+            <div className="text">Overlapping photos of a space, reconstructed as one 3D scene at true scale. Measurable, walkable.</div>
+          </div>
+          <div className="cell c03">
+            <div className="kicker">03 · GOAL</div>
+            <div className="text">A demo a CEO can run in five minutes without being taught.</div>
+          </div>
+          <div className="cell c04">
+            <div className="col">
+              <div className="kicker">04 · CONTEXT &amp; PROCESS</div>
+              <ul className="bullets">
+                <li>
+                  I’ve been interested in working with gaussian splats for a year or two, I took this as an opportunity to do so, I thought this is a
+                  great fit.
+                </li>
+                <li>
+                  The garage scans were done in my sister’s garage. It took about 12 runs to get the right 4 output. The process took about a day to
+                  learn and get right.
+                </li>
+                <li>The Bellevue gaussian splat was downloaded off the internet</li>
+              </ul>
+            </div>
+            <div className="media">
+              <img src="/notes/process.gif" alt="" />
+            </div>
+          </div>
+          <div className="cell c05">
+            <div className="kicker">05 · DESIGN INSPIRATION</div>
+            <div className="text">Pinterest board</div>
+            <a className="link" href="https://pin.it/Ic7LjgNtx" target="_blank" rel="noreferrer">
+              pin.it/Ic7LjgNtx
+            </a>
+          </div>
+          <div className="cell c06">
+            <div className="kicker">06 · STACK</div>
+            <ul className="bullets">
+              <li>Gaussian splats, SPZ</li>
+              <li>Spark + three.js</li>
+              <li>React, zustand, TypeScript, Vite</li>
+              <li>Python pipeline: NumPy, SciPy, Open3D</li>
+            </ul>
+          </div>
+          <div className="cell c07">
+            <div className="kicker">07 · ARCHITECTURE</div>
+            <ul className="bullets">
+              <li>Captures: one gaussian-splat scan per state</li>
+              <li>Pipeline: register → diff → bake → publish</li>
+              <li>Register: floor and walls, then ICP, into one room frame</li>
+              <li>Diff: voxel occupancy, objects tracked across states</li>
+              <li>Bake: metric world frame, SPZ and commits.json</li>
+              <li>Viewer: store, scene model, three.js + Spark engine, React chrome</li>
+            </ul>
+          </div>
+          <div className="cell c08 accent">
+            <div className="kicker">08 · NEXT STEPS</div>
+            <ul className="steps">
+              <li>Scan a real factory</li>
+              <li>Implement a strict and robust design system</li>
+              <li>Add documentation entry functionality</li>
+            </ul>
+          </div>
         </div>
       </div>
     );

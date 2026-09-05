@@ -192,7 +192,6 @@ kbd {
 #stage canvas.overlay {
   pointer-events: none;
 }
-.page-how #stage,
 .page-footnotes #stage {
   filter: brightness(0.5);
   transition: filter var(--t-base) var(--ease);
@@ -235,7 +234,6 @@ kbd {
   bottom: 0;
   width: var(--col-r);
 }
-.page-how .band,
 .page-footnotes .band {
   opacity: 0;
 }
@@ -252,13 +250,11 @@ kbd {
 #chrome > * {
   pointer-events: auto;
 }
-.page-how #chrome,
 .page-footnotes #chrome {
   opacity: 0;
   transform: translateY(16px);
   pointer-events: none;
 }
-.page-how #chrome > *,
 .page-footnotes #chrome > * {
   pointer-events: none;
 }
@@ -1472,9 +1468,6 @@ kbd {
   animation: rise var(--t-base) var(--ease) both;
   z-index: var(--z-page);
 }
-#footnotes {
-  background: rgba(7, 7, 8, 0.82);
-}
 .page .back {
   position: absolute;
   left: 50%;
@@ -1503,100 +1496,195 @@ kbd {
   color: var(--ink-30);
   border-color: var(--ink-15);
 }
-.page .body {
-  width: 620px;
+/* Notes: a hairline bento, twelve columns by six rows, the gif in the context cell, next steps the accent cell */
+#footnotes {
+  background: rgba(7, 7, 8, 0.9);
+}
+.page .mark {
+  position: absolute;
+  left: var(--margin, 32px);
+  top: 28px;
+  font-size: 13px;
+}
+.page .links {
+  position: absolute;
+  right: 32px;
+  top: 28px;
+  height: 28px;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--ink-50);
+}
+.page .links span {
+  cursor: pointer;
+}
+.page .links span:hover,
+.page .links .on {
+  color: var(--ink-100);
+}
+#footnotes .bento {
+  position: absolute;
+  left: 32px;
+  right: 32px;
+  top: 88px;
+  bottom: 32px;
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-70);
+}
+#footnotes .cell {
+  background: #08080a;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
-#footnotes .body {
-  width: 640px;
-  gap: 28px;
-}
-.page .h {
-  font-size: 28px;
-  font-weight: 500;
-  color: var(--ink-100);
-  letter-spacing: -0.01em;
-}
-#how .rows {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  row-gap: 18px;
-  column-gap: 24px;
-  font-size: 15px;
-  line-height: 1.5;
-  color: var(--ink-70);
-}
-#how .rows .t {
-  color: var(--ink-100);
-  font-weight: 600;
-}
-#how .rows .t.std {
-  color: var(--std);
-}
-#how .diagram {
-  display: flex;
-  align-items: center;
-  padding: 8px 0;
-}
-#how .diagram .box {
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--ink-30);
-  position: relative;
-  box-sizing: border-box;
-}
-#how .diagram .box.std {
-  border: 1.5px solid var(--std);
-}
-#how .diagram .link {
-  width: 40px;
-  height: 1px;
-  background: var(--ink-18);
-}
-#how .diagram .cap {
-  position: absolute;
-  left: 0;
-  top: -20px;
-  font-family: var(--font-data);
-  font-weight: 500;
+#footnotes .cell .kicker {
   font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--std);
-  white-space: nowrap;
+  letter-spacing: 0.1em;
+  color: var(--ink-40);
 }
-#how .diagram .cap.below {
-  top: auto;
-  bottom: -22px;
+#footnotes .cell .kicker.faint {
+  color: var(--ink-30);
 }
-#how .diagram .ghost {
-  position: absolute;
-  left: 12px;
-  top: 10px;
-  width: 20px;
-  height: 24px;
-  border: 1px dashed var(--std);
+#footnotes .cell .row {
+  display: flex;
+  justify-content: space-between;
 }
-#footnotes .notes {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  row-gap: 14px;
-  column-gap: 16px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--ink-70);
+#footnotes .cell .text {
+  color: var(--ink-60);
 }
-#footnotes .n {
+#footnotes .cell .quote {
+  font-style: italic;
+}
+#footnotes .cell .lead {
+  font-size: 15px;
+  color: var(--ink-90);
+}
+#footnotes .cell .link {
+  display: block;
+  width: fit-content;
   font-family: var(--font-data);
   font-size: 11px;
-  color: var(--ink-30);
-  padding-top: 4px;
+  color: rgba(255, 255, 255, 0.35);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.2);
 }
-#footnotes .colophon {
-  font-family: var(--font-data);
-  font-size: 11px;
+#footnotes .cell .link:hover {
+  color: var(--ink-90);
+  text-decoration-color: var(--ink-50);
+}
+#footnotes .cell.title {
+  grid-column: 1 / 4;
+  grid-row: 1 / 3;
+  justify-content: space-between;
+}
+#footnotes .cell.title .big {
+  font-size: 30px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--ink-100);
+}
+#footnotes .cell.title .dim {
+  color: var(--ink-40);
+}
+#footnotes .cell.c01 {
+  grid-column: 4 / 8;
+  grid-row: 1 / 3;
+}
+#footnotes .cell.c02 {
+  grid-column: 1 / 4;
+  grid-row: 3 / 5;
+}
+#footnotes .cell.c03 {
+  grid-column: 4 / 8;
+  grid-row: 3 / 5;
+}
+#footnotes .cell.c04 {
+  grid-column: 8 / 13;
+  grid-row: 1 / 4;
+  flex-direction: row;
+  gap: 16px;
+}
+#footnotes .cell.c04 .col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#footnotes .cell.c04 .media {
+  flex: 0 0 38%;
+  align-self: stretch;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+#footnotes .cell.c04 .media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+#footnotes .cell .bullets {
+  margin: 0;
+  padding: 0 0 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink-60);
+}
+#footnotes .cell .bullets li::marker {
   color: var(--ink-30);
+}
+#footnotes .cell.c05 {
+  grid-column: 8 / 13;
+  grid-row: 4 / 5;
+}
+#footnotes .cell.c06 {
+  grid-column: 1 / 5;
+  grid-row: 5 / 7;
+}
+#footnotes .cell.c07 {
+  grid-column: 5 / 9;
+  grid-row: 5 / 7;
+}
+#footnotes .cell.c08 {
+  grid-column: 9 / 13;
+  grid-row: 5 / 7;
+}
+#footnotes .cell.accent {
+  background: #c4b5f5;
+  color: #0a0a0c;
+}
+#footnotes .cell.accent .kicker {
+  color: rgba(10, 10, 12, 0.55);
+}
+#footnotes .cell.accent .steps {
+  margin: 0;
+  padding: 0 0 0 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #0a0a0c;
+}
+#footnotes .cell.accent .steps li::marker {
+  color: rgba(10, 10, 12, 0.55);
 }
 
 /* ---- the title deck -------------------------------------------------------------------------------------------- */
